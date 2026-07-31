@@ -6,10 +6,29 @@ import pytest
 from app.ops.manitos_passive_gate import (
     PassiveGateConfig,
     PassiveGateThresholds,
+    build_parser,
     collect_sample,
     evaluate_samples,
     run_passive_gate,
 )
+
+
+def test_parser_uses_generic_configurable_health_and_report_defaults(monkeypatch):
+    monkeypatch.delenv("OBSERVER_INTEGRATION_HEALTH_URL", raising=False)
+    monkeypatch.delenv("MANITOS_READY_URL", raising=False)
+    monkeypatch.delenv("OBSERVER_INTEGRATION_GATE_OUTPUT", raising=False)
+
+    defaults = build_parser().parse_args([])
+    assert defaults.manitos_ready_url == ""
+    assert defaults.output == ".observer-state/integration-gate-report.json"
+
+    generic = build_parser().parse_args(
+        ["--integration-health-url", "https://integration.example.test/health"]
+    )
+    legacy = build_parser().parse_args(
+        ["--manitos-ready-url", "https://integration.example.test/health"]
+    )
+    assert generic.manitos_ready_url == legacy.manitos_ready_url
 
 
 def _sample(

@@ -824,7 +824,7 @@ async def test_export_import_roundtrip(client):
     assert import_data["imported"] >= 1
 
 
-# ── New Endpoints (Phase 8) ──────────────────────────────────────────
+# ── Evaluation endpoints ─────────────────────────────────────────────
 
 
 @pytest.mark.anyio

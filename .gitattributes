@@ -1,7 +1,7 @@
 # Normalize all text files to LF in the index and working tree.
 # This repo is edited from both WSL and Windows tooling; without this,
 # CRLF working-tree files against an LF index produce whole-file phantom
-# diffs in git status (same fix as the manitos repo, devlog 2026-07-07).
+# diffs in git status.
 * text=auto eol=lf
 
 # Windows-only script formats require CRLF to run correctly.
