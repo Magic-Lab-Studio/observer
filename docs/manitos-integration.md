@@ -169,6 +169,37 @@ and TTFT; plus model and language distributions. Empty windows return zero-value
 metrics. The Overview dashboard renders the same metadata-only indicators for the
 `manitos` project.
 
+## Passive release gate (phase 8)
+
+Phase 8 observes normal ManitOS use without generating prompts or synthetic turns. The
+gate samples Observer health, the metadata-only quality summary, and the
+`observer_exporter` block from ManitOS `/readyz`. It writes an atomic progress report
+that contains only bounded counters, distributions, circuit state, and timestamps.
+API keys, actor hashes, endpoints with credentials, prompts, responses, tool arguments,
+and artifacts are never copied into the report.
+
+After starting both applications and enabling the exporter, run a 24-hour window:
+
+```bash
+cd backend
+python -m app.ops.manitos_passive_gate \
+  --duration-hours 24 \
+  --interval-seconds 60 \
+  --minimum-turns 20 \
+  --project-id manitos \
+  --environment development
+```
+
+This command is passive: real turns happen only when a person uses ManitOS. It fails
+closed when too few turns are observed or when availability, error, degradation,
+truncation, tool, fallback, TTS, latency, spool, circuit, privacy, or durable-delivery
+thresholds are violated. Progress and the final decision are written to
+`.observer-state/manitos-phase8.json`; the directory is ignored by Git.
+
+For a non-promotional connectivity probe, set `--duration-seconds 0 --minimum-turns 0`.
+The default gate still requires durable encrypted delivery. Use
+`--allow-volatile-delivery` only for local diagnostics, never for release evidence.
+
 ## Database migration
 
 From `backend/`:

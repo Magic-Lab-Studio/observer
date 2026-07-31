@@ -1,0 +1,25 @@
+# Normalize all text files to LF in the index and working tree.
+# This repo is edited from both WSL and Windows tooling; without this,
+# CRLF working-tree files against an LF index produce whole-file phantom
+# diffs in git status (same fix as the manitos repo, devlog 2026-07-07).
+* text=auto eol=lf
+
+# Windows-only script formats require CRLF to run correctly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets — never convert.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.db binary
+*.sqlite3 binary
+*.sqlite binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

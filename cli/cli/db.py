@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 DEFAULT_DB_PATH = Path("observatory.db")
 
@@ -57,7 +57,7 @@ CREATE INDEX IF NOT EXISTS ix_evaluations_span_id ON evaluations (span_id);
 """
 
 
-def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
+def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     """Get a SQLite connection and ensure schema exists."""
     path = db_path or DEFAULT_DB_PATH
     conn = sqlite3.connect(str(path))
@@ -67,11 +67,11 @@ def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
 
 
 def list_traces(
-    db_path: Optional[Path] = None,
+    db_path: Path | None = None,
     limit: int = 100,
     offset: int = 0,
-    status: Optional[str] = None,
-    name_search: Optional[str] = None,
+    status: str | None = None,
+    name_search: str | None = None,
 ) -> list[dict[str, Any]]:
     """List traces from local SQLite database."""
     conn = get_connection(db_path)
@@ -96,7 +96,7 @@ def list_traces(
         conn.close()
 
 
-def get_trace(trace_id: str, db_path: Optional[Path] = None) -> Optional[dict[str, Any]]:
+def get_trace(trace_id: str, db_path: Path | None = None) -> dict[str, Any] | None:
     """Get a single trace by ID."""
     conn = get_connection(db_path)
     try:
@@ -107,7 +107,7 @@ def get_trace(trace_id: str, db_path: Optional[Path] = None) -> Optional[dict[st
         conn.close()
 
 
-def get_trace_spans(trace_id: str, db_path: Optional[Path] = None) -> list[dict[str, Any]]:
+def get_trace_spans(trace_id: str, db_path: Path | None = None) -> list[dict[str, Any]]:
     """Get all spans for a trace."""
     conn = get_connection(db_path)
     try:
@@ -121,8 +121,8 @@ def get_trace_spans(trace_id: str, db_path: Optional[Path] = None) -> list[dict[
 
 
 def list_evaluations(
-    db_path: Optional[Path] = None,
-    trace_id: Optional[str] = None,
+    db_path: Path | None = None,
+    trace_id: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
@@ -145,7 +145,7 @@ def list_evaluations(
         conn.close()
 
 
-def get_stats(db_path: Optional[Path] = None) -> dict[str, Any]:
+def get_stats(db_path: Path | None = None) -> dict[str, Any]:
     """Get summary statistics from the database."""
     conn = get_connection(db_path)
     try:

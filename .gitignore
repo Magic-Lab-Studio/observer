@@ -60,6 +60,7 @@ podman-compose.override.yml
 # Database
 *.db
 *.sqlite3
+.observer-state/
 
 # OS
 .DS_Store
