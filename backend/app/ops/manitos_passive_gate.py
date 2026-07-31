@@ -115,6 +115,8 @@ def _safe_quality(payload: Mapping[str, Any] | None) -> dict[str, Any]:
         "project_id": _bounded_text(source.get("project_id"), maximum=128),
         "environment": _bounded_text(source.get("environment"), maximum=64) or None,
         "hours": _non_negative_int(source.get("hours")),
+        "window_start": _bounded_text(source.get("window_start"), maximum=64) or None,
+        "window_end": _bounded_text(source.get("window_end"), maximum=64) or None,
         "total_turns": _non_negative_int(source.get("total_turns")),
         "avg_duration_ms": _non_negative_float(source.get("avg_duration_ms")),
         "avg_ttft_ms": _non_negative_float(source.get("avg_ttft_ms")),
@@ -181,12 +183,16 @@ async def _get_json(
 async def collect_sample(
     client: httpx.AsyncClient,
     config: PassiveGateConfig,
+    *,
+    window_start: str | None = None,
 ) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {config.api_key}"} if config.api_key else {}
     query: dict[str, str | int] = {
         "hours": config.analytics_hours,
         "project_id": config.project_id,
     }
+    if window_start:
+        query["since"] = window_start
     if config.environment:
         query["environment"] = config.environment
     health_ok, health_code, health, health_error = await _get_json(
@@ -241,13 +247,12 @@ def evaluate_samples(
 ) -> dict[str, Any]:
     observer_samples = [sample for sample in samples if sample.get("observer", {}).get("ok")]
     availability_rate = len(observer_samples) / len(samples) if samples else 0.0
-    baseline = observer_samples[0].get("quality", {}) if observer_samples else {}
     final = observer_samples[-1].get("quality", {}) if observer_samples else {}
-    observed_turns = _counter_delta(final, baseline, "total_turns")
-    deltas = {key: _counter_delta(final, baseline, key) for key in _QUALITY_COUNT_KEYS}
+    observed_turns = _non_negative_int(final.get("total_turns"))
+    window_counts = {key: _non_negative_int(final.get(key)) for key in _QUALITY_COUNT_KEYS}
 
     def rate(key: str) -> float:
-        return deltas[key] / observed_turns if observed_turns else 0.0
+        return window_counts[key] / observed_turns if observed_turns else 0.0
 
     rates = {
         "error_rate": rate("error_count"),
@@ -257,12 +262,13 @@ def evaluate_samples(
         "fallback_rate": rate("fallback_count"),
         "tts_error_rate": rate("tts_error_count"),
     }
-    ready_samples = [sample for sample in samples if sample.get("manitos", {}).get("ok")]
+    manitos_samples = [sample for sample in samples if sample.get("manitos", {}).get("ok")]
+    manitos_availability_rate = len(manitos_samples) / len(samples) if samples else 0.0
     exporter_baseline = (
-        ready_samples[0].get("manitos", {}).get("exporter", {}) if ready_samples else {}
+        manitos_samples[0].get("manitos", {}).get("exporter", {}) if manitos_samples else {}
     )
     exporter_final = (
-        ready_samples[-1].get("manitos", {}).get("exporter", {}) if ready_samples else {}
+        manitos_samples[-1].get("manitos", {}).get("exporter", {}) if manitos_samples else {}
     )
     baseline_stats = exporter_baseline.get("stats", {})
     final_stats = exporter_final.get("stats", {})
@@ -271,13 +277,17 @@ def evaluate_samples(
     }
     circuit_open_samples = sum(
         1
-        for sample in ready_samples
+        for sample in manitos_samples
         if sample.get("manitos", {}).get("exporter", {}).get("circuit_state") == "open"
     )
 
     failures: list[str] = []
     if availability_rate < thresholds.minimum_availability_rate:
         failures.append("observer_availability_below_threshold")
+    if manitos_availability_rate < thresholds.minimum_availability_rate:
+        failures.append("manitos_availability_below_threshold")
+    if samples and not samples[-1].get("manitos", {}).get("ok"):
+        failures.append("manitos_not_ready_at_end")
     if observed_turns < thresholds.minimum_turns:
         failures.append("insufficient_observed_turns")
     for metric, maximum in (
@@ -294,7 +304,7 @@ def evaluate_samples(
         failures.append("average_duration_above_threshold")
     if config_error := exporter_final.get("spool_error"):
         failures.append(f"observer_spool_error:{_bounded_text(config_error, maximum=80)}")
-    if ready_samples:
+    if manitos_samples:
         if not exporter_final.get("enabled"):
             failures.append("manitos_observer_exporter_disabled")
         if exporter_final.get("privacy_mode") != "metadata_only":
@@ -320,8 +330,9 @@ def evaluate_samples(
         "failures": failures,
         "sample_count": len(samples),
         "observer_availability_rate": availability_rate,
+        "manitos_availability_rate": manitos_availability_rate,
         "observed_turns": observed_turns,
-        "quality_count_deltas": deltas,
+        "quality_window_counts": window_counts,
         "quality_rates": rates,
         "final_average_duration_ms": _non_negative_float(final.get("avg_duration_ms")),
         "final_average_ttft_ms": _non_negative_float(final.get("avg_ttft_ms")),
@@ -357,7 +368,7 @@ async def run_passive_gate(config: PassiveGateConfig) -> dict[str, Any]:
     timeout = httpx.Timeout(config.request_timeout_seconds)
     async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
         while True:
-            samples.append(await collect_sample(client, config))
+            samples.append(await collect_sample(client, config, window_start=started_at))
             elapsed = time.monotonic() - started
             running = {
                 "schema_version": "observer.manitos.passive_gate.v1",

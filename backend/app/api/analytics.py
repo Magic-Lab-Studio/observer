@@ -59,6 +59,8 @@ class ManitOSQualitySummary(BaseModel):
     project_id: str
     environment: str | None
     hours: int
+    window_start: str | None = None
+    window_end: str | None = None
     total_turns: int
     error_count: int
     error_rate: float
@@ -223,12 +225,33 @@ async def get_manitos_quality(
     hours: int = Query(24, ge=1, le=720),
     project_id: str = Query("manitos", min_length=1, max_length=128),
     environment: str | None = Query(None, min_length=1, max_length=64),
+    since: datetime | None = Query(None),
+    until: datetime | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Aggregate bounded, metadata-only turn quality signals across SQL dialects."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    """Aggregate bounded, metadata-only turn quality signals across SQL dialects.
+
+    With ``since`` the aggregation uses a fixed half-open interval
+    ``[since, until or now)`` instead of the rolling ``hours`` window, so the
+    result is genuinely cumulative over that interval and never mixes turns
+    aging out of a sliding cutoff.
+    """
+    now = datetime.now(timezone.utc)
+    if since is not None:
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        window_start = since
+        window_end = until or now
+        if window_end.tzinfo is None:
+            window_end = window_end.replace(tzinfo=timezone.utc)
+        cutoff = window_start
+    else:
+        cutoff = now - timedelta(hours=hours)
+        window_start = cutoff
+        window_end = now
     trace_query = select(Trace.id, Trace.status).where(
-        Trace.created_at >= cutoff, Trace.project_id == project_id
+        Trace.created_at >= cutoff, Trace.created_at < window_end,
+        Trace.project_id == project_id,
     )
     if environment:
         trace_query = trace_query.where(Trace.environment == environment)
@@ -289,6 +312,8 @@ async def get_manitos_quality(
         "project_id": project_id,
         "environment": environment,
         "hours": hours,
+        "window_start": window_start.isoformat(),
+        "window_end": window_end.isoformat(),
         "total_turns": total_turns,
         "error_count": error_count,
         "error_rate": rate(error_count),

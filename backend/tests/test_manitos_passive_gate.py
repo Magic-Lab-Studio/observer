@@ -48,13 +48,13 @@ def _sample(
     }
 
 
-def test_evaluate_samples_passes_on_healthy_deltas():
+def test_evaluate_samples_passes_on_healthy_window():
     thresholds = PassiveGateThresholds(minimum_turns=2)
 
     result = evaluate_samples([_sample(turns=10), _sample(turns=12)], thresholds)
 
     assert result["passed"] is True
-    assert result["observed_turns"] == 2
+    assert result["observed_turns"] == 12
     assert result["quality_rates"]["error_rate"] == 0.0
 
 
@@ -62,7 +62,7 @@ def test_evaluate_samples_fails_on_quality_and_delivery_regressions():
     thresholds = PassiveGateThresholds(minimum_turns=2, maximum_error_rate=0.2)
 
     result = evaluate_samples(
-        [_sample(turns=10), _sample(turns=12, errors=1, dropped=1, circuit="open")],
+        [_sample(turns=10), _sample(turns=10, errors=3, dropped=1, circuit="open")],
         thresholds,
     )
 
@@ -72,6 +72,18 @@ def test_evaluate_samples_fails_on_quality_and_delivery_regressions():
     assert "observer_circuit_open_during_window" in result["failures"]
 
 
+def test_evaluate_samples_error_rate_uses_window_counts_not_snapshot_deltas():
+    thresholds = PassiveGateThresholds(minimum_turns=2, maximum_error_rate=0.2)
+
+    result = evaluate_samples(
+        [_sample(turns=10, errors=6), _sample(turns=12, errors=6)], thresholds
+    )
+
+    assert result["passed"] is False
+    assert result["quality_window_counts"]["error_count"] == 6
+    assert "error_rate_above_threshold" in result["failures"]
+
+
 def test_evaluate_samples_fails_closed_without_real_turns():
     result = evaluate_samples([_sample(turns=10), _sample(turns=10)], PassiveGateThresholds())
 
@@ -79,18 +91,50 @@ def test_evaluate_samples_fails_closed_without_real_turns():
     assert "insufficient_observed_turns" in result["failures"]
 
 
+def test_evaluate_samples_fails_when_manitos_unavailable_at_end():
+    thresholds = PassiveGateThresholds(minimum_turns=2)
+    samples = [_sample(turns=10), {**_sample(turns=10), "manitos": {"ok": False}}]
+
+    result = evaluate_samples(samples, thresholds)
+
+    assert result["passed"] is False
+    assert result["manitos_availability_rate"] == 0.5
+    assert "manitos_availability_below_threshold" in result["failures"]
+    assert "manitos_not_ready_at_end" in result["failures"]
+
+
+def test_evaluate_samples_fails_when_manitos_mostly_down():
+    thresholds = PassiveGateThresholds(minimum_turns=2)
+    samples = [
+        _sample(turns=10),
+        {**_sample(turns=10), "manitos": {"ok": False}},
+        {**_sample(turns=10), "manitos": {"ok": False}},
+    ]
+
+    result = evaluate_samples(samples, thresholds)
+
+    assert result["passed"] is False
+    assert result["manitos_availability_rate"] == 1 / 3
+    assert "manitos_availability_below_threshold" in result["failures"]
+
+
 @pytest.mark.asyncio
 async def test_collect_sample_keeps_only_bounded_metadata():
+    captured: dict[str, str] = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/health":
             return httpx.Response(200, json={"status": "healthy", "db": "ok"})
         if request.url.path == "/v1/analytics/manitos-quality":
+            captured["query"] = str(request.url.query)
             return httpx.Response(
                 200,
                 json={
                     "project_id": "manitos",
                     "environment": "test",
                     "hours": 24,
+                    "window_start": "2026-07-30T00:00:00+00:00",
+                    "window_end": "2026-07-30T00:05:00+00:00",
                     "total_turns": 3,
                     "error_count": 0,
                     "models": [{"key": "phi4-mini", "count": 3, "secret": "drop-me"}],
@@ -122,17 +166,38 @@ async def test_collect_sample_keeps_only_bounded_metadata():
         duration_seconds=0,
     )
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        sample = await collect_sample(client, config)
+        sample = await collect_sample(client, config, window_start="2026-07-30T00:00:00+00:00")
 
     assert sample["observer"]["ok"] is True
+    assert "since=2026-07-30T00%3A00%3A00%2B00%3A00" in captured["query"]
+    assert sample["quality"]["window_start"] == "2026-07-30T00:00:00+00:00"
+    assert sample["quality"]["window_end"] == "2026-07-30T00:05:00+00:00"
     assert sample["quality"]["models"] == [{"key": "phi4-mini", "count": 3}]
     assert "prompt" not in sample["quality"]
     assert "api_key" not in sample["manitos"]["exporter"]
 
 
 @pytest.mark.asyncio
+async def test_collect_sample_without_window_uses_rolling_hours():
+    captured: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/analytics/manitos-quality":
+            captured["query"] = str(request.url.query)
+            return httpx.Response(200, json={"total_turns": 0})
+        return httpx.Response(404)
+
+    config = PassiveGateConfig(observer_url="http://observer", duration_seconds=0)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await collect_sample(client, config)
+
+    assert "since" not in captured["query"]
+    assert "hours=720" in captured["query"]
+
+
+@pytest.mark.asyncio
 async def test_report_never_persists_api_key_or_url_credentials(tmp_path, monkeypatch):
-    async def fake_collect(_client, _config):
+    async def fake_collect(_client, _config, **kwargs):
         return _sample(turns=0)
 
     monkeypatch.setattr("app.ops.manitos_passive_gate.collect_sample", fake_collect)
