@@ -280,7 +280,7 @@ def serve(host: str, port: int, reload: bool, db: str) -> None:
     except ImportError:
         console.print("[red]Error: backend app module not found.[/red]")
         console.print("Make sure the backend is installed: pip install -e ../backend")
-    except Exception as e:
+    except (RuntimeError, OSError) as e:
         console.print(f"[red]Server error: {e}[/red]")
 
 

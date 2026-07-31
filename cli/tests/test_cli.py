@@ -6,8 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
-
 from cli.db import (
     get_connection,
     get_stats,
@@ -17,7 +15,7 @@ from cli.db import (
     list_traces,
 )
 from cli.main import cli
-
+from click.testing import CliRunner
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -367,7 +365,7 @@ class TestExportCommand:
     def test_export_includes_spans(self, runner: CliRunner, db_file: Path) -> None:
         r = runner.invoke(cli, ["export", "--db", str(db_file)])
         data = json.loads(r.output)
-        trace_with_spans = [t for t in data["traces"] if t["id"] == "trace-0000"][0]
+        trace_with_spans = next(t for t in data["traces"] if t["id"] == "trace-0000")
         assert len(trace_with_spans["spans"]) == 2
 
     def test_export_limit(self, runner: CliRunner, db_file: Path) -> None:
