@@ -30,6 +30,23 @@ def test_parser_uses_generic_configurable_health_and_report_defaults(monkeypatch
     )
     assert generic.manitos_ready_url == legacy.manitos_ready_url
 
+    monkeypatch.setenv("MANITOS_READY_URL", "https://legacy.example.test/health")
+    monkeypatch.setenv(
+        "OBSERVER_INTEGRATION_HEALTH_URL",
+        "https://generic.example.test/health",
+    )
+    environment = build_parser().parse_args([])
+    assert environment.manitos_ready_url == "https://generic.example.test/health"
+
+    monkeypatch.delenv("OBSERVER_INTEGRATION_HEALTH_URL")
+    legacy_environment = build_parser().parse_args([])
+    assert legacy_environment.manitos_ready_url == "https://legacy.example.test/health"
+
+    explicit = build_parser().parse_args(
+        ["--output", ".observer-state/explicit-report.json"]
+    )
+    assert explicit.output == ".observer-state/explicit-report.json"
+
 
 def _sample(
     *,
@@ -215,6 +232,30 @@ async def test_collect_sample_without_window_uses_rolling_hours():
 
 
 @pytest.mark.asyncio
+async def test_collect_sample_without_health_url_fails_closed():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"status": "healthy", "db": "ok"})
+        if request.url.path == "/v1/analytics/manitos-quality":
+            return httpx.Response(200, json={"total_turns": 0})
+        return httpx.Response(404)
+
+    config = PassiveGateConfig(observer_url="http://observer", duration_seconds=0)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        sample = await collect_sample(client, config)
+
+    assert sample["manitos"]["ok"] is False
+    assert sample["manitos"]["status_code"] == 0
+    assert sample["manitos"]["error"] == "not_configured"
+    result = evaluate_samples(
+        [sample],
+        PassiveGateThresholds(minimum_turns=0, require_durable_delivery=False),
+    )
+    assert result["manitos_availability_rate"] == 0.0
+    assert "manitos_readiness_unavailable" in result["failures"]
+
+
+@pytest.mark.asyncio
 async def test_report_never_persists_api_key_or_url_credentials(tmp_path, monkeypatch):
     async def fake_collect(_client, _config, **kwargs):
         return _sample(turns=0)
@@ -230,9 +271,10 @@ async def test_report_never_persists_api_key_or_url_credentials(tmp_path, monkey
         thresholds=PassiveGateThresholds(minimum_turns=0),
     )
 
-    await run_passive_gate(config)
+    report = await run_passive_gate(config)
 
     persisted = output.read_text(encoding="utf-8")
+    assert report["schema_version"] == "observer.manitos.passive_gate.v1"
     assert "password" not in persisted
     assert "url-secret" not in persisted
     assert "ready-secret" not in persisted

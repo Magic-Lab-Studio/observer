@@ -206,9 +206,9 @@ async def collect_sample(
         f"{config.observer_url}/v1/analytics/manitos-quality?{urlencode(query)}",
         headers=headers,
     )
-    ready_ok = True
+    ready_ok = False
     ready_code = 0
-    ready_error: str | None = None
+    ready_error: str | None = "not_configured"
     ready: dict[str, Any] = {}
     if config.manitos_ready_url:
         ready_ok, ready_code, ready, ready_error = await _get_json(
