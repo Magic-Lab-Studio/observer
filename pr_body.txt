@@ -1,0 +1,15 @@
+## Summary
+The nightly review for 2026-07-31 has been completed for the LLM Observatory service.
+
+## Findings
+none — read-only review
+
+## Changes made
+none — read-only review
+
+## Verification
+All required tests passed successfully.
+- `cd backend && python -m pytest tests -q` -> 119 passed
+- `cd sdk/python && python -m pytest tests -q` -> 37 passed
+- `cd cli && python -m pytest tests -q` -> 63 passed
+- `ruff check backend cli sdk/python` -> All checks passed!
