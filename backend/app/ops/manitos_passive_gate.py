@@ -1,4 +1,4 @@
-"""Passive, metadata-only release gate for the ManitOS integration."""
+"""Passive, metadata-only integration validation for compatible agent runtimes."""
 
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ class PassiveGateThresholds:
 @dataclass(frozen=True)
 class PassiveGateConfig:
     observer_url: str = "http://127.0.0.1:8000"
-    manitos_ready_url: str = "http://127.0.0.1:8765/readyz"
+    manitos_ready_url: str = os.getenv("MANITOS_READY_URL", "")
     api_key: str = field(default="", repr=False)
     project_id: str = "manitos"
     environment: str | None = None
@@ -211,6 +211,10 @@ async def collect_sample(
         ready_ok, ready_code, ready, ready_error = await _get_json(
             client, config.manitos_ready_url
         )
+    else:
+        ready_ok = False
+        ready_code = 0
+        ready_error = "readiness_url_not_configured"
     exporter = _extract_exporter(ready)
     observer_healthy = (
         health_ok
@@ -403,7 +407,14 @@ def build_parser() -> argparse.ArgumentParser:
         description="Observe real ManitOS telemetry without generating conversations."
     )
     parser.add_argument("--observer-url", default=os.getenv("MANITOS_OBSERVER_URL", "http://127.0.0.1:8000"))
-    parser.add_argument("--manitos-ready-url", default=os.getenv("MANITOS_READY_URL", "http://127.0.0.1:8765/readyz"))
+    parser.add_argument(
+        "--manitos-ready-url",
+        default=os.getenv("MANITOS_READY_URL", ""),
+        help=(
+            "Readiness probe URL for the integrated agent runtime "
+            "(required for availability checks)"
+        ),
+    )
     parser.add_argument(
         "--api-key",
         default=os.getenv("MANITOS_OBSERVER_API_KEY", ""),

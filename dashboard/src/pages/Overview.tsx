@@ -124,10 +124,10 @@ function Overview() {
         </div>
       )}
 
-      <section className="mt-8" aria-labelledby="manitos-quality-heading">
+      <section className="mt-8" aria-labelledby="runtime-quality-heading">
         <div className="flex items-baseline justify-between mb-4">
-          <h2 id="manitos-quality-heading" className="text-xl font-semibold">ManitOS Quality</h2>
-          <span className="text-sm text-gray-500">metadata only · project: manitos</span>
+          <h2 id="runtime-quality-heading" className="text-xl font-semibold">Runtime Quality</h2>
+          <span className="text-sm text-gray-500">metadata only</span>
         </div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard title="Turns" value={quality?.total_turns.toLocaleString() ?? '0'} />
@@ -160,7 +160,7 @@ function Overview() {
                   ))}
                 </div>
               ) : (
-                <div className="text-gray-500">No ManitOS data yet</div>
+                <div className="text-gray-500">No runtime quality data yet</div>
               )}
             </div>
           ))}

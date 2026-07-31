@@ -1,4 +1,4 @@
-"""add versioned ManitOS ingestion contract
+"""add versioned integration ingestion contract
 
 Revision ID: 20260720_manitos
 Revises: 623c57886e29
@@ -18,7 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    """Add ManitOS correlation fields and retry receipts."""
+    """Add integration correlation fields and retry receipts."""
 
     with op.batch_alter_table("traces") as batch_op:
         batch_op.alter_column(
@@ -60,7 +60,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove ManitOS ingestion state."""
+    """Remove integration ingestion state."""
 
     op.drop_index("ix_ingestion_receipts_trace_id", table_name="ingestion_receipts")
     op.drop_index("ix_ingestion_receipts_project_id", table_name="ingestion_receipts")
