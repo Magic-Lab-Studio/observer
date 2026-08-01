@@ -5,16 +5,19 @@ Open-source LLM observability SDK for tracing and monitoring AI applications.
 ## Installation
 
 ```bash
-pip install llm-observatory
+pip install magic-lab-observer
 ```
 
 With optional integrations:
 
 ```bash
-pip install llm-observatory[openai,anthropic,langchain]
+pip install magic-lab-observer[openai,anthropic,langchain]
 ```
 
 ## Quick Start
+
+The distribution name is `magic-lab-observer`; the stable Python import remains
+`llm_observatory`.
 
 ```python
 from llm_observatory import instrument, trace

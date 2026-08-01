@@ -5,8 +5,11 @@ Command-line interface for LLM Observatory.
 ## Installation
 
 ```bash
-pip install -e .
+pip install magic-lab-observer-cli
 ```
+
+Before the distribution is published, install this directory from the checked-out
+repository with `python -m pip install -e ./cli`.
 
 ## Usage
 

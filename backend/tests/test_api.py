@@ -11,7 +11,7 @@ async def test_health_check(client):
     data = response.json()
     assert data["status"] == "healthy"
     assert data["db"] == "ok"
-    assert data["version"] == "0.1.0"
+    assert data["version"] == "0.1.1"
 
 
 @pytest.mark.anyio
@@ -21,7 +21,7 @@ async def test_root(client):
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "LLM Observatory"
-    assert data["version"] == "0.1.0"
+    assert data["version"] == "0.1.1"
 
 
 @pytest.mark.anyio

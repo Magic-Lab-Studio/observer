@@ -17,6 +17,9 @@ Open-source observability, evaluation, and telemetry platform for LLM and agenti
 
 ## Quick Start
 
+For a guided installation, first trace, application integration, privacy choices,
+and production checklist, see [First-time setup](docs/first-time-setup.md).
+
 ### Docker Compose (recommended)
 
 ```bash
@@ -82,8 +85,8 @@ observer/
 │       ├── api.ts            # Centralized API client
 │       └── types.ts          # Shared TypeScript interfaces
 ├── sdk/
-│   ├── python/               # llm-observatory PyPI package
-│   └── typescript/           # llm-observatory npm package
+│   ├── python/               # magic-lab-observer PyPI package
+│   └── typescript/           # @magic-lab-studio/observer npm package
 ├── cli/                      # llm-observatory CLI
 ├── docker-compose.yml
 ├── podman-compose.yml
@@ -141,7 +144,7 @@ curl -X POST http://localhost:8000/v1/traces/batch \
 ## Python SDK
 
 ```bash
-pip install llm-observatory
+pip install magic-lab-observer
 ```
 
 ```python
@@ -177,11 +180,11 @@ tracer.add_exporter(OTLPExporter(endpoint="http://localhost:8000"))
 ## TypeScript SDK
 
 ```bash
-npm install llm-observatory
+npm install @magic-lab-studio/observer
 ```
 
 ```typescript
-import { instrument, trace, asyncTrace, Tracer } from "llm-observatory";
+import { instrument, trace, asyncTrace, Tracer } from "@magic-lab-studio/observer";
 
 // Auto-instrument
 instrument({ openai: true, anthropic: true });
@@ -198,14 +201,14 @@ const result = await asyncTrace("summarize", async (span) => {
 
 // Custom tracer with OTLP exporter
 const tracer = new Tracer({ serviceName: "my-app" });
-import { OTLPExporter } from "llm-observatory/exporters/otlp";
+import { OTLPExporter } from "@magic-lab-studio/observer";
 tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
 ```
 
 ## CLI
 
 ```bash
-pip install llm-observatory-cli
+pip install magic-lab-observer-cli
 ```
 
 ```bash

@@ -177,7 +177,7 @@ class TestCLIHelp:
     def test_version(self, runner: CliRunner) -> None:
         r = runner.invoke(cli, ["--version"])
         assert r.exit_code == 0
-        assert "0.1.0" in r.output
+        assert "0.1.1" in r.output
 
     def test_help(self, runner: CliRunner) -> None:
         r = runner.invoke(cli, ["--help"])
@@ -339,7 +339,7 @@ class TestExportCommand:
         assert r.exit_code == 0
         data = json.loads(r.output)
         assert data["format"] == "llm-observatory-export"
-        assert data["version"] == "0.1.0"
+        assert data["version"] == "0.1.1"
         assert data["trace_count"] == 4
 
     def test_export_to_file(self, runner: CliRunner, db_file: Path, tmp_path: Path) -> None:

@@ -1,6 +1,6 @@
 {
-  "name": "llm-observatory",
-  "version": "0.1.0",
+  "name": "@magic-lab-studio/observer",
+  "version": "0.1.1",
   "description": "TypeScript SDK for LLM Observatory - Open-source LLM observability",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,6 +22,19 @@
   ],
   "author": "LLM Observatory Contributors",
   "license": "Apache-2.0",
+  "homepage": "https://github.com/Magic-Lab-Studio/observer#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Magic-Lab-Studio/observer.git",
+    "directory": "sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/Magic-Lab-Studio/observer/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=22.12.0"
   },
