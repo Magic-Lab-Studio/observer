@@ -16,6 +16,11 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 
+LEGACY_REPORT_SCHEMA = "observer.manitos.passive_gate.v1"
+GENERIC_REPORT_SCHEMA = "observer.integration.passive_gate.v2"
+LEGACY_REPORT_PATH = ".observer-state/manitos-phase8.json"
+GENERIC_REPORT_PATH = ".observer-state/integration-gate-report.json"
+
 _QUALITY_COUNT_KEYS = (
     "error_count",
     "degraded_count",
@@ -72,6 +77,8 @@ def _non_negative_float(value: Any) -> float:
 
 @dataclass(frozen=True)
 class PassiveGateThresholds:
+    """Compatibility evaluation parameters, not a production policy."""
+
     minimum_turns: int = 20
     minimum_availability_rate: float = 0.99
     maximum_error_rate: float = 0.05
@@ -88,9 +95,6 @@ class PassiveGateThresholds:
 @dataclass(frozen=True)
 class PassiveGateConfig:
     observer_url: str = "http://127.0.0.1:8000"
-    # The integration health endpoint is deployment-specific. Keep the legacy
-    # field name for callers of the published helper, but require configuration
-    # instead of exposing a product-specific topology as a default.
     manitos_ready_url: str = ""
     api_key: str = field(default="", repr=False)
     project_id: str = "manitos"
@@ -99,9 +103,9 @@ class PassiveGateConfig:
     duration_seconds: float = 86_400.0
     interval_seconds: float = 60.0
     request_timeout_seconds: float = 5.0
-    # Retained for consumers of the published cross-repository gate contract.
-    output_path: str = ".observer-state/manitos-phase8.json"
+    output_path: str = LEGACY_REPORT_PATH
     thresholds: PassiveGateThresholds = field(default_factory=PassiveGateThresholds)
+    report_schema: str = LEGACY_REPORT_SCHEMA
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "observer_url", self.observer_url.rstrip("/"))
@@ -111,6 +115,8 @@ class PassiveGateConfig:
             raise ValueError("interval_seconds must be at least 0.1")
         if not 1 <= self.analytics_hours <= 720:
             raise ValueError("analytics_hours must be between 1 and 720")
+        if self.report_schema not in {LEGACY_REPORT_SCHEMA, GENERIC_REPORT_SCHEMA}:
+            raise ValueError("unsupported report_schema")
 
 
 def _safe_quality(payload: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -212,9 +218,7 @@ async def collect_sample(
     ready_error: str | None = "not_configured"
     ready: dict[str, Any] = {}
     if config.manitos_ready_url:
-        ready_ok, ready_code, ready, ready_error = await _get_json(
-            client, config.manitos_ready_url
-        )
+        ready_ok, ready_code, ready, ready_error = await _get_json(client, config.manitos_ready_url)
     exporter = _extract_exporter(ready)
     observer_healthy = (
         health_ok
@@ -346,12 +350,136 @@ def evaluate_samples(
     }
 
 
+def _generic_quality(payload: Mapping[str, Any]) -> dict[str, Any]:
+    aliases = {
+        "error_count": "error_count",
+        "degraded_count": "impaired_count",
+        "truncated_count": "incomplete_output_count",
+        "tool_error_count": "operation_error_count",
+        "fallback_count": "alternate_path_count",
+        "tts_error_count": "component_error_count",
+    }
+    result = {key: value for key, value in payload.items() if key not in _QUALITY_COUNT_KEYS}
+    result.update(
+        {generic: _non_negative_int(payload.get(legacy)) for legacy, generic in aliases.items()}
+    )
+    return result
+
+
+def _generic_sample(sample: Mapping[str, Any]) -> dict[str, Any]:
+    integration = sample.get("manitos") if isinstance(sample.get("manitos"), Mapping) else {}
+    return {
+        "sampled_at": sample.get("sampled_at"),
+        "observer": dict(sample.get("observer") or {}),
+        "integration": {
+            "ok": integration.get("ok") is True,
+            "status_code": _non_negative_int(integration.get("status_code")),
+            "error": _bounded_text(integration.get("error"), maximum=80) or None,
+        },
+        "quality": _generic_quality(sample.get("quality") or {}),
+    }
+
+
+def _generic_failure(value: str) -> str:
+    name = str(value).split(":", 1)[0]
+    aliases = {
+        "manitos_availability_below_threshold": "integration_availability_below_threshold",
+        "manitos_not_ready_at_end": "integration_unhealthy_at_end",
+        "degraded_rate_above_threshold": "impaired_rate_above_threshold",
+        "truncated_rate_above_threshold": "incomplete_output_rate_above_threshold",
+        "tool_error_rate_above_threshold": "operation_error_rate_above_threshold",
+        "fallback_rate_above_threshold": "alternate_path_rate_above_threshold",
+        "tts_error_rate_above_threshold": "component_error_rate_above_threshold",
+        "observer_spool_error": "integration_delivery_error",
+        "manitos_observer_exporter_disabled": "integration_export_disabled",
+        "durable_delivery_disabled": "persistence_requirement_not_met",
+        "observer_envelopes_dropped": "delivery_items_dropped",
+        "observer_spool_evicted": "persisted_items_evicted",
+        "observer_circuit_open_during_window": "delivery_temporarily_unavailable",
+        "observer_persisted_pending_above_threshold": "pending_delivery_above_threshold",
+        "manitos_readiness_unavailable": "integration_health_unavailable",
+    }
+    return aliases.get(name, name)
+
+
+def _generic_evaluation(evaluation: Mapping[str, Any]) -> dict[str, Any]:
+    count_aliases = {
+        "error_count": "error_count",
+        "degraded_count": "impaired_count",
+        "truncated_count": "incomplete_output_count",
+        "tool_error_count": "operation_error_count",
+        "fallback_count": "alternate_path_count",
+        "tts_error_count": "component_error_count",
+    }
+    rate_aliases = {
+        "error_rate": "error_rate",
+        "degraded_rate": "impaired_rate",
+        "truncated_rate": "incomplete_output_rate",
+        "tool_error_rate": "operation_error_rate",
+        "fallback_rate": "alternate_path_rate",
+        "tts_error_rate": "component_error_rate",
+    }
+    counts = evaluation.get("quality_window_counts") or {}
+    rates = evaluation.get("quality_rates") or {}
+    return {
+        "passed": evaluation.get("passed") is True,
+        "failures": [_generic_failure(value) for value in evaluation.get("failures") or []],
+        "sample_count": _non_negative_int(evaluation.get("sample_count")),
+        "observer_availability_rate": _non_negative_float(
+            evaluation.get("observer_availability_rate")
+        ),
+        "integration_availability_rate": _non_negative_float(
+            evaluation.get("manitos_availability_rate")
+        ),
+        "observed_operations": _non_negative_int(evaluation.get("observed_turns")),
+        "quality_window_counts": {
+            generic: _non_negative_int(counts.get(legacy))
+            for legacy, generic in count_aliases.items()
+        },
+        "quality_rates": {
+            generic: _non_negative_float(rates.get(legacy))
+            for legacy, generic in rate_aliases.items()
+        },
+        "final_average_duration_ms": _non_negative_float(
+            evaluation.get("final_average_duration_ms")
+        ),
+        "final_average_initial_response_ms": _non_negative_float(
+            evaluation.get("final_average_ttft_ms")
+        ),
+    }
+
+
 def _safe_config(config: PassiveGateConfig) -> dict[str, Any]:
     result = asdict(config)
     result.pop("api_key", None)
+    result.pop("report_schema", None)
     result["observer_url"] = _safe_url(config.observer_url)
     result["manitos_ready_url"] = _safe_url(config.manitos_ready_url)
+    if config.report_schema == GENERIC_REPORT_SCHEMA:
+        thresholds = result.pop("thresholds")
+        result.pop("observer_url", None)
+        result.pop("manitos_ready_url", None)
+        result.pop("output_path", None)
+        result["evaluation_parameters"] = {
+            "minimum_observations": thresholds["minimum_turns"],
+            "minimum_availability_rate": thresholds["minimum_availability_rate"],
+            "maximum_error_rate": thresholds["maximum_error_rate"],
+            "maximum_impaired_rate": thresholds["maximum_degraded_rate"],
+            "maximum_incomplete_output_rate": thresholds["maximum_truncated_rate"],
+            "maximum_operation_error_rate": thresholds["maximum_tool_error_rate"],
+            "maximum_alternate_path_rate": thresholds["maximum_fallback_rate"],
+            "maximum_component_error_rate": thresholds["maximum_tts_error_rate"],
+            "maximum_average_duration_ms": thresholds["maximum_average_duration_ms"],
+            "maximum_pending_delivery_items": thresholds["maximum_persisted_pending"],
+            "require_persistent_delivery": thresholds["require_durable_delivery"],
+        }
     return result
+
+
+def _report_samples(samples: list[dict[str, Any]], schema: str) -> list[dict[str, Any]]:
+    if schema == GENERIC_REPORT_SCHEMA:
+        return [_generic_sample(sample) for sample in samples]
+    return samples
 
 
 def _write_report(path: str | Path, report: Mapping[str, Any]) -> None:
@@ -375,12 +503,12 @@ async def run_passive_gate(config: PassiveGateConfig) -> dict[str, Any]:
             samples.append(await collect_sample(client, config, window_start=started_at))
             elapsed = time.monotonic() - started
             running = {
-                "schema_version": "observer.manitos.passive_gate.v1",
+                "schema_version": config.report_schema,
                 "status": "running",
                 "started_at": started_at,
                 "updated_at": _utc_now(),
                 "config": _safe_config(config),
-                "samples": samples,
+                "samples": _report_samples(samples, config.report_schema),
             }
             _write_report(config.output_path, running)
             remaining = config.duration_seconds - elapsed
@@ -389,14 +517,19 @@ async def run_passive_gate(config: PassiveGateConfig) -> dict[str, Any]:
             await asyncio.sleep(min(config.interval_seconds, remaining))
 
     evaluation = evaluate_samples(samples, config.thresholds)
+    public_evaluation = (
+        _generic_evaluation(evaluation)
+        if config.report_schema == GENERIC_REPORT_SCHEMA
+        else evaluation
+    )
     report = {
-        "schema_version": "observer.manitos.passive_gate.v1",
+        "schema_version": config.report_schema,
         "status": "passed" if evaluation["passed"] else "failed",
         "started_at": started_at,
         "finished_at": _utc_now(),
         "config": _safe_config(config),
-        "evaluation": evaluation,
-        "samples": samples,
+        "evaluation": public_evaluation,
+        "samples": _report_samples(samples, config.report_schema),
     }
     _write_report(config.output_path, report)
     return report
@@ -406,16 +539,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Evaluate a configurable, metadata-only integration telemetry window."
     )
-    parser.add_argument("--observer-url", default=os.getenv("MANITOS_OBSERVER_URL", "http://127.0.0.1:8000"))
+    parser.add_argument(
+        "--observer-url", default=os.getenv("MANITOS_OBSERVER_URL", "http://127.0.0.1:8000")
+    )
     parser.add_argument(
         "--integration-health-url",
-        "--manitos-ready-url",
         dest="manitos_ready_url",
         default=os.getenv(
             "OBSERVER_INTEGRATION_HEALTH_URL",
             os.getenv("MANITOS_READY_URL", ""),
         ),
         help="Optional integration health URL (legacy flag remains supported).",
+    )
+    parser.add_argument(
+        "--manitos-ready-url",
+        dest="manitos_ready_url",
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--api-key",
@@ -427,23 +567,107 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--duration-hours", type=float, default=24.0)
     parser.add_argument("--duration-seconds", type=float)
     parser.add_argument("--interval-seconds", type=float, default=60.0)
-    parser.add_argument("--minimum-turns", type=int, default=20)
+    parser.add_argument(
+        "--minimum-observations",
+        dest="minimum_turns",
+        type=int,
+        default=20,
+        help="Minimum observations required by this caller's evaluation policy.",
+    )
+    parser.add_argument(
+        "--minimum-turns",
+        dest="minimum_turns",
+        type=int,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--minimum-availability-rate", type=float, default=0.99)
     parser.add_argument("--maximum-error-rate", type=float, default=0.05)
-    parser.add_argument("--maximum-degraded-rate", type=float, default=0.15)
-    parser.add_argument("--maximum-truncated-rate", type=float, default=0.05)
-    parser.add_argument("--maximum-tool-error-rate", type=float, default=0.10)
-    parser.add_argument("--maximum-fallback-rate", type=float, default=0.25)
-    parser.add_argument("--maximum-tts-error-rate", type=float, default=0.10)
-    parser.add_argument("--maximum-average-duration-ms", type=float, default=60_000.0)
-    parser.add_argument("--maximum-persisted-pending", type=int, default=0)
-    parser.add_argument("--allow-volatile-delivery", action="store_true")
     parser.add_argument(
+        "--maximum-impaired-rate", dest="maximum_degraded_rate", type=float, default=0.15
+    )
+    parser.add_argument(
+        "--maximum-degraded-rate",
+        dest="maximum_degraded_rate",
+        type=float,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--maximum-incomplete-output-rate", dest="maximum_truncated_rate", type=float, default=0.05
+    )
+    parser.add_argument(
+        "--maximum-truncated-rate",
+        dest="maximum_truncated_rate",
+        type=float,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--maximum-operation-error-rate", dest="maximum_tool_error_rate", type=float, default=0.10
+    )
+    parser.add_argument(
+        "--maximum-tool-error-rate",
+        dest="maximum_tool_error_rate",
+        type=float,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--maximum-alternate-path-rate", dest="maximum_fallback_rate", type=float, default=0.25
+    )
+    parser.add_argument(
+        "--maximum-fallback-rate",
+        dest="maximum_fallback_rate",
+        type=float,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--maximum-component-error-rate", dest="maximum_tts_error_rate", type=float, default=0.10
+    )
+    parser.add_argument(
+        "--maximum-tts-error-rate",
+        dest="maximum_tts_error_rate",
+        type=float,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--maximum-average-duration-ms", type=float, default=60_000.0)
+    parser.add_argument(
+        "--maximum-pending-delivery-items", dest="maximum_persisted_pending", type=int, default=0
+    )
+    parser.add_argument(
+        "--maximum-persisted-pending",
+        dest="maximum_persisted_pending",
+        type=int,
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--allow-nonpersistent-delivery", dest="allow_volatile_delivery", action="store_true"
+    )
+    parser.add_argument(
+        "--allow-volatile-delivery",
+        dest="allow_volatile_delivery",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
         "--output",
         default=os.getenv(
             "OBSERVER_INTEGRATION_GATE_OUTPUT",
-            ".observer-state/manitos-phase8.json",
+            LEGACY_REPORT_PATH,
         ),
+    )
+    output_group.add_argument(
+        "--generic-report",
+        nargs="?",
+        const=GENERIC_REPORT_PATH,
+        metavar="PATH",
+        help="Emit the additive generic v2 report, optionally at PATH.",
     )
     return parser
 
@@ -465,6 +689,7 @@ def config_from_args(args: argparse.Namespace) -> PassiveGateConfig:
         maximum_persisted_pending=max(0, args.maximum_persisted_pending),
         require_durable_delivery=not args.allow_volatile_delivery,
     )
+    generic_output = getattr(args, "generic_report", None)
     return PassiveGateConfig(
         observer_url=args.observer_url,
         manitos_ready_url=args.manitos_ready_url,
@@ -473,8 +698,9 @@ def config_from_args(args: argparse.Namespace) -> PassiveGateConfig:
         environment=args.environment,
         duration_seconds=duration_seconds,
         interval_seconds=args.interval_seconds,
-        output_path=args.output,
+        output_path=generic_output or args.output,
         thresholds=thresholds,
+        report_schema=GENERIC_REPORT_SCHEMA if generic_output else LEGACY_REPORT_SCHEMA,
     )
 
 
@@ -485,18 +711,27 @@ def main() -> int:
     except KeyboardInterrupt:
         return 130
     evaluation = report["evaluation"]
+    observed_key = (
+        "observed_operations" if config.report_schema == GENERIC_REPORT_SCHEMA else "observed_turns"
+    )
     print(
         json.dumps(
             {
                 "status": report["status"],
                 "output": str(Path(config.output_path).resolve()),
-                "observed_turns": evaluation["observed_turns"],
+                observed_key: evaluation[observed_key],
                 "failures": evaluation["failures"],
             },
             sort_keys=True,
         )
     )
     return 0 if evaluation["passed"] else 1
+
+
+# Additive generic names for new callers; legacy imports remain supported.
+IntegrationGateThresholds = PassiveGateThresholds
+IntegrationGateConfig = PassiveGateConfig
+run_integration_gate = run_passive_gate
 
 
 if __name__ == "__main__":
