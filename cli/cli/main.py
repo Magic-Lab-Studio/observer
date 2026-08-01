@@ -13,7 +13,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="llm-observatory")
+@click.version_option(version="0.1.1", prog_name="llm-observatory")
 @click.option("--api-key", envvar="OBSERVATORY_API_KEY", default=None, help="API key for backend authentication")
 @click.pass_context
 def cli(ctx: click.Context, api_key: str | None) -> None:
@@ -266,7 +266,7 @@ def serve(host: str, port: int, reload: bool, db: str) -> None:
         import uvicorn
     except ImportError:
         console.print("[red]Error: uvicorn is not installed.[/red]")
-        console.print("Install it with: pip install 'llm-observatory-backend[sqlite]'")
+        console.print("Install it with: pip install 'magic-lab-observer-backend[sqlite]'")
         return
 
     os.environ["DATABASE_URL"] = db
@@ -374,7 +374,7 @@ def export(db: str, output_format: str, output: str | None, status: str | None, 
 
     export_data = {
         "format": "llm-observatory-export",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "trace_count": len(traces_data),
         "traces": traces_data,
     }

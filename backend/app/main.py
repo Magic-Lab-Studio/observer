@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title="LLM Observatory",
     description="Open-source observability and telemetry platform for LLMs",
-    version="0.1.0",
+    version="0.1.1",
     lifespan=lifespan,
 )
 
@@ -98,7 +98,7 @@ async def health_check() -> dict:
     except Exception:
         db_status = "error"
 
-    return {"status": "healthy", "db": db_status, "version": "0.1.0"}
+    return {"status": "healthy", "db": db_status, "version": "0.1.1"}
 
 
 @app.get("/")
@@ -106,7 +106,7 @@ async def root() -> dict[str, str]:
     """Root endpoint."""
     return {
         "name": "LLM Observatory",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "docs": "/docs",
     }
 

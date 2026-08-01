@@ -5,7 +5,7 @@ Open-source LLM observability for Node.js/TypeScript applications.
 ## Installation
 
 ```bash
-npm install llm-observatory
+npm install @magic-lab-studio/observer
 ```
 
 Optional peer dependencies for auto-instrumentation:
@@ -18,7 +18,7 @@ npm install anthropic   # for Anthropic auto-instrumentation
 ## Quick Start
 
 ```typescript
-import { instrument, trace, asyncTrace, Tracer, OTLPExporter } from 'llm-observatory';
+import { instrument, trace, asyncTrace, Tracer, OTLPExporter } from '@magic-lab-studio/observer';
 
 // Auto-instrument LLM libraries
 instrument({ openai: true, anthropic: true });
@@ -94,7 +94,7 @@ Core tracing class.
 Sends traces to the LLM Observatory backend via HTTP.
 
 ```typescript
-import { OTLPExporter } from 'llm-observatory';
+import { OTLPExporter } from '@magic-lab-studio/observer';
 
 const exporter = new OTLPExporter({
   endpoint: 'http://localhost:8000',
@@ -111,7 +111,7 @@ tracer.addExporter(exporter);
 Calculate USD cost for a model using the built-in pricing table.
 
 ```typescript
-import { calculateCost } from 'llm-observatory';
+import { calculateCost } from '@magic-lab-studio/observer';
 
 const cost = calculateCost('gpt-4o', 1000, 500);
 // Returns 0.0075 or null for unknown models
@@ -122,7 +122,7 @@ Supported models: GPT-4o, GPT-4o-mini, GPT-4-turbo, GPT-4, GPT-3.5-turbo, o1, o1
 ## TypeScript Types
 
 ```typescript
-import type { Span, SpanStatus, TokenUsage, SpanExporter } from 'llm-observatory';
+import type { Span, SpanStatus, TokenUsage, SpanExporter } from '@magic-lab-studio/observer';
 
 interface Span {
   id: string;
