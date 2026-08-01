@@ -1,13 +1,14 @@
 # LLM Observatory
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![CI](https://github.com/josedaniel-dev/observer/actions/workflows/ci.yml/badge.svg)](https://github.com/josedaniel-dev/observer/actions/workflows/ci.yml)
+[![CI](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml/badge.svg)](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml)
 
-Open-source observability and telemetry platform for analyzing and grading LLMs.
+Open-source observability, evaluation, and telemetry platform for LLM and agentic systems.
 
 ## Features
 
 - **Multi-framework tracing** — Auto-instrument OpenAI, Anthropic, LangChain
+- **Agent runtime integration** — Versioned adapters for metadata-only telemetry
 - **Cost tracking** — Per-model pricing for 20+ models (GPT-4o, Claude 4, Gemini 2.0, etc.)
 - **Evaluation engine** — LLM-as-Judge with YAML rubric, rule-based metrics, human feedback
 - **Real-time dashboard** — Live trace streaming via WebSocket, time-range filtering
@@ -19,7 +20,7 @@ Open-source observability and telemetry platform for analyzing and grading LLMs.
 ### Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/josedaniel-dev/observer.git
+git clone https://github.com/Magic-Lab-Studio/observer.git
 cd observer
 docker compose up -d
 ```
@@ -97,7 +98,7 @@ Base URL: `http://localhost:8000`
 |----------|-----------------------------------|----------------------------------|
 | `GET`    | `/health`                         | Health check (db status, version)|
 | `POST`   | `/v1/traces/batch`                | Ingest traces                    |
-| `POST`   | `/v1/ingest/manitos/traces`       | Idempotent ManitOS turn ingestion|
+| `POST`   | `/v1/ingest/manitos/traces`       | Versioned integration ingestion   |
 | `GET`    | `/v1/traces`                      | List traces (paginated)          |
 | `GET`    | `/v1/traces/{id}`                 | Get trace detail                 |
 | `DELETE` | `/v1/traces/{id}`                 | Delete trace                     |
@@ -111,11 +112,11 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/timeline`          | Trace counts over time           |
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost breakdown by model          |
 | `GET`    | `/v1/analytics/sessions`          | Unique sessions with stats       |
-| `GET`    | `/v1/analytics/manitos-quality`   | ManitOS quality and latency       |
+| `GET`    | `/v1/analytics/manitos-quality`   | Integration quality and latency   |
 
-The ManitOS endpoint uses the versioned `manitos.telemetry.v1` envelope, accepts opaque
-ManitOS session identifiers, and safely deduplicates exporter retries. See
-[docs/manitos-integration.md](docs/manitos-integration.md) for its contract and limits.
+The integration endpoint uses the versioned `manitos.telemetry.v1` envelope, accepts
+opaque session identifiers, and safely deduplicates exporter retries. See
+[docs/manitos-integration.md](docs/manitos-integration.md) for the published contract.
 
 ### Example: Ingest a trace
 

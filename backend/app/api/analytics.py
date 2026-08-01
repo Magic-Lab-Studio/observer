@@ -54,7 +54,7 @@ class QualityBreakdown(BaseModel):
 
 
 class ManitOSQualitySummary(BaseModel):
-    """Metadata-only quality indicators emitted by ManitOS turns."""
+    """Metadata-only quality indicators emitted by a compatible integration."""
 
     project_id: str
     environment: str | None

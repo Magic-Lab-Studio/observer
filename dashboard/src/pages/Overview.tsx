@@ -124,21 +124,23 @@ function Overview() {
         </div>
       )}
 
-      <section className="mt-8" aria-labelledby="manitos-quality-heading">
+      <section className="mt-8" aria-labelledby="integration-quality-heading">
         <div className="flex items-baseline justify-between mb-4">
-          <h2 id="manitos-quality-heading" className="text-xl font-semibold">ManitOS Quality</h2>
-          <span className="text-sm text-gray-500">metadata only · project: manitos</span>
+          <h2 id="integration-quality-heading" className="text-xl font-semibold">Integration Quality</h2>
+          <span className="text-sm text-gray-500">
+            metadata only · project: {quality?.project_id ?? 'configured integration'}
+          </span>
         </div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard title="Turns" value={quality?.total_turns.toLocaleString() ?? '0'} />
           <StatCard title="Error Rate" value={`${((quality?.error_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Degraded Rate" value={`${((quality?.degraded_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Fallback Rate" value={`${((quality?.fallback_rate ?? 0) * 100).toFixed(1)}%`} />
+          <StatCard title="Quality Warning Rate" value={`${((quality?.degraded_rate ?? 0) * 100).toFixed(1)}%`} />
+          <StatCard title="Alternate Path Rate" value={`${((quality?.fallback_rate ?? 0) * 100).toFixed(1)}%`} />
           <StatCard title="Avg Turn Latency" value={`${Math.round(quality?.avg_duration_ms ?? 0)}ms`} />
           <StatCard title="Avg TTFT" value={`${Math.round(quality?.avg_ttft_ms ?? 0)}ms`} />
           <StatCard title="Truncated Rate" value={`${((quality?.truncated_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Tool Error Rate" value={`${((quality?.tool_error_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="TTS Error Rate" value={`${((quality?.tts_error_rate ?? 0) * 100).toFixed(1)}%`} />
+          <StatCard title="Operation Error Rate" value={`${((quality?.tool_error_rate ?? 0) * 100).toFixed(1)}%`} />
+          <StatCard title="Component Error Rate" value={`${((quality?.tts_error_rate ?? 0) * 100).toFixed(1)}%`} />
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -160,7 +162,7 @@ function Overview() {
                   ))}
                 </div>
               ) : (
-                <div className="text-gray-500">No ManitOS data yet</div>
+                <div className="text-gray-500">No integration data yet</div>
               )}
             </div>
           ))}

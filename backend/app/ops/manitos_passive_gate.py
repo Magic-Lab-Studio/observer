@@ -1,4 +1,4 @@
-"""Passive, metadata-only release gate for the ManitOS integration."""
+"""Passive, metadata-only compatibility gate for an Observer integration."""
 
 from __future__ import annotations
 
@@ -88,7 +88,10 @@ class PassiveGateThresholds:
 @dataclass(frozen=True)
 class PassiveGateConfig:
     observer_url: str = "http://127.0.0.1:8000"
-    manitos_ready_url: str = "http://127.0.0.1:8765/readyz"
+    # The integration health endpoint is deployment-specific. Keep the legacy
+    # field name for callers of the published helper, but require configuration
+    # instead of exposing a product-specific topology as a default.
+    manitos_ready_url: str = ""
     api_key: str = field(default="", repr=False)
     project_id: str = "manitos"
     environment: str | None = None
@@ -96,6 +99,7 @@ class PassiveGateConfig:
     duration_seconds: float = 86_400.0
     interval_seconds: float = 60.0
     request_timeout_seconds: float = 5.0
+    # Retained for consumers of the published cross-repository gate contract.
     output_path: str = ".observer-state/manitos-phase8.json"
     thresholds: PassiveGateThresholds = field(default_factory=PassiveGateThresholds)
 
@@ -203,9 +207,9 @@ async def collect_sample(
         f"{config.observer_url}/v1/analytics/manitos-quality?{urlencode(query)}",
         headers=headers,
     )
-    ready_ok = True
+    ready_ok = False
     ready_code = 0
-    ready_error: str | None = None
+    ready_error: str | None = "not_configured"
     ready: dict[str, Any] = {}
     if config.manitos_ready_url:
         ready_ok, ready_code, ready, ready_error = await _get_json(
@@ -400,10 +404,19 @@ async def run_passive_gate(config: PassiveGateConfig) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Observe real ManitOS telemetry without generating conversations."
+        description="Evaluate a configurable, metadata-only integration telemetry window."
     )
     parser.add_argument("--observer-url", default=os.getenv("MANITOS_OBSERVER_URL", "http://127.0.0.1:8000"))
-    parser.add_argument("--manitos-ready-url", default=os.getenv("MANITOS_READY_URL", "http://127.0.0.1:8765/readyz"))
+    parser.add_argument(
+        "--integration-health-url",
+        "--manitos-ready-url",
+        dest="manitos_ready_url",
+        default=os.getenv(
+            "OBSERVER_INTEGRATION_HEALTH_URL",
+            os.getenv("MANITOS_READY_URL", ""),
+        ),
+        help="Optional integration health URL (legacy flag remains supported).",
+    )
     parser.add_argument(
         "--api-key",
         default=os.getenv("MANITOS_OBSERVER_API_KEY", ""),
@@ -425,7 +438,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--maximum-average-duration-ms", type=float, default=60_000.0)
     parser.add_argument("--maximum-persisted-pending", type=int, default=0)
     parser.add_argument("--allow-volatile-delivery", action="store_true")
-    parser.add_argument("--output", default=".observer-state/manitos-phase8.json")
+    parser.add_argument(
+        "--output",
+        default=os.getenv(
+            "OBSERVER_INTEGRATION_GATE_OUTPUT",
+            ".observer-state/manitos-phase8.json",
+        ),
+    )
     return parser
 
 

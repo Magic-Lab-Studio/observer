@@ -84,7 +84,7 @@ function Traces() {
           <input
             type="text"
             aria-label="Project filter"
-            placeholder="Project (for example manitos)"
+            placeholder="Project (for example my-app)"
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
             className="bg-gray-700 text-white px-4 py-2 rounded-md min-w-[220px]"

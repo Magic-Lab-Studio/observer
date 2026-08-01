@@ -18,9 +18,9 @@ class Trace(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
-    # ManitOS session identifiers are stable opaque strings (for example
-    # ``session_20260720_...``), not UUIDs.  Keep trace/span IDs UUID-sized,
-    # but do not discard the source system's correlation identifiers.
+    # Integration session identifiers are stable opaque strings, not
+    # necessarily UUIDs. Keep trace/span IDs UUID-sized without discarding
+    # source-system correlation identifiers.
     session_id = Column(String(255), nullable=True, index=True)
     turn_id = Column(String(128), nullable=True, index=True)
     project_id = Column(String(128), nullable=True, index=True)
