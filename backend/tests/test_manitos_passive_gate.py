@@ -4,10 +4,17 @@ import httpx
 import pytest
 
 from app.ops.manitos_passive_gate import (
+    GENERIC_REPORT_PATH,
+    GENERIC_REPORT_SCHEMA,
+    LEGACY_REPORT_PATH,
+    LEGACY_REPORT_SCHEMA,
+    IntegrationGateConfig,
+    IntegrationGateThresholds,
     PassiveGateConfig,
     PassiveGateThresholds,
     build_parser,
     collect_sample,
+    config_from_args,
     evaluate_samples,
     run_passive_gate,
 )
@@ -20,7 +27,7 @@ def test_parser_uses_generic_configurable_health_and_report_defaults(monkeypatch
 
     defaults = build_parser().parse_args([])
     assert defaults.manitos_ready_url == ""
-    assert defaults.output == ".observer-state/manitos-phase8.json"
+    assert defaults.output == LEGACY_REPORT_PATH
 
     generic = build_parser().parse_args(
         ["--integration-health-url", "https://integration.example.test/health"]
@@ -42,10 +49,62 @@ def test_parser_uses_generic_configurable_health_and_report_defaults(monkeypatch
     legacy_environment = build_parser().parse_args([])
     assert legacy_environment.manitos_ready_url == "https://legacy.example.test/health"
 
-    explicit = build_parser().parse_args(
-        ["--output", ".observer-state/explicit-report.json"]
-    )
+    explicit = build_parser().parse_args(["--output", ".observer-state/explicit-report.json"])
     assert explicit.output == ".observer-state/explicit-report.json"
+
+    generic_report = build_parser().parse_args(["--generic-report"])
+    assert generic_report.generic_report == GENERIC_REPORT_PATH
+
+
+def test_generic_names_and_legacy_cli_flags_remain_compatible():
+    assert IntegrationGateConfig is PassiveGateConfig
+    assert IntegrationGateThresholds is PassiveGateThresholds
+
+    generic = build_parser().parse_args(
+        [
+            "--minimum-observations",
+            "3",
+            "--maximum-alternate-path-rate",
+            "0.2",
+            "--maximum-component-error-rate",
+            "0.1",
+        ]
+    )
+    legacy = build_parser().parse_args(
+        [
+            "--minimum-turns",
+            "3",
+            "--maximum-fallback-rate",
+            "0.2",
+            "--maximum-tts-error-rate",
+            "0.1",
+        ]
+    )
+    assert generic.minimum_turns == legacy.minimum_turns
+    assert generic.maximum_fallback_rate == legacy.maximum_fallback_rate
+    assert generic.maximum_tts_error_rate == legacy.maximum_tts_error_rate
+
+
+def test_cli_help_prefers_generic_terminology():
+    help_text = build_parser().format_help()
+
+    for generic_flag in (
+        "--integration-health-url",
+        "--minimum-observations",
+        "--maximum-alternate-path-rate",
+        "--maximum-component-error-rate",
+        "--maximum-pending-delivery-items",
+        "--generic-report",
+    ):
+        assert generic_flag in help_text
+    for legacy_flag in (
+        "--manitos-ready-url",
+        "--minimum-turns",
+        "--maximum-fallback-rate",
+        "--maximum-tts-error-rate",
+        "--maximum-persisted-pending",
+    ):
+        assert legacy_flag not in help_text
 
 
 def _sample(
@@ -274,8 +333,58 @@ async def test_report_never_persists_api_key_or_url_credentials(tmp_path, monkey
     report = await run_passive_gate(config)
 
     persisted = output.read_text(encoding="utf-8")
-    assert report["schema_version"] == "observer.manitos.passive_gate.v1"
+    assert report["schema_version"] == LEGACY_REPORT_SCHEMA
+    assert "report_schema" not in report["config"]
     assert "password" not in persisted
     assert "url-secret" not in persisted
     assert "ready-secret" not in persisted
     assert "header-secret" not in persisted
+
+
+@pytest.mark.asyncio
+async def test_generic_v2_is_additive_and_omits_legacy_delivery_details(tmp_path, monkeypatch):
+    async def fake_collect(_client, _config, **kwargs):
+        return _sample(turns=10, tts_errors=2, dropped=1, circuit="open")
+
+    monkeypatch.setattr("app.ops.manitos_passive_gate.collect_sample", fake_collect)
+    output = tmp_path / "integration-gate-report.json"
+    config = PassiveGateConfig(
+        observer_url="http://observer",
+        manitos_ready_url="http://integration/health",
+        duration_seconds=0,
+        output_path=str(output),
+        report_schema=GENERIC_REPORT_SCHEMA,
+        thresholds=PassiveGateThresholds(minimum_turns=1),
+    )
+
+    report = await run_passive_gate(config)
+    persisted = output.read_text(encoding="utf-8")
+
+    assert report["schema_version"] == GENERIC_REPORT_SCHEMA
+    assert report["evaluation"]["observed_operations"] == 10
+    assert report["evaluation"]["quality_rates"]["component_error_rate"] == 0.2
+    assert report["samples"][0]["integration"]["ok"] is True
+    assert "exporter" not in report["samples"][0]["integration"]
+    assert "observer_url" not in report["config"]
+    assert "integration_health_url" not in report["config"]
+    assert "output_path" not in report["config"]
+    for legacy_key in (
+        "manitos",
+        "tts_error_count",
+        "fallback_count",
+        "spool_error",
+        "circuit_state",
+        "durable_delivery",
+        "persisted_pending",
+    ):
+        assert f'"{legacy_key}":' not in persisted
+
+
+def test_generic_report_mode_selects_v2_without_changing_legacy_default():
+    legacy = config_from_args(build_parser().parse_args([]))
+    generic = config_from_args(build_parser().parse_args(["--generic-report"]))
+
+    assert legacy.report_schema == LEGACY_REPORT_SCHEMA
+    assert legacy.output_path == LEGACY_REPORT_PATH
+    assert generic.report_schema == GENERIC_REPORT_SCHEMA
+    assert generic.output_path == GENERIC_REPORT_PATH

@@ -94,6 +94,23 @@ metadata-only aggregate fields for this integration. Existing field names are
 retained to avoid breaking clients; they should not be interpreted as ManitOS
 production policy or release criteria.
 
+## Optional integration gate
+
+Observer includes an optional metadata-only evaluation utility. New automation
+should use `observer-integration-passive-gate --generic-report`, which emits the
+additive `observer.integration.passive_gate.v2` report at
+`.observer-state/integration-gate-report.json` unless another path is supplied.
+Its evaluation parameters are caller configuration, not Observer or ManitOS
+production policy.
+
+The v2 report excludes configured endpoint and output paths as well as legacy
+delivery internals; it retains only bounded integration status and aggregate
+quality terminology needed by external automation.
+
+The legacy `observer-manitos-passive-gate` command, v1 schema, CLI flags, failure
+identifiers, and default report path remain supported unchanged. Enabling v2
+does not move, rewrite, or delete an existing v1 report.
+
 ## Runtime configuration
 
 The ManitOS exporter is opt-in. Integration users may configure these published

@@ -1,4 +1,4 @@
-"""Versioned, idempotent telemetry ingestion for ManitOS runtimes."""
+"""Versioned, idempotent telemetry ingestion for a reference runtime integration."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def _bounded_json(value: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 class ManitOSTrace(StrictModel):
-    """Root trace metadata for one ManitOS turn."""
+    """Root trace metadata for one integration operation."""
 
     id: str
     name: str = Field(min_length=1, max_length=255)
@@ -100,7 +100,7 @@ class ManitOSTrace(StrictModel):
 
 
 class ManitOSSpan(StrictModel):
-    """A completed or explicitly partial operation within a ManitOS turn."""
+    """A completed or explicitly partial operation within an integration trace."""
 
     id: str
     parent_id: str | None = None
@@ -142,7 +142,7 @@ class ManitOSSpan(StrictModel):
 
 
 class ManitOSIngestRequest(StrictModel):
-    """Stable wire envelope for a single ManitOS turn trace."""
+    """Stable wire envelope retained for the published integration contract."""
 
     schema_version: Literal["manitos.telemetry.v1"]
     idempotency_key: str = Field(min_length=1, max_length=255)
@@ -309,7 +309,7 @@ async def ingest_manitos_trace(
     payload: ManitOSIngestRequest,
     session: AsyncSession = Depends(get_session),
 ) -> ManitOSIngestResponse:
-    """Upsert a complete ManitOS turn trace with retry-safe semantics."""
+    """Upsert a complete integration trace with retry-safe semantics."""
 
     del request  # Required by SlowAPI's decorator contract.
     digest = _payload_hash(payload)
