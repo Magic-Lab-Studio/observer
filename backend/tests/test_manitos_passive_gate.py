@@ -20,7 +20,7 @@ def test_parser_uses_generic_configurable_health_and_report_defaults(monkeypatch
 
     defaults = build_parser().parse_args([])
     assert defaults.manitos_ready_url == ""
-    assert defaults.output == ".observer-state/integration-gate-report.json"
+    assert defaults.output == ".observer-state/manitos-phase8.json"
 
     generic = build_parser().parse_args(
         ["--integration-health-url", "https://integration.example.test/health"]

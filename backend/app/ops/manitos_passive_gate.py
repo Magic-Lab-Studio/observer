@@ -99,7 +99,8 @@ class PassiveGateConfig:
     duration_seconds: float = 86_400.0
     interval_seconds: float = 60.0
     request_timeout_seconds: float = 5.0
-    output_path: str = ".observer-state/integration-gate-report.json"
+    # Retained for consumers of the published cross-repository gate contract.
+    output_path: str = ".observer-state/manitos-phase8.json"
     thresholds: PassiveGateThresholds = field(default_factory=PassiveGateThresholds)
 
     def __post_init__(self) -> None:
@@ -441,7 +442,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         default=os.getenv(
             "OBSERVER_INTEGRATION_GATE_OUTPUT",
-            ".observer-state/integration-gate-report.json",
+            ".observer-state/manitos-phase8.json",
         ),
     )
     return parser
