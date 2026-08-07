@@ -89,7 +89,7 @@ jobs:
             --virtual-time-budget=5000 \
             --window-size=1440,900 \
             --screenshot=smoke-artifacts/observer-dashboard.png \
-            http://localhost:5173/
+            http://localhost:5173/traces
           test -s smoke-artifacts/observer-dashboard.png
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
