@@ -48,6 +48,6 @@ The workflow checks that the tag and package versions match, builds packages in
 jobs without publishing permission, and grants OIDC only to the publish jobs.
 It never accepts arbitrary credentials or silently moves an existing tag.
 
-The initial npm `0.1.1` package was published before this workflow. When
-bootstrapping the three Python `0.1.1` projects, select `python`; do not attempt
-to republish the existing npm version.
+Observer `0.1.1` established all four registry projects. For later releases,
+update every package to the same new version before selecting `all`; registries
+do not permit republishing an existing version.
