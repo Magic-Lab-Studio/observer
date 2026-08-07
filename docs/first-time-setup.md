@@ -93,9 +93,15 @@ canonical package distribution names are:
 | Python CLI | `magic-lab-observer-cli` | `llm-observatory` command |
 | Python backend | `magic-lab-observer-backend` | `app` package and existing entry points |
 
-Until these distributions are published by Magic Lab Studio, install them from
-the checked-out repository instead of installing similarly named unscoped
-packages from a public registry:
+The TypeScript SDK is available from npm:
+
+```bash
+npm install @magic-lab-studio/observer@0.1.1
+```
+
+Until the Python distributions are published by Magic Lab Studio, install them
+from the checked-out repository instead of installing similarly named
+unscoped packages from a public registry:
 
 ```bash
 python -m pip install "./sdk/python[openai,anthropic,langchain]"
@@ -109,9 +115,8 @@ Do not use `pip install llm-observatory` or `npm install llm-observatory` as a
 substitute: those unscoped registry names are not the distribution identity of
 this repository.
 
-The first registry publication under the canonical names is planned for
-Observer `0.1.1`, so it can correspond to a source tag newer than the existing
-`v0.1.0` release.
+The first canonical npm publication is Observer `0.1.1`. Python registry
+availability is tracked separately; see [Package releases](releasing.md).
 
 For custom runtimes, direct HTTP is the smallest stable contract. Send completed
 spans to `/v1/traces/batch`; use a consistent `trace_id` to connect model, tool,
@@ -154,10 +159,10 @@ Before the first registry release, organization maintainers must:
 
 1. Create or verify the `magic-lab-studio` npm organization and grant the
    release maintainers access.
-2. Reserve the three Python distribution names with an initial release from
-   this repository.
-3. Configure PyPI and npm trusted publishing for this GitHub repository.
-4. Publish matching versions and verify the installed package metadata and
-   provenance.
+2. Configure the three pending PyPI publishers for this repository.
+3. Configure PyPI and npm trusted publishing as described in
+   [Package releases](releasing.md).
+4. Publish matching versions and verify installed package metadata and
+   provenance from clean environments.
 5. Update this guide only after registry installation has been tested from a
    clean environment.
