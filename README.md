@@ -8,6 +8,11 @@ LLM and agentic systems. It stores traces in SQLite or PostgreSQL that you
 control, works with local or hosted models, and requires no Observer cloud
 account.
 
+![Observer dashboard showing a synthetic trace](docs/assets/observer-dashboard.png)
+
+_The dashboard above was rendered from synthetic telemetry by the clean-runner
+[quickstart smoke test](.github/workflows/quickstart-smoke.yml)._
+
 ## Features
 
 - **Multi-framework tracing** — Auto-instrument OpenAI, Anthropic, LangChain
