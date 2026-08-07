@@ -72,6 +72,9 @@ jobs:
           curl --fail --silent --show-error \
             'http://localhost:8000/v1/traces/?search=quickstart-smoke' \
             | jq -e '.total == 1 and .traces[0].name == "quickstart-smoke"' >/dev/null
+          curl --fail --silent --show-error \
+            'http://localhost:5173/api/v1/traces/?search=quickstart-smoke' \
+            | jq -e '.total == 1 and .traces[0].name == "quickstart-smoke"' >/dev/null
       - name: Capture the populated dashboard
         shell: bash
         run: |

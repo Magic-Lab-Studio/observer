@@ -1,4 +1,4 @@
-FROM node:22.12-alpine
+FROM node:22.12-alpine AS build
 
 WORKDIR /app
 
@@ -12,11 +12,10 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Install serve globally for production static file serving
-RUN npm install -g serve
+FROM nginx:1.27-alpine
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
 
 # Expose port
 EXPOSE 5173
-
-# Serve the production build
-CMD ["serve", "dist", "-l", "5173"]
