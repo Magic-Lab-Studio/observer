@@ -48,7 +48,7 @@ export const api = {
     if (params.session_id) qs.set('session_id', params.session_id);
     if (params.service_instance_id) qs.set('service_instance_id', params.service_instance_id);
     const query = qs.toString();
-    return request(`/v1/traces${query ? `?${query}` : ''}`);
+    return request(`/v1/traces/${query ? `?${query}` : ''}`);
   },
 
   async getTrace(traceId: string): Promise<Trace> {
@@ -76,7 +76,7 @@ export const api = {
     if (params.min_score !== undefined) qs.set('min_score', String(params.min_score));
     if (params.max_score !== undefined) qs.set('max_score', String(params.max_score));
     const query = qs.toString();
-    return request(`/v1/evaluations${query ? `?${query}` : ''}`);
+    return request(`/v1/evaluations/${query ? `?${query}` : ''}`);
   },
 
   // Analytics

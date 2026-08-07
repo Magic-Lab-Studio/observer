@@ -85,6 +85,18 @@ jobs:
             --headless=new \
             --no-sandbox \
             --disable-gpu \
+            --virtual-time-budget=5000 \
+            --dump-dom \
+            http://localhost:5173/traces \
+            > smoke-artifacts/traces.html
+          grep --quiet 'quickstart-smoke' smoke-artifacts/traces.html
+          if grep --quiet --ignore-case 'failed to fetch\|api error' smoke-artifacts/traces.html; then
+            exit 1
+          fi
+          google-chrome \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
             --hide-scrollbars \
             --virtual-time-budget=5000 \
             --window-size=1440,900 \
