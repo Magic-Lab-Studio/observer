@@ -1,0 +1,80 @@
+name: Quickstart smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quickstart-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compose-quickstart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Start Observer exactly as documented
+        run: docker compose up -d
+      - name: Wait for API and dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_ready=false
+          dashboard_ready=false
+          for _ in {1..90}; do
+            if curl --fail --silent --show-error http://localhost:8000/health \
+              | jq -e '.status == "healthy" and .db == "ok"' >/dev/null; then
+              api_ready=true
+            fi
+            if curl --fail --silent --show-error http://localhost:5173/ >/dev/null; then
+              dashboard_ready=true
+            fi
+            if [[ "$api_ready" == true && "$dashboard_ready" == true ]]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          exit 1
+      - name: Send and retrieve a synthetic trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --request POST http://localhost:8000/v1/traces/batch \
+            --header 'Content-Type: application/json' \
+            --data '{
+              "spans": [{
+                "id": "00000000-0000-4000-8000-000000000012",
+                "trace_id": "00000000-0000-4000-8000-000000000011",
+                "name": "quickstart-smoke",
+                "span_type": "llm",
+                "start_time": 1785600000.0,
+                "end_time": 1785600001.0,
+                "status": "ok",
+                "tokens_input": 12,
+                "tokens_output": 4,
+                "attributes": {
+                  "provider": "synthetic",
+                  "model": "example-model",
+                  "environment": "ci"
+                }
+              }]
+            }' \
+            | jq -e 'length == 1 and .[0].name == "quickstart-smoke"' >/dev/null
+          curl --fail --silent --show-error \
+            'http://localhost:8000/v1/traces/?search=quickstart-smoke' \
+            | jq -e '.total == 1 and .traces[0].name == "quickstart-smoke"' >/dev/null
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop Observer
+        if: always()
+        run: docker compose down --volumes
