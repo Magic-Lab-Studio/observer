@@ -72,6 +72,28 @@ jobs:
           curl --fail --silent --show-error \
             'http://localhost:8000/v1/traces/?search=quickstart-smoke' \
             | jq -e '.total == 1 and .traces[0].name == "quickstart-smoke"' >/dev/null
+      - name: Capture the populated dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v google-chrome
+          mkdir -p smoke-artifacts
+          google-chrome \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --hide-scrollbars \
+            --virtual-time-budget=5000 \
+            --window-size=1440,900 \
+            --screenshot=smoke-artifacts/observer-dashboard.png \
+            http://localhost:5173/
+          test -s smoke-artifacts/observer-dashboard.png
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: observer-dashboard-screenshot
+          path: smoke-artifacts/observer-dashboard.png
+          if-no-files-found: error
+          retention-days: 3
       - name: Show service logs on failure
         if: failure()
         run: docker compose logs --no-color
