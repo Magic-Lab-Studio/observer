@@ -93,15 +93,22 @@ canonical package distribution names are:
 | Python CLI | `magic-lab-observer-cli` | `llm-observatory` command |
 | Python backend | `magic-lab-observer-backend` | `app` package and existing entry points |
 
-The TypeScript SDK is available from npm:
+The published SDKs and CLI are available from their registries:
 
 ```bash
 npm install @magic-lab-studio/observer@0.1.1
+python -m pip install magic-lab-observer==0.1.1
+python -m pip install magic-lab-observer-cli==0.1.1
 ```
 
-Until the Python distributions are published by Magic Lab Studio, install them
-from the checked-out repository instead of installing similarly named
-unscoped packages from a public registry:
+Install the backend distribution separately when embedding or operating the
+API outside the Compose quickstart:
+
+```bash
+python -m pip install magic-lab-observer-backend==0.1.1
+```
+
+Contributors can instead install editable packages from a checkout:
 
 ```bash
 python -m pip install "./sdk/python[openai,anthropic,langchain]"
@@ -115,8 +122,8 @@ Do not use `pip install llm-observatory` or `npm install llm-observatory` as a
 substitute: those unscoped registry names are not the distribution identity of
 this repository.
 
-The first canonical npm publication is Observer `0.1.1`. Python registry
-availability is tracked separately; see [Package releases](releasing.md).
+The first coordinated registry publication is Observer `0.1.1`; see
+[Package releases](releasing.md).
 
 For custom runtimes, direct HTTP is the smallest stable contract. Send completed
 spans to `/v1/traces/batch`; use a consistent `trace_id` to connect model, tool,
@@ -155,14 +162,12 @@ PyPI does not support organization scopes, so the Python distributions use the
 `@magic-lab-studio` scope. Publishing should use registry trusted publishing
 from a protected GitHub environment rather than long-lived API tokens.
 
-Before the first registry release, organization maintainers must:
+Release maintainers must keep the trusted-publishing configuration aligned:
 
 1. Create or verify the `magic-lab-studio` npm organization and grant the
    release maintainers access.
-2. Configure the three pending PyPI publishers for this repository.
+2. Keep the three PyPI trusted publishers configured for this repository.
 3. Configure PyPI and npm trusted publishing as described in
    [Package releases](releasing.md).
 4. Publish matching versions and verify installed package metadata and
    provenance from clean environments.
-5. Update this guide only after registry installation has been tested from a
-   clean environment.

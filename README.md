@@ -196,20 +196,18 @@ curl -X POST http://localhost:8000/v1/traces/batch \
 
 ## Python SDK
 
-Registry installation (after the corresponding PyPI release is available):
-
 ```bash
-pip install magic-lab-observer
+pip install magic-lab-observer==0.1.1
 ```
 
-Before the first PyPI release, install from a checkout:
+For editable SDK development from a checkout:
 
 ```bash
 python -m pip install "./sdk/python[openai,anthropic,langchain]"
 ```
 
 See [First-time setup](docs/first-time-setup.md#3-instrument-an-application)
-for current registry availability and package identities.
+for package identities and integration examples.
 
 ```python
 from llm_observatory import instrument, trace
@@ -271,13 +269,11 @@ tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
 
 ## CLI
 
-Registry installation (after the corresponding PyPI release is available):
-
 ```bash
-pip install magic-lab-observer-cli
+pip install magic-lab-observer-cli==0.1.1
 ```
 
-Before the first PyPI release, install from a checkout:
+For editable CLI development from a checkout:
 
 ```bash
 python -m pip install ./cli
