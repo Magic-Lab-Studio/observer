@@ -2,6 +2,8 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml/badge.svg)](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/magic-lab-observer.svg)](https://pypi.org/project/magic-lab-observer/)
+[![npm](https://img.shields.io/npm/v/%40magic-lab-studio%2Fobserver.svg)](https://www.npmjs.com/package/@magic-lab-studio/observer)
 
 Observer is a local-first, self-hosted observability and evaluation platform for
 LLM and agentic systems. It stores traces in SQLite or PostgreSQL that you
