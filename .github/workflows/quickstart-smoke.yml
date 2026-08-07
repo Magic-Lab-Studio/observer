@@ -72,6 +72,9 @@ jobs:
           curl --fail --silent --show-error \
             'http://localhost:8000/v1/traces/?search=quickstart-smoke' \
             | jq -e '.total == 1 and .traces[0].name == "quickstart-smoke"' >/dev/null
+          curl --fail --silent --show-error \
+            'http://localhost:5173/api/v1/traces/?search=quickstart-smoke' \
+            | jq -e '.total == 1 and .traces[0].name == "quickstart-smoke"' >/dev/null
       - name: Capture the populated dashboard
         shell: bash
         run: |
@@ -82,11 +85,23 @@ jobs:
             --headless=new \
             --no-sandbox \
             --disable-gpu \
+            --virtual-time-budget=5000 \
+            --dump-dom \
+            http://localhost:5173/traces \
+            > smoke-artifacts/traces.html
+          grep --quiet 'quickstart-smoke' smoke-artifacts/traces.html
+          if grep --quiet --ignore-case 'failed to fetch\|api error' smoke-artifacts/traces.html; then
+            exit 1
+          fi
+          google-chrome \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
             --hide-scrollbars \
             --virtual-time-budget=5000 \
             --window-size=1440,900 \
             --screenshot=smoke-artifacts/observer-dashboard.png \
-            http://localhost:5173/
+            http://localhost:5173/traces
           test -s smoke-artifacts/observer-dashboard.png
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
