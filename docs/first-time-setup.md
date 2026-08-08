@@ -104,9 +104,14 @@ python -m pip install magic-lab-observer-cli==0.1.1
 Install the backend distribution separately when embedding or operating the
 API outside the Compose quickstart:
 
+The default backend configuration uses SQLite, so include its database driver:
+
 ```bash
-python -m pip install magic-lab-observer-backend==0.1.1
+python -m pip install "magic-lab-observer-backend[sqlite]==0.1.1"
 ```
+
+For PostgreSQL, install `magic-lab-observer-backend==0.1.1` and set
+`DATABASE_URL` to a PostgreSQL URL before importing or starting the application.
 
 Contributors can instead install editable packages from a checkout:
 
