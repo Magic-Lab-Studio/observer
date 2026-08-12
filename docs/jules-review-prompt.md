@@ -14,7 +14,7 @@ branch unless the task explicitly asks for a PR.
 Context:
 
 - Product name is "Observer" (a.k.a. "LLM Observatory", package
-  magic-lab-observer). "ManitOS" is an integration lane, not the product name.
+  magic-lab-observer). "Manitos" is an integration lane, not the product name.
 - Read AGENTS.md at the repository root and follow its review output contract
   exactly (Summary / Findings / Checklist / Verdict).
 - Baseline: <commit-sha of last accepted review> for delta comparison.
@@ -31,7 +31,7 @@ What to review:
 5. Diff against the baseline commit: list changed files, new/removed public
    endpoints or SDK exports, and any migration changes.
 6. Consistency: scan for wrong product names ("LLM Observatory service",
-   "ManitOS" as product), stale test counts in README/docs, and docs that
+   "Manitos" as product), stale test counts in README/docs, and docs that
    contradict code.
 7. Do not report "none" as a finding. Every finding must carry evidence
    (path:line) and a concrete action. If nothing is actionable, state the

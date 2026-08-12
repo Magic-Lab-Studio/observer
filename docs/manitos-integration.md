@@ -1,6 +1,6 @@
-# ManitOS telemetry integration
+# Manitos telemetry integration
 
-ManitOS is one supported Observer integration. It uses an additive, versioned,
+Manitos is one supported Observer integration. It uses an additive, versioned,
 retry-safe ingestion contract; existing `/v1/traces` clients remain supported.
 
 ## Public contract
@@ -91,7 +91,7 @@ does not render `actor_id_hash`.
 
 The compatibility endpoint `GET /v1/analytics/manitos-quality` provides bounded,
 metadata-only aggregate fields for this integration. Existing field names are
-retained to avoid breaking clients; they should not be interpreted as ManitOS
+retained to avoid breaking clients; they should not be interpreted as Manitos
 production policy or release criteria.
 
 ## Optional integration gate
@@ -100,7 +100,7 @@ Observer includes an optional metadata-only evaluation utility. New automation
 should use `observer-integration-passive-gate --generic-report`, which emits the
 additive `observer.integration.passive_gate.v2` report at
 `.observer-state/integration-gate-report.json` unless another path is supplied.
-Its evaluation parameters are caller configuration, not Observer or ManitOS
+Its evaluation parameters are caller configuration, not Observer or Manitos
 production policy.
 
 The v2 report excludes configured endpoint and output paths as well as legacy
@@ -113,8 +113,8 @@ does not move, rewrite, or delete an existing v1 report.
 
 ## Runtime configuration
 
-The ManitOS exporter is opt-in. Integration users may configure these published
-environment variables in the ManitOS runtime:
+The Manitos exporter is opt-in. Integration users may configure these published
+environment variables in the Manitos runtime:
 
 ```bash
 MANITOS_OBSERVER_ENABLED=1
