@@ -9,7 +9,7 @@ Application -> POST /v1/traces/batch -> Observer API -> SQLite/PostgreSQL
                                                    -> analytics/evaluations
 ```
 
-The ManitOS ingestion route is an optional compatibility integration. A general
+The Manitos ingestion route is an optional compatibility integration. A general
 application does not need it.
 
 ## 1. Start Observer locally
@@ -158,7 +158,7 @@ Before exposing Observer outside a development machine:
 
 The generic integration gate report
 `observer.integration.passive_gate.v2` is optional. It can validate a custom
-runtime integration without adopting the ManitOS-specific ingestion contract.
+runtime integration without adopting the Manitos-specific ingestion contract.
 
 ## Package publication ownership
 
