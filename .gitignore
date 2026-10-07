@@ -22,6 +22,9 @@ wheels/
 
 # Virtual environments
 .venv/
+.venv.backup-*/
+.venv.failed-*/
+.runtime/
 venv/
 ENV/
 
@@ -65,4 +68,3 @@ podman-compose.override.yml
 # OS
 .DS_Store
 Thumbs.db
-

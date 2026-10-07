@@ -44,6 +44,31 @@ alembic upgrade head
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
+### Recoverable Linux development environment
+
+The optional local development profile pins managed Python 3.12.14 and hashed
+dependencies for the backend, Python SDK, CLI, and their tests. Install `uv`
+first, then run from the repository root:
+
+```bash
+bash scripts/bootstrap_runtime.sh check
+TMPDIR="$PWD/.runtime/tmp" bash scripts/bootstrap_runtime.sh repair
+```
+
+Place the checkout and `TMPDIR` on a data disk with adequate free space. This
+helper refuses `/tmp` and `/var/tmp`, keeps its Python installation outside the
+OS-managed interpreter, and does not alter databases or start services. Package
+support remains Python 3.10+; this pin is a reproducible deployment profile.
+
+Use `--venv PATH` for an isolated validation environment. `repair` leaves a
+healthy interpreter unchanged; `--replace` explicitly rebuilds dependencies.
+An existing environment is renamed to a timestamped backup, never deleted. On
+an installation failure, the previous environment is restored and the partial
+installation is retained for inspection. Review backups before removing them.
+Stop `observer-backend` with `systemctl --user stop observer-backend` before
+replacing its active environment, then use `systemctl --user restart
+observer-backend` after successful validation.
+
 ## 2. Send the first trace
 
 The generic ingestion endpoint accepts batches of spans and groups them by
