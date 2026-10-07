@@ -135,9 +135,10 @@ jobs:
           npm audit --audit-level=high
           npx tsc --noEmit
           npm run test:run
-      - name: Dashboard typecheck and build
+      - name: Dashboard regression tests, typecheck and build
         working-directory: dashboard
         run: |
           npm ci
           npm audit --audit-level=high
           npm run build
+          npm test
