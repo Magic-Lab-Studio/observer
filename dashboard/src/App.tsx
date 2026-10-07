@@ -25,12 +25,12 @@ function App() {
     <div className="min-h-screen bg-gray-900">
       <nav className="bg-gray-800 border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
+          <div className="flex items-center justify-between min-h-16 py-3 sm:py-0">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-0">
               <NavLink to="/" className="text-xl font-bold text-white">
                 LLM Observatory
               </NavLink>
-              <div className="ml-10 flex items-baseline space-x-4">
+              <div className="sm:ml-10 flex items-baseline gap-4">
                 <NavLink to="/" end className={navLinkClass}>
                   Overview
                 </NavLink>
