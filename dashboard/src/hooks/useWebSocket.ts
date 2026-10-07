@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getLiveWebSocketUrl } from '../urls';
 
 interface WebSocketMessage {
   type: string;
@@ -11,15 +12,9 @@ interface UseWebSocketOptions {
   reconnectInterval?: number;
 }
 
-function getDefaultWsUrl(): string {
-  if (typeof window === 'undefined') return 'ws://localhost/ws/live';
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${proto}//${window.location.host}/ws/live`;
-}
-
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const {
-    url = getDefaultWsUrl(),
+    url = getLiveWebSocketUrl(typeof window === 'undefined' ? undefined : window.location),
     onMessage,
     reconnectInterval = 3000,
   } = options;
