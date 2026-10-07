@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { Span } from '../types';
-import { parseApiDate } from '../dates';
 
 interface TraceWaterfallProps {
   traceId: string;
@@ -39,7 +38,7 @@ function TraceWaterfall({ traceId, spans: spansProp }: TraceWaterfallProps) {
 
   const toMs = (t: string | null | undefined) => {
     if (t == null) return Date.now();
-    return parseApiDate(t).getTime();
+    return new Date(t).getTime();
   };
   const spansMs = spans.map((s) => ({
     ...s,

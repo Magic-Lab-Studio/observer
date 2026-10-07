@@ -7,7 +7,6 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { api } from '../api';
 import type { SummaryData, TimelinePoint, CostByModel, ManitOSQualitySummary } from '../types';
 import { StatCard } from '../components/shared';
-import { parseApiDate } from '../dates';
 
 const TIME_RANGES = [
   { label: '1h', hours: 1 },
@@ -181,7 +180,7 @@ function Overview() {
                   dataKey="timestamp"
                   stroke="#9CA3AF"
                   tickFormatter={(ts) => {
-                    const d = parseApiDate(ts);
+                    const d = new Date(ts);
                     return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
                   }}
                 />
@@ -190,7 +189,7 @@ function Overview() {
                   contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
                   labelStyle={{ color: '#F3F4F6' }}
                   formatter={(value: number) => [`$${value.toFixed(4)}`, 'Cost']}
-                  labelFormatter={(ts) => parseApiDate(ts).toLocaleString()}
+                  labelFormatter={(ts) => new Date(ts).toLocaleString()}
                 />
                 <Line type="monotone" dataKey="cost_usd" stroke="#10B981" strokeWidth={2} dot={false} />
               </LineChart>

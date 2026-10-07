@@ -1,5 +1,3 @@
-import { parseApiDate } from '../dates';
-
 export function StatusBadge({ status }: { status: string }) {
   if (status === 'ok') {
     return (
@@ -42,14 +40,14 @@ export function StatCard({ title, value }: { title: string; value: string }) {
 
 export function formatDuration(start: string, end: string | null) {
   if (!end) return '-';
-  const ms = parseApiDate(end).getTime() - parseApiDate(start).getTime();
+  const ms = new Date(end).getTime() - new Date(start).getTime();
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
 export function formatTimeAgo(dateStr: string) {
   const now = new Date();
-  const date = parseApiDate(dateStr);
+  const date = new Date(dateStr);
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);

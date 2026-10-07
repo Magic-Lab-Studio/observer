@@ -4,7 +4,6 @@ import { api } from '../api';
 import type { Trace, Span } from '../types';
 import TraceWaterfall from '../components/TraceWaterfall';
 import { StatusBadge, InfoCard, formatDuration } from '../components/shared';
-import { parseApiDate } from '../dates';
 
 function TraceDetail() {
   const { traceId } = useParams<{ traceId: string }>();
@@ -69,7 +68,7 @@ function TraceDetail() {
         <InfoCard label="Status" value={trace.status} />
         <InfoCard label="Duration" value={formatDuration(trace.start_time, trace.end_time)} />
         <InfoCard label="Spans" value={spans.length.toString()} />
-        <InfoCard label="Created" value={parseApiDate(trace.created_at).toLocaleString()} />
+        <InfoCard label="Created" value={new Date(trace.created_at).toLocaleString()} />
       </div>
 
       {(trace.project_id || trace.environment || trace.service_instance_id || trace.session_id || trace.turn_id) && (

@@ -2,18 +2,8 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml/badge.svg)](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/magic-lab-observer.svg)](https://pypi.org/project/magic-lab-observer/)
-[![npm](https://img.shields.io/npm/v/%40magic-lab-studio%2Fobserver.svg)](https://www.npmjs.com/package/@magic-lab-studio/observer)
 
-Observer is a local-first, self-hosted observability and evaluation platform for
-LLM and agentic systems. It stores traces in SQLite or PostgreSQL that you
-control, works with local or hosted models, and requires no Observer cloud
-account.
-
-![Observer dashboard showing a synthetic trace](docs/assets/observer-dashboard.png)
-
-_The dashboard above was rendered from synthetic telemetry by the clean-runner
-[quickstart smoke test](.github/workflows/quickstart-smoke.yml)._
+Open-source observability, evaluation, and telemetry platform for LLM and agentic systems.
 
 ## Features
 
@@ -25,55 +15,10 @@ _The dashboard above was rendered from synthetic telemetry by the clean-runner
 - **CLI tools** — Query, export, import, and evaluate traces from the terminal
 - **SQLite & PostgreSQL** — Local dev with SQLite, production with PostgreSQL
 
-## Privacy and data collection
-
-Observer has no built-in product analytics or managed telemetry service. Your
-Observer data plane runs on infrastructure you control. What enters that data
-plane depends on how you instrument the application:
-
-- Generic Python and TypeScript auto-instrumentation captures model inputs and
-  outputs, token usage, timing, cost, status, model/provider identifiers, and
-  user-supplied span attributes by default. Inputs and outputs can contain raw
-  prompts or model responses.
-- Direct HTTP instrumentation can be metadata-only: omit `input` and `output`
-  and send only the operational fields your retention policy permits.
-- The reference runtime integration is documented for metadata-only telemetry.
-  Its compatibility schema still accepts generic `input` and `output` fields,
-  so exporters must omit content and deployments should verify stored data.
-- Observer does not require actor identity, provider credentials, or secrets in
-  trace payloads. Do not place API keys, personal data, or secret-bearing URLs
-  in spans or attributes.
-- Rule-based evaluation stays local. Enabling LLM-as-Judge with
-  `OPENAI_API_KEY` sends the selected evaluation context to the configured model
-  provider under that provider's data policy.
-
-Treat the database as sensitive whenever content capture is enabled. Configure
-authentication, TLS, access control, backups, retention, and deletion before a
-shared deployment. See [First-time setup](docs/first-time-setup.md#4-choose-a-privacy-mode).
-
-## How Observer compares
-
-Observer deliberately favors a small, inspectable self-hosted deployment over
-the broadest integration catalog. This table is a starting point, not a claim
-that one tool fits every team.
-
-| Project | Strongest fit | Where it is stronger than Observer | Where Observer is simpler |
-| --- | --- | --- | --- |
-| **Observer** | A compact local data plane with traces, evaluations, cost/latency analytics, CLI, and dashboard | — | SQLite for a single-node start; API, dashboard, and database are the complete core stack |
-| [Langfuse](https://langfuse.com/docs/observability/overview) | Mature end-to-end LLM engineering workflows | Prompt management, datasets, experiments, custom dashboards, and production-scale ingestion | Observer avoids the ClickHouse, Redis/Valkey, and object-storage services used by production Langfuse self-hosting |
-| [Arize Phoenix](https://arize.com/docs/phoenix/) | OpenTelemetry/OpenInference tracing and systematic experimentation | Broader instrumentation, datasets, experiments, prompt playground, and a larger ecosystem | Observer offers a narrower API and SQLite path when those workflows are unnecessary |
-| [Helicone](https://docs.helicone.ai/getting-started/platform-overview) | Gateway-first routing and observability | Provider gateway, routing, and proxy-based onboarding | Observer is not in the model request path and can ingest traces directly |
-| [OpenLLMetry](https://github.com/traceloop/openllmetry) | OpenTelemetry instrumentation for an existing observability stack | Much broader provider, framework, vector database, and OTLP backend coverage | Observer includes its own storage, analytics API, evaluation engine, CLI, and dashboard |
-
-Comparison checked against the linked project documentation on 2026-08-07.
-
 ## Quick Start
 
 For a guided installation, first trace, application integration, privacy choices,
 and production checklist, see [First-time setup](docs/first-time-setup.md).
-
-Copy [`.env.example`](.env.example) when you need to customize the backend. The
-checked-in values are development examples, not production credentials.
 
 ### Docker Compose (recommended)
 
@@ -199,17 +144,8 @@ curl -X POST http://localhost:8000/v1/traces/batch \
 ## Python SDK
 
 ```bash
-pip install magic-lab-observer==0.1.1
+pip install magic-lab-observer
 ```
-
-For editable SDK development from a checkout:
-
-```bash
-python -m pip install "./sdk/python[openai,anthropic,langchain]"
-```
-
-See [First-time setup](docs/first-time-setup.md#3-instrument-an-application)
-for package identities and integration examples.
 
 ```python
 from llm_observatory import instrument, trace
@@ -272,13 +208,7 @@ tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
 ## CLI
 
 ```bash
-pip install magic-lab-observer-cli==0.1.1
-```
-
-For editable CLI development from a checkout:
-
-```bash
-python -m pip install ./cli
+pip install magic-lab-observer-cli
 ```
 
 ```bash
@@ -380,6 +310,3 @@ cd dashboard && npx tsc --noEmit
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE) for details.
-
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
-verification, compatibility, and privacy requirements.

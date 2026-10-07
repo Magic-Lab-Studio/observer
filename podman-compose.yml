@@ -19,7 +19,7 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Containerfile
+      containerfile: Containerfile
     container_name: llm-observatory-backend
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/observatory
@@ -28,16 +28,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./backend:/app
 
   dashboard:
     build:
       context: ./dashboard
-      dockerfile: Containerfile
+      containerfile: Containerfile
     container_name: llm-observatory-dashboard
     ports:
       - "5173:5173"
     depends_on:
       - backend
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
 
 volumes:
   postgres_data:
