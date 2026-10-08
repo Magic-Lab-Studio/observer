@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import type { Trace, Span } from '../types';
 import TraceWaterfall from '../components/TraceWaterfall';
+import SpanDetail from '../components/SpanDetail';
 import { StatusBadge, InfoCard, formatDuration } from '../components/shared';
 import { parseApiDate } from '../dates';
 
@@ -146,33 +147,7 @@ function TraceDetail() {
         </table>
       </div>
 
-      {selectedSpan && (
-        <div className="mt-6 bg-gray-800 rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">Span Detail: {selectedSpan.name}</h3>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div>
-              <h4 className="text-sm font-medium text-gray-400 mb-2">Input</h4>
-              <pre className="bg-gray-900 rounded p-3 text-sm text-gray-300 overflow-x-auto">
-                {selectedSpan.input ? JSON.stringify(selectedSpan.input, null, 2) : 'null'}
-              </pre>
-            </div>
-            <div>
-              <h4 className="text-sm font-medium text-gray-400 mb-2">Output</h4>
-              <pre className="bg-gray-900 rounded p-3 text-sm text-gray-300 overflow-x-auto">
-                {selectedSpan.output ? JSON.stringify(selectedSpan.output, null, 2) : 'null'}
-              </pre>
-            </div>
-          </div>
-          {selectedSpan.attributes && Object.keys(selectedSpan.attributes).length > 0 && (
-            <div className="mt-4">
-              <h4 className="text-sm font-medium text-gray-400 mb-2">Attributes</h4>
-              <pre className="bg-gray-900 rounded p-3 text-sm text-gray-300 overflow-x-auto">
-                {JSON.stringify(selectedSpan.attributes, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
+      {selectedSpan && <SpanDetail span={selectedSpan} />}
     </div>
   );
 }
