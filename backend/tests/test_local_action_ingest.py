@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 
-def payload():
-    path = Path(__file__).parent / "fixtures/local_action_admission_v1.json"
+def payload(name="admission"):
+    path = Path(__file__).parent / f"fixtures/local_action_{name}_v1.json"
     return json.loads(path.read_text())
 
 
@@ -44,3 +44,19 @@ async def test_conflicting_event_cannot_rewrite_preflight_as_execution(client):
     data["trace"]["metadata"]["outcome"] = "verified"
     response = await client.post("/v1/ingest/manitos/traces", json=data)
     assert response.status_code == 409
+
+
+@pytest.mark.anyio
+async def test_uncertain_effect_remains_an_error_requiring_reconciliation(client):
+    data = payload("uncertain")
+    response = await client.post("/v1/ingest/manitos/traces", json=data)
+    assert response.status_code == 200
+    trace = (await client.get(f"/v1/traces/?session_id={data['session_id']}")).json()["traces"][0]
+    assert trace["status"] == "error"
+    assert trace["metadata"]["outcome"] == "uncertain"
+    assert trace["metadata"]["reconciliation_required"] is True
+    assert set(trace["metadata"]) == set(data["trace"]["metadata"])
+    spans = (await client.get(f"/v1/traces/{data['trace']['id']}/spans")).json()
+    assert spans[0]["input"] is None and spans[0]["output"] is None
+    repeated = await client.post("/v1/ingest/manitos/traces", json=data)
+    assert repeated.json()["status"] == "duplicate"
