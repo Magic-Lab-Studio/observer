@@ -21,8 +21,18 @@ from app.websocket import manager
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
-    yield
-    await engine.dispose()
+    import asyncio
+
+    from app.retention import retention_loop
+
+    retention = asyncio.create_task(
+        retention_loop(engine)
+    )  # returns at once unless OBSERVATORY_RETENTION_DAYS > 0
+    try:
+        yield
+    finally:
+        retention.cancel()
+        await engine.dispose()
 
 
 app = FastAPI(
@@ -114,6 +124,11 @@ async def root() -> dict[str, str]:
 @app.websocket("/ws/live")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint for real-time trace streaming."""
+    from app.auth import websocket_authorized
+
+    if not websocket_authorized(websocket):
+        await websocket.close(code=1008)
+        return
     await manager.connect(websocket)
     try:
         while True:

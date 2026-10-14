@@ -82,3 +82,37 @@ async def test_manitos_quality_without_since_keeps_rolling_window(client, db_ses
     assert data["error_count"] == 1
     assert data["window_start"] is not None
     assert data["window_end"] is not None
+
+
+@pytest.mark.anyio
+async def test_manitos_quality_counts_one_model_per_turn(client, db_session):
+    """Audit 2026-10-14: "model" came from every span; rates summed to 1.95."""
+    now = _now()
+    for index in range(2):
+        trace = await _insert_trace(
+            db_session, name=f"turn-{index}", created_at=now - timedelta(minutes=5 + index)
+        )
+        for span_name, model in (
+            ("manitos.turn.lifecycle", "qwen3.8-27b-groq"),
+            ("model_routing", "google_gemma-3-4b-it-Q4_K_M.gguf"),
+            ("model.answered", "groq · qwen/qwen3.8-27b"),
+        ):
+            db_session.add(
+                Span(
+                    trace_id=trace.id,
+                    name=span_name,
+                    span_type="llm",
+                    start_time=now - timedelta(minutes=5 + index),
+                    status="ok",
+                    attributes={"model": model, "language": "es"},
+                )
+            )
+    await db_session.commit()
+
+    since = (now - timedelta(hours=1)).isoformat()
+    response = await client.get(f"/v1/analytics/manitos-quality?{urlencode({'since': since})}")
+    data = response.json()
+    models = {item["key"]: item for item in data["models"]}
+    assert set(models) == {"groq · qwen/qwen3.8-27b"}
+    assert models["groq · qwen/qwen3.8-27b"]["count"] == 2
+    assert sum(item["rate"] for item in data["models"]) <= 1.0

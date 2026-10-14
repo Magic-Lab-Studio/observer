@@ -13,6 +13,9 @@ from app.db import get_session
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
 
+# Spans whose "model" attribute names the model that answered, best first (see manitos_quality).
+_MODEL_SPAN_PRIORITY = {"model.answered": 0, "manitos.turn.lifecycle": 1}
+
 router = APIRouter()
 
 
@@ -97,9 +100,11 @@ async def get_analytics_summary(
     total_traces = result.scalar() or 0
 
     # Total spans and cost
-    span_query = select(Span.start_time, Span.end_time, Span.cost_usd).join(
-        Trace, Span.trace_id == Trace.id
-    ).where(Trace.created_at >= cutoff)
+    span_query = (
+        select(Span.start_time, Span.end_time, Span.cost_usd)
+        .join(Trace, Span.trace_id == Trace.id)
+        .where(Trace.created_at >= cutoff)
+    )
     if session_id:
         span_query = span_query.where(Trace.session_id == session_id)
     result = await session.execute(span_query)
@@ -123,10 +128,14 @@ async def get_analytics_summary(
     error_count = result.scalar() or 0
 
     # Evaluations
-    eval_query = select(
-        func.count(Evaluation.id),
-        func.coalesce(func.avg(Evaluation.score), 0),
-    ).join(Trace, Evaluation.trace_id == Trace.id).where(Trace.created_at >= cutoff)
+    eval_query = (
+        select(
+            func.count(Evaluation.id),
+            func.coalesce(func.avg(Evaluation.score), 0),
+        )
+        .join(Trace, Evaluation.trace_id == Trace.id)
+        .where(Trace.created_at >= cutoff)
+    )
     if session_id:
         eval_query = eval_query.where(Trace.session_id == session_id)
     result = await session.execute(eval_query)
@@ -157,9 +166,11 @@ async def get_cost_by_model(
     # SQLAlchemy JSON extraction differs between SQLite and PostgreSQL.
     # Aggregate this bounded time-window result in Python for identical
     # semantics on both supported databases.
-    query = select(Span.attributes, Span.cost_usd).join(
-        Trace, Span.trace_id == Trace.id
-    ).where(Trace.created_at >= cutoff)
+    query = (
+        select(Span.attributes, Span.cost_usd)
+        .join(Trace, Span.trace_id == Trace.id)
+        .where(Trace.created_at >= cutoff)
+    )
     result = await session.execute(query)
     rows = result.all()
     by_model: dict[str, dict[str, str | float | int]] = {}
@@ -184,21 +195,20 @@ async def get_trace_timeline(
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
     # Get all traces in the time range
-    query = (
-        select(Trace)
-        .where(Trace.created_at >= cutoff)
-        .order_by(Trace.created_at)
-    )
+    query = select(Trace).where(Trace.created_at >= cutoff).order_by(Trace.created_at)
     result = await session.execute(query)
     traces = list(result.scalars().all())
 
     # Get all span costs for traces in the time range (single query, no N+1)
-    cost_query = select(
-        Span.trace_id,
-        func.coalesce(func.sum(Span.cost_usd), 0).label("cost_usd"),
-    ).join(Trace, Span.trace_id == Trace.id).where(
-        Trace.created_at >= cutoff
-    ).group_by(Span.trace_id)
+    cost_query = (
+        select(
+            Span.trace_id,
+            func.coalesce(func.sum(Span.cost_usd), 0).label("cost_usd"),
+        )
+        .join(Trace, Span.trace_id == Trace.id)
+        .where(Trace.created_at >= cutoff)
+        .group_by(Span.trace_id)
+    )
     cost_result = await session.execute(cost_query)
     cost_by_trace = {row.trace_id: float(row.cost_usd) for row in cost_result.all()}
 
@@ -250,7 +260,8 @@ async def get_manitos_quality(
         window_start = cutoff
         window_end = now
     trace_query = select(Trace.id, Trace.status).where(
-        Trace.created_at >= cutoff, Trace.created_at < window_end,
+        Trace.created_at >= cutoff,
+        Trace.created_at < window_end,
         Trace.project_id == project_id,
     )
     if environment:
@@ -269,6 +280,7 @@ async def get_manitos_quality(
     ttfts: list[float] = []
     models: dict[str, set[str]] = {}
     languages: dict[str, set[str]] = {}
+    answered_model: dict[str, tuple[int, str]] = {}
 
     if trace_ids:
         span_query = select(Span.trace_id, Span.name, Span.attributes).where(
@@ -293,18 +305,27 @@ async def get_manitos_quality(
                 fallbacks.add(trace_id)
             if row.name == "tts.synthesis" and attributes.get("status") == "error":
                 tts_errors.add(trace_id)
-            for key, target in (("model", models), ("language", languages)):
-                value = str(attributes.get(key) or "").strip()[:160]
-                if value:
-                    target.setdefault(value, set()).add(trace_id)
+            language = str(attributes.get("language") or "").strip()[:160]
+            if language:
+                languages.setdefault(language, set()).add(trace_id)
+            # One model per turn: the one that wrote the reply (model.answered), else the
+            # lifecycle's. Counting "model" from every span gave three spellings per turn and
+            # rates summing to 1.95 (audit 2026-10-14); model_routing is the router's choice.
+            model = str(attributes.get("model") or "").strip()[:160]
+            if model and row.name in _MODEL_SPAN_PRIORITY:
+                rank = _MODEL_SPAN_PRIORITY[row.name]
+                if trace_id not in answered_model or rank < answered_model[trace_id][0]:
+                    answered_model[trace_id] = (rank, model)
+
+    for trace_id, (_rank, model) in answered_model.items():
+        models.setdefault(model, set()).add(trace_id)
 
     def rate(count: int) -> float:
         return count / total_turns if total_turns else 0.0
 
     def breakdown(values: dict[str, set[str]]) -> list[dict]:
         items = [
-            {"key": key, "count": len(ids), "rate": rate(len(ids))}
-            for key, ids in values.items()
+            {"key": key, "count": len(ids), "rate": rate(len(ids))} for key, ids in values.items()
         ]
         return sorted(items, key=lambda item: (-item["count"], item["key"]))
 
