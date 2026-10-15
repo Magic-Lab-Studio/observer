@@ -10,7 +10,7 @@ LLM and agentic systems. It stores traces in SQLite or PostgreSQL that you
 control, works with local or hosted models, and requires no Observer cloud
 account.
 
-![Observer dashboard overview: KPIs with sparklines, activity and p95 latency, latency distribution, time per stage, models](docs/assets/ui-overview.png)
+![Observer dashboard overview: KPIs with sparklines, activity and p95 latency, latency distribution, time per stage, models, alert banner](docs/assets/ui-overview.png)
 
 _The dashboard above was rendered from synthetic telemetry. The clean-runner
 [quickstart smoke test](.github/workflows/quickstart-smoke.yml) still captures its own screenshot
@@ -20,20 +20,35 @@ as a CI artifact._
 
 The dashboard was rebuilt as a dense, dark console: sidebar navigation, a global time range and
 environment filter, live updates, and charts that use the whole screen. The interface is available in
-English and Spanish: pick the language with the ES/EN switch in the header (the choice is remembered; the
-default follows the browser language).
+English and Spanish: pick the language with the ES/EN switch in the header (the choice is remembered;
+the default follows the browser language).
 
 - **Overview** — turns, error rate, p50/p95 latency, time to first token, fallback rate and cost
-  (always shown, even at $0), with an activity/latency chart, latency histogram, per-stage time
-  and model share.
-- **Providers** (new) — your LLM fallback chain in the order it is tried, with per-provider success
-  rate, 429/timeout/error counts, p50/p95 latency, how often each one actually answered, fallback
-  depth and common routes. It flags providers that are configured but never reached.
+  (always shown, even at $0), an activity/latency chart, latency histogram, per-stage time and model
+  share. The series and latency KPIs come from the metrics query, so 7 d and 30 d ranges use every turn.
+- **Providers** — your LLM fallback chain in the order it is tried, with per-provider success rate,
+  429/timeout/error counts, p50/p95 latency, how often each one answered, fallback depth, common routes
+  and the average turn score. It flags providers that are configured but never reached.
 
 ![Providers: fallback chain, per-provider table, fallback depth, latency and routes](docs/assets/ui-providers.png)
 
-- **Trace detail** — a hierarchical waterfall, a per-stage time bar and, for `llm.chain` spans,
-  the provider-by-provider attempts of that turn.
+- **Alerts** — threshold rules over a sliding window (error rate, p95 latency, fallback rate, provider
+  failures, providers out of quota, ...), a global banner and optional desktop notifications.
+
+![Alerts: open alerts, rules and history](docs/assets/ui-alerts.png)
+
+- **Evaluations** — every turn is scored without a model (health, completeness, quality, fallback,
+  latency, time to first token), with quality by model and the per-criterion breakdown of each turn.
+
+![Evaluations: quality by model, score distribution and the breakdown of one turn](docs/assets/ui-evaluations.png)
+
+- **Explore** — a query builder over turns, provider attempts and evaluations (measure, aggregation,
+  group by, granularity). The query lives in the URL so it can be shared, and views can be saved.
+
+![Explore: p95 turn duration by provider over time](docs/assets/ui-explore.png)
+
+- **Trace detail** — a hierarchical waterfall, a per-stage time bar and, for `llm.chain` spans, the
+  provider-by-provider attempts of that turn.
 
 ![Trace detail with the llm.chain attempts of one turn](docs/assets/ui-trace-detail.png)
 
@@ -415,7 +430,7 @@ export OBSERVATORY_JUDGE_MODEL=gpt-4o  # default
 ### Run tests
 
 ```bash
-# Backend (169 tests)
+# Backend (170 tests)
 cd backend && pytest
 
 # Python SDK (37 tests)
