@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 
-from fastapi import HTTPException, Security
+from fastapi import HTTPException, Security, WebSocket
 from fastapi.security import APIKeyHeader
 
 # Read API key from environment. If not set, auth is disabled (dev mode).
@@ -32,5 +33,19 @@ async def require_api_key(
     if authorization.lower().startswith("bearer "):
         token = authorization[7:]
 
-    if token != API_KEY:
+    if not hmac.compare_digest(token.encode(), API_KEY.encode()):
         raise HTTPException(status_code=403, detail="Invalid API key")
+
+
+def websocket_authorized(websocket: WebSocket) -> bool:
+    """Same rule as require_api_key for /ws/live, which had no check at all (audit 2026-10-14).
+
+    The key comes in the Authorization header (the dashboard's proxy adds it) or, for
+    scripts, ``?api_key=``.
+    """
+    if not API_KEY:
+        return True
+    token = websocket.headers.get("authorization") or websocket.query_params.get("api_key") or ""
+    if token.lower().startswith("bearer "):
+        token = token[7:]
+    return bool(token) and hmac.compare_digest(token.encode(), API_KEY.encode())

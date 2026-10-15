@@ -174,11 +174,13 @@ your retention policy does not permit.
 Before exposing Observer outside a development machine:
 
 - Replace the example database credentials and keep the database private.
-- Set `OBSERVATORY_API_KEY` and pass it as a Bearer token from exporters.
+- Set `OBSERVATORY_API_KEY` and pass it as a Bearer token from exporters. It also guards
+  `/ws/live`; give the dashboard process the same variable so its proxy adds the header.
 - Terminate TLS at a trusted reverse proxy or ingress.
 - Restrict `CORS_ORIGINS` to the actual dashboard and operator origins.
 - Put the dashboard and API behind an authentication-aware gateway.
-- Configure backups, retention, and deletion appropriate to the captured data.
+- Configure backups, retention (`OBSERVATORY_RETENTION_DAYS`), and deletion appropriate to the
+  captured data.
 - Validate SQLite or PostgreSQL migrations during every upgrade.
 
 The generic integration gate report
