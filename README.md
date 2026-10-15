@@ -10,18 +10,17 @@ LLM and agentic systems. It stores traces in SQLite or PostgreSQL that you
 control, works with local or hosted models, and requires no Observer cloud
 account.
 
-![Observer dashboard showing a synthetic trace](docs/assets/observer-dashboard.png)
+![Observer dashboard overview: KPIs with sparklines, activity and p95 latency, latency distribution, time per stage, models](docs/assets/ui-overview.png)
 
-_The dashboard above was rendered from synthetic telemetry by the clean-runner
-[quickstart smoke test](.github/workflows/quickstart-smoke.yml)._
+_The dashboard above was rendered from synthetic telemetry. The clean-runner
+[quickstart smoke test](.github/workflows/quickstart-smoke.yml) still captures its own screenshot
+as a CI artifact._
 
 ## What's new: a redesigned dashboard
 
 The dashboard was rebuilt as a dense, dark console: sidebar navigation, a global time range and
 environment filter, live updates, and charts that use the whole screen. The interface text is
 currently in Spanish.
-
-![Overview: KPIs with sparklines, activity and p95 latency, latency distribution, time per stage, models](docs/assets/ui-overview.png)
 
 - **Overview** — turns, error rate, p50/p95 latency, time to first token, fallback rate and cost
   (always shown, even at $0), with an activity/latency chart, latency histogram, per-stage time
