@@ -9,8 +9,17 @@ class Base(DeclarativeBase):
     pass
 
 
+from app.models.alerts import AlertEvent, AlertRule  # noqa: E402
 from app.models.evaluation import Evaluation  # noqa: E402
 from app.models.ingestion import IngestionReceipt  # noqa: E402
 from app.models.trace import Span, Trace  # noqa: E402
 
-__all__ = ["Base", "Trace", "Span", "Evaluation", "IngestionReceipt"]
+__all__ = [
+    "Base",
+    "Trace",
+    "Span",
+    "Evaluation",
+    "IngestionReceipt",
+    "AlertRule",
+    "AlertEvent",
+]

@@ -20,7 +20,8 @@ It records the dashboard change, verification evidence and outstanding integrati
 ## Layout
 
 - `backend/` — FastAPI backend, package `magic-lab-observer-backend`.
-  - `app/api/` — route handlers (`traces`, `evaluations`, `analytics`, `manitos_ingest`).
+  - `app/api/` — route handlers (`traces`, `evaluations`, `analytics`, `manitos_ingest`, `providers`, `alerts`).
+  - `app/metrics_core.py` — turn signals and statistics shared by alerts; `app/alerts.py` — alert evaluator loop.
   - `app/evaluators/` — rubric/LMM-as-Judge engine.
   - `app/models/` — SQLAlchemy models.
   - `app/ops/` — e.g. `manitos_passive_gate.py`.

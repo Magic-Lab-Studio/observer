@@ -10,7 +10,6 @@ provider/model with percentiles follows Langfuse's metrics API.
 from __future__ import annotations
 
 import json
-import math
 import os
 import tempfile
 import time
@@ -25,6 +24,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.metrics_core import classify_attempt as _classify
+from app.metrics_core import parse_attempts, percentile
 from app.models.trace import Span, Trace
 
 router = APIRouter()
@@ -95,52 +96,6 @@ async def post_snapshot(snapshot: ProviderSnapshot) -> dict[str, Any]:
         if os.path.exists(tmp):
             os.unlink(tmp)
     return {"status": "ok", "providers": len(stored["providers"])}
-
-
-def parse_attempts(text: str) -> list[dict[str, Any]]:
-    """Parse ``groq:qwen/qwen3.8-27b=429@412ms>llamacpp:-=ok`` into attempt dicts.
-
-    Each is ``{backend, model, result, ms}``; unreadable parts are skipped.
-    """
-    out: list[dict[str, Any]] = []
-    for part in (text or "").split(">"):
-        head, sep, tail = part.rpartition("=")
-        if not sep or ":" not in head:
-            continue
-        backend, _, model = head.partition(":")
-        ms = None
-        if "@" in tail and tail.endswith("ms"):
-            tail, _, raw = tail.rpartition("@")
-            try:
-                ms = int(raw[:-2])
-            except ValueError:
-                ms = None
-        backend = backend.strip().lower()
-        if not backend or not tail:
-            continue
-        out.append(
-            {"backend": backend, "model": "" if model == "-" else model, "result": tail, "ms": ms}
-        )
-    return out
-
-
-def _classify(result: str) -> str:
-    if result == "ok":
-        return "ok"
-    if result == "429":
-        return "rate_limited"
-    if result == "timeout":
-        return "timeout"
-    if result.startswith("skipped"):
-        return "skipped"
-    return "error"
-
-
-def _pct(values: list[float], p: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    return ordered[min(len(ordered) - 1, max(0, math.ceil(p * len(ordered)) - 1))]
 
 
 def _aware(value: datetime | None) -> datetime | None:
@@ -227,9 +182,9 @@ def aggregate(rows: list[tuple[dict[str, Any], datetime | None, float | None]]) 
                 "answered": p["answered"],
                 "answered_share": p["answered"] / turns if turns else 0.0,
                 "success_rate": p["ok"] / tried if tried else None,
-                "p50_ms": _pct(p["ok_ms"], 0.5),
-                "p95_ms": _pct(p["ok_ms"], 0.95),
-                "turn_p50_ms": _pct(p["turn_ms"], 0.5),
+                "p50_ms": percentile(p["ok_ms"], 0.5),
+                "p95_ms": percentile(p["ok_ms"], 0.95),
+                "turn_p50_ms": percentile(p["turn_ms"], 0.5),
                 "last_seen": p["last_seen"].isoformat() if p["last_seen"] else None,
                 "models": sorted(
                     (
@@ -237,7 +192,7 @@ def aggregate(rows: list[tuple[dict[str, Any], datetime | None, float | None]]) 
                             "model": k,
                             "attempts": v["attempts"],
                             "ok": v["ok"],
-                            "p50_ms": _pct(v["ok_ms"], 0.5),
+                            "p50_ms": percentile(v["ok_ms"], 0.5),
                         }
                         for k, v in p["models"].items()
                     ),

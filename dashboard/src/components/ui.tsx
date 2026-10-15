@@ -13,6 +13,7 @@ export function Icon({ name, className = 'size-4' }: { name: string; className?:
     chevron: 'M9 6l6 6-6 6',
     warn: 'M12 3l10 18H2zM12 10v5M12 18v.01',
     menu: 'M4 6h16M4 12h16M4 18h16',
+    bell: 'M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8zM10 20a2 2 0 004 0',
     providers: 'M5 12h4M15 12h4M9 12a3 3 0 106 0 3 3 0 00-6 0zM12 5V3M12 21v-2',
   };
   return (

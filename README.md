@@ -197,10 +197,30 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost breakdown by model          |
 | `GET`    | `/v1/analytics/sessions`          | Unique sessions with stats       |
 | `GET`    | `/v1/analytics/manitos-quality`   | Integration quality and latency   |
+| `GET`    | `/v1/providers/`                  | LLM provider chain statistics     |
+| `POST`   | `/v1/providers/snapshot`          | Provider configuration snapshot   |
+| `GET`    | `/v1/alerts/metrics`              | Metrics an alert rule can watch   |
+| `GET`    | `/v1/alerts/rules`                | List alert rules                  |
+| `POST`   | `/v1/alerts/rules`                | Create an alert rule              |
+| `PATCH`  | `/v1/alerts/rules/{id}`           | Edit or enable/disable a rule     |
+| `DELETE` | `/v1/alerts/rules/{id}`           | Delete a rule and its events      |
+| `GET`    | `/v1/alerts/events`               | Alert events (`?state=open`)      |
+| `POST`   | `/v1/alerts/events/{id}/ack`      | Mark an alert as seen             |
+| `POST`   | `/v1/alerts/evaluate`             | Evaluate all rules now            |
 
 The integration endpoint uses the versioned `manitos.telemetry.v1` envelope, accepts
 opaque session identifiers, and safely deduplicates exporter retries. See
 [docs/manitos-integration.md](docs/manitos-integration.md) for the published contract.
+
+### Alerts
+
+Rules watch a metric over a sliding window (error rate, p50/p95 latency, share of turns on the
+fallback path, degraded/truncated replies, provider failures, providers out of quota) and fire
+when it crosses a threshold with enough samples. A rule resolves once the value is back inside the
+threshold by a 10 % margin, then waits for its cooldown before it can fire again. Open alerts show
+as a banner in the dashboard and, optionally, as browser desktop notifications. Four default rules
+are created on first start (`OBSERVATORY_ALERTS_DEFAULTS=0` skips them); `OBSERVATORY_ALERTS=0`
+turns the evaluator off and `OBSERVATORY_ALERT_INTERVAL_SEC` (default 60) sets its period.
 
 ### Example: Ingest a trace
 
@@ -359,7 +379,7 @@ export OBSERVATORY_JUDGE_MODEL=gpt-4o  # default
 ### Run tests
 
 ```bash
-# Backend (106 tests)
+# Backend (149 tests)
 cd backend && pytest
 
 # Python SDK (37 tests)
