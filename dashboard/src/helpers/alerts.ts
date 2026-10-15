@@ -1,7 +1,18 @@
+import { t } from '../i18n.ts';
 // Pure helpers for the alerts UI. Self-contained on purpose: the Node test runner loads this file
 // directly (no extensionless runtime imports).
 
 export type MetricUnit = 'ratio' | 'ms' | 'count';
+/** Labels (Spanish keys) of the rule-based turn criteria scored by the backend. */
+export const CRITERION_LABEL: Record<string, string> = {
+  health: 'Salud',
+  complete: 'Completitud',
+  quality: 'Calidad',
+  fallback: 'Vía alterna',
+  latency: 'Latencia',
+  ttft: 'Primer token',
+};
+
 export type Severity = 'info' | 'warning' | 'critical';
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
@@ -59,9 +70,9 @@ export function describeRule(
   metric: { label: string; unit: MetricUnit } | undefined,
 ): string {
   const unit = metric?.unit ?? 'count';
-  const label = metric?.label ?? rule.metric;
+  const label = t(metric?.label ?? rule.metric);
   const scope = rule.scope ? ` (${rule.scope})` : '';
-  const window = unit === 'count' ? '' : ` en ${windowLabel(rule.window_minutes)}`;
+  const window = unit === 'count' ? '' : ` ${t('en')} ${windowLabel(rule.window_minutes)}`;
   return `${label}${scope} ${rule.comparator} ${formatMetricValue(unit, rule.threshold)}${window}`;
 }
 

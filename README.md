@@ -19,8 +19,9 @@ as a CI artifact._
 ## What's new: a redesigned dashboard
 
 The dashboard was rebuilt as a dense, dark console: sidebar navigation, a global time range and
-environment filter, live updates, and charts that use the whole screen. The interface text is
-currently in Spanish.
+environment filter, live updates, and charts that use the whole screen. The interface is available in
+English and Spanish: pick the language with the ES/EN switch in the header (the choice is remembered; the
+default follows the browser language).
 
 - **Overview** — turns, error rate, p50/p95 latency, time to first token, fallback rate and cost
   (always shown, even at $0), with an activity/latency chart, latency histogram, per-stage time
@@ -207,10 +208,45 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/alerts/events`               | Alert events (`?state=open`)      |
 | `POST`   | `/v1/alerts/events/{id}/ack`      | Mark an alert as seen             |
 | `POST`   | `/v1/alerts/evaluate`             | Evaluate all rules now            |
+| `GET`    | `/v1/evaluations/by-model`        | Turn quality by model and provider|
+| `POST`   | `/v1/analytics/query`             | Flexible metrics query            |
+| `GET`    | `/v1/analytics/query/schema`      | Views, measures and dimensions    |
 
 The integration endpoint uses the versioned `manitos.telemetry.v1` envelope, accepts
 opaque session identifiers, and safely deduplicates exporter retries. See
 [docs/manitos-integration.md](docs/manitos-integration.md) for the published contract.
+
+### Metrics explorer
+
+`POST /v1/analytics/query` aggregates stored telemetry by dimension and time, in the spirit of
+Langfuse's metrics API. A request names a **view** (`turns`, `provider_attempts` or `evaluations`),
+**metrics** (a measure plus `count`, `sum`, `avg`, `min`, `max`, `p50`, `p95` or `p99`; `avg` of a
+0/1 field is a rate), up to two **dimensions** to group by (environment, model, provider, language,
+intent, status, ...), **filters** (`=`, `!=`, `in`), a range (`hours` or `from_time`/`to_time`), an
+optional **granularity** (`minute`, `hour`, `day` or `auto`) and a `row_limit` (at most 1000).
+Every field is checked against a fixed list per view (`GET /v1/analytics/query/schema`), so nothing
+in the request becomes a column or an expression; session and turn ids can filter but never group.
+
+```json
+{"view": "turns", "hours": 168, "granularity": "day",
+ "metrics": [{"measure": "duration_ms", "aggregation": "p95"}],
+ "dimensions": ["provider"],
+ "filters": [{"field": "environment", "op": "=", "value": "prod"}]}
+```
+
+The dashboard's **Explore** page builds these queries from selectors, keeps the query in the URL so
+it can be shared, and saves named views in the browser. The Overview reads its series and latency
+KPIs from the same endpoint, so 7 d and 30 d ranges use every turn.
+
+### Automatic turn evaluations
+
+Every Manitos turn is scored without a model by a deterministic rubric (`manitos_turn@1`): health
+(error / tool error), completeness (truncated), quality (degraded), fallback, latency and time to
+first token, with fixed weights; a turn passes at 0.6 unless it failed outright. A background sweep
+(`OBSERVATORY_AUTO_EVAL_INTERVAL_SEC`, default 60; `OBSERVATORY_AUTO_EVAL=0` turns it off;
+`OBSERVATORY_AUTO_EVAL_DAYS`, default 7) scores recent turns that have no evaluation yet and also
+backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
+Evaluations page shows the score by model, the grade and the per-criterion breakdown of each turn.
 
 ### Alerts
 
@@ -379,7 +415,7 @@ export OBSERVATORY_JUDGE_MODEL=gpt-4o  # default
 ### Run tests
 
 ```bash
-# Backend (149 tests)
+# Backend (169 tests)
 cd backend && pytest
 
 # Python SDK (37 tests)

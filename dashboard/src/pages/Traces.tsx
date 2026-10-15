@@ -5,6 +5,7 @@ import { useFilters } from '../context';
 import type { Trace } from '../types';
 import { Chip, EmptyState, ErrorState, Icon, Segmented, Skeleton, StatusDot } from '../components/ui';
 import { fmtInt, fmtMs, shortId, stageLabel, stageTimings, timeAgo, traceDurationMs } from '../helpers/format';
+import { t } from '../i18n';
 
 const LIMIT = 25;
 const inputCls = 'rounded-lg border border-line bg-panel px-3 py-1.5 text-xs text-ink placeholder:text-faint focus:border-accent outline-none';
@@ -50,7 +51,7 @@ function Traces() {
       setTotal(data.total);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+      setError(err instanceof Error ? err.message : t('Error desconocido'));
     } finally {
       setLoading(false);
     }
@@ -70,26 +71,26 @@ function Traces() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Trazas</h1>
-          <p className="text-xs text-faint">{fmtInt(total)} resultados</p>
+          <h1 className="text-lg font-semibold tracking-tight">{t("Trazas")}</h1>
+          <p className="text-xs text-faint">{fmtInt(total)}  {t("resultados")}</p>
         </div>
       </div>
 
       <div className="sticky top-14 z-10 -mx-4 flex flex-wrap items-center gap-2 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
         <div className="relative min-w-[220px] flex-1 max-w-md">
           <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-faint" />
-          <input type="text" aria-label="Buscar trazas" placeholder="Buscar por nombre…" value={search}
+          <input type="text" aria-label={t("Buscar trazas")} placeholder={t("Buscar por nombre…")} value={search}
             onChange={(e) => setSearch(e.target.value)} className={`${inputCls} w-full pl-8`} />
         </div>
-        <Segmented label="Estado" value={status} onChange={setStatus}
-          options={[{ label: 'Todas', value: '' }, { label: 'OK', value: 'ok' }, { label: 'Error', value: 'error' }]} />
-        <select aria-label="Entorno" value={envFilter} onChange={(e) => setEnvFilter(e.target.value)} className={inputCls}>
-          <option value="">Todos los entornos</option>
+        <Segmented label={t("Estado")} value={status} onChange={setStatus}
+          options={[{ label: t('Todas'), value: '' }, { label: 'OK', value: 'ok' }, { label: t('Error'), value: 'error' }]} />
+        <select aria-label={t("Entorno")} value={envFilter} onChange={(e) => setEnvFilter(e.target.value)} className={inputCls}>
+          <option value="">{t("Todos los entornos")}</option>
           {environments.map((e) => <option key={e} value={e}>{e}</option>)}
         </select>
-        <input type="text" aria-label="Project filter" placeholder="Proyecto" value={projectFilter}
+        <input type="text" aria-label={t("Project filter")} placeholder={t("Proyecto")} value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)} className={`${inputCls} w-32`} />
-        <input type="text" aria-label="Session filter" placeholder="ID de sesión" value={sessionFilter}
+        <input type="text" aria-label={t("Session filter")} placeholder={t("ID de sesión")} value={sessionFilter}
           onChange={(e) => setSessionFilter(e.target.value)} className={`${inputCls} w-44 font-mono`} />
       </div>
 
@@ -98,13 +99,13 @@ function Traces() {
           <table className="w-full min-w-[860px] text-left text-xs">
             <thead>
               <tr className="border-b border-line text-[11px] uppercase tracking-wider text-faint">
-                <th className="w-8 py-2.5 pl-4 font-medium"><span className="sr-only">Estado</span></th>
-                <th className="px-3 py-2.5 font-medium">Traza</th>
-                <th className="px-3 py-2.5 font-medium">Entorno</th>
-                <th className="px-3 py-2.5 font-medium">Sesión</th>
-                <th className="px-3 py-2.5 font-medium w-[26%]">Duración</th>
-                <th className="px-3 py-2.5 font-medium">Etapa más lenta</th>
-                <th className="px-4 py-2.5 text-right font-medium">Creada</th>
+                <th className="w-8 py-2.5 pl-4 font-medium"><span className="sr-only">{t("Estado")}</span></th>
+                <th className="px-3 py-2.5 font-medium">{t("Traza")}</th>
+                <th className="px-3 py-2.5 font-medium">{t("Entorno")}</th>
+                <th className="px-3 py-2.5 font-medium">{t("Sesión")}</th>
+                <th className="px-3 py-2.5 font-medium w-[26%]">{t("Duración")}</th>
+                <th className="px-3 py-2.5 font-medium">{t("Etapa más lenta")}</th>
+                <th className="px-4 py-2.5 text-right font-medium">{t("Creada")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -113,7 +114,7 @@ function Traces() {
                   <tr key={i}><td colSpan={7} className="px-4 py-2"><Skeleton className="h-6" /></td></tr>
                 ))
               ) : traces.length === 0 ? (
-                <tr><td colSpan={7}><EmptyState title="No hay trazas con estos filtros" /></td></tr>
+                <tr><td colSpan={7}><EmptyState title={t("No hay trazas con estos filtros")} /></td></tr>
               ) : traces.map((t) => {
                 const d = traceDurationMs(t);
                 const ts = topStage(t);
@@ -147,12 +148,12 @@ function Traces() {
       )}
 
       <div className="flex items-center justify-between text-xs text-faint">
-        <span>Página {page + 1} de {pages}</span>
+        <span>{t("Página {p} de {n}", { p: page + 1, n: pages })}</span>
         <div className="flex gap-2">
           <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
-            className="rounded-lg border border-line bg-panel px-3 py-1.5 text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-panel">Anterior</button>
+            className="rounded-lg border border-line bg-panel px-3 py-1.5 text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-panel">{t("Anterior")}</button>
           <button type="button" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= pages}
-            className="rounded-lg border border-line bg-panel px-3 py-1.5 text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-panel">Siguiente</button>
+            className="rounded-lg border border-line bg-panel px-3 py-1.5 text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-panel">{t("Siguiente")}</button>
         </div>
       </div>
     </div>

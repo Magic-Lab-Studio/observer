@@ -61,6 +61,9 @@ class TurnSignals:
     intent: str = ""
     answered_by: str = ""
     attempts: list[dict[str, Any]] = field(default_factory=list)
+    seen_spans: set[str] = field(default_factory=set)
+    environment: str = ""
+    session_id: str = ""
 
 
 def aware(value: datetime | None) -> datetime | None:
@@ -132,7 +135,15 @@ async def load_turn_signals(
 ) -> list[TurnSignals]:
     """Signals of every turn created at or after ``since`` (newest first, capped at ``limit``)."""
     query = (
-        select(Trace.id, Trace.status, Trace.created_at, Trace.start_time, Trace.end_time)
+        select(
+            Trace.id,
+            Trace.status,
+            Trace.created_at,
+            Trace.start_time,
+            Trace.end_time,
+            Trace.environment,
+            Trace.session_id,
+        )
         .where(Trace.created_at >= since, Trace.project_id == project_id)
         .order_by(Trace.created_at.desc())
         .limit(limit)
@@ -140,10 +151,39 @@ async def load_turn_signals(
     if environment:
         query = query.where(Trace.environment == environment)
     rows = (await session.execute(query)).all()
+    return await _signals_from_rows(session, rows)
+
+
+async def load_signals_for(session: AsyncSession, trace_ids: list[str]) -> list[TurnSignals]:
+    """Signals of the given traces (used by the evaluation sweep)."""
+    rows: list = []
+    for i in range(0, len(trace_ids), _CHUNK):
+        chunk = trace_ids[i : i + _CHUNK]
+        rows += (
+            await session.execute(
+                select(
+                    Trace.id,
+                    Trace.status,
+                    Trace.created_at,
+                    Trace.start_time,
+                    Trace.end_time,
+                    Trace.environment,
+                    Trace.session_id,
+                ).where(Trace.id.in_(chunk))
+            )
+        ).all()
+    return await _signals_from_rows(session, rows)
+
+
+async def _signals_from_rows(session: AsyncSession, rows: list) -> list[TurnSignals]:
     turns: dict[str, TurnSignals] = {}
-    for tid, status, created, start, end in rows:
+    for tid, status, created, start, end, env, session_id in rows:
         signals = TurnSignals(
-            trace_id=str(tid), status=str(status or "ok"), created_at=aware(created)
+            trace_id=str(tid),
+            status=str(status or "ok"),
+            created_at=aware(created),
+            environment=str(env or ""),
+            session_id=str(session_id or ""),
         )
         if start is not None and end is not None:
             signals.duration_ms = (aware(end) - aware(start)).total_seconds() * 1000.0
@@ -159,6 +199,7 @@ async def load_turn_signals(
             signals = turns.get(str(trace_id))
             if signals is None:
                 continue
+            signals.seen_spans.add(str(name))
             _apply_span(signals, str(name), attrs if isinstance(attrs, dict) else {})
     return list(turns.values())
 

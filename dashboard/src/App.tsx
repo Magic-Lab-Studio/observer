@@ -3,9 +3,12 @@ import { Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FilterProvider, useFilters } from './context';
 import { AlertsProvider, useAlerts } from './alerts-context';
+import { LocaleProvider, useLocale } from './i18n-context';
+import { LANGS } from './i18n';
 import { SEVERITY_LABEL, severityRank } from './helpers/alerts';
 import { Icon, Segmented } from './components/ui';
 import { clockTime } from './helpers/format';
+import { t } from './i18n';
 
 const Overview = lazy(() => import('./pages/Overview'));
 const Traces = lazy(() => import('./pages/Traces'));
@@ -13,11 +16,13 @@ const TraceDetail = lazy(() => import('./pages/TraceDetail'));
 const Evaluations = lazy(() => import('./pages/Evaluations'));
 const Providers = lazy(() => import('./pages/Providers'));
 const Alerts = lazy(() => import('./pages/Alerts'));
+const Explore = lazy(() => import('./pages/Explore'));
 
 const NAV = [
   { to: '/', label: 'Resumen', icon: 'overview', end: true },
   { to: '/traces', label: 'Trazas', icon: 'traces', end: false },
   { to: '/providers', label: 'Proveedores', icon: 'providers', end: false },
+  { to: '/explore', label: 'Explorar', icon: 'explore', end: false },
   { to: '/alerts', label: 'Alertas', icon: 'bell', end: false },
   { to: '/evaluations', label: 'Evaluaciones', icon: 'evals', end: false },
 ];
@@ -38,7 +43,7 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
 function AlertBadge() {
   const { openCount } = useAlerts();
   if (openCount === 0) return null;
-  return <span className="ml-auto rounded-full bg-bad px-1.5 text-[10px] font-semibold text-canvas" aria-label={`${openCount} alertas abiertas`}>{openCount}</span>;
+  return <span className="ml-auto rounded-full bg-bad px-1.5 text-[10px] font-semibold text-canvas" aria-label={t('{n} alertas abiertas', { n: openCount })}>{openCount}</span>;
 }
 
 function AlertBanner() {
@@ -50,9 +55,9 @@ function AlertBanner() {
   return (
     <div role="status" className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-xs lg:px-6 ${tone}`}>
       <Icon name="bell" className="size-4 shrink-0" />
-      <span className="font-semibold">{SEVERITY_LABEL[top.severity]}</span>
-      <span className="min-w-0 truncate">{top.rule_name}{open.length > 1 ? ` y ${open.length - 1} más` : ''}</span>
-      <NavLink to="/alerts" className="ml-auto underline">Ver alertas</NavLink>
+      <span className="font-semibold">{t(SEVERITY_LABEL[top.severity])}</span>
+      <span className="min-w-0 truncate">{t(top.rule_name)}{open.length > 1 ? ` ${t('y {n} más', { n: open.length - 1 })}` : ''}</span>
+      <NavLink to="/alerts" className="ml-auto underline">{t("Ver alertas")}</NavLink>
     </div>
   );
 }
@@ -60,9 +65,9 @@ function AlertBanner() {
 function LiveBadge() {
   const { connected, lastUpdated } = useFilters();
   return (
-    <span className="inline-flex items-center gap-2 text-xs text-dim" title={connected ? 'Conectado al flujo en vivo' : 'Sin flujo en vivo; reintentando'}>
+    <span className="inline-flex items-center gap-2 text-xs text-dim" title={connected ? t('Conectado al flujo en vivo') : t('Sin flujo en vivo; reintentando')}>
       <span className={`size-2 rounded-full ${connected ? 'bg-ok live-dot' : 'bg-warn'}`} />
-      <span className="hidden sm:inline">{connected ? 'En vivo' : 'Reconectando…'}</span>
+      <span className="hidden sm:inline">{connected ? t('En vivo') : t('Reconectando…')}</span>
       {lastUpdated && <span className="hidden md:inline text-faint">· {clockTime(lastUpdated)}</span>}
     </span>
   );
@@ -70,11 +75,12 @@ function LiveBadge() {
 
 function Header({ onMenu }: { onMenu: () => void }) {
   const { hours, setHours, env, setEnv, environments, refresh, loading } = useFilters();
+  const { lang, setLang } = useLocale();
   const { pathname } = useLocation();
-  const showFilters = pathname === '/' || pathname === '/providers';
+  const showFilters = pathname === '/' || pathname === '/providers' || pathname === '/evaluations' || pathname === '/explore';
   return (
     <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b py-2 border-line bg-canvas/85 px-4 backdrop-blur lg:px-6">
-      <button type="button" onClick={onMenu} aria-label="Abrir menú"
+      <button type="button" onClick={onMenu} aria-label={t("Abrir menú")}
         className="lg:hidden rounded-md p-1.5 text-dim hover:bg-panel-2 hover:text-ink">
         <Icon name="menu" className="size-5" />
       </button>
@@ -82,17 +88,18 @@ function Header({ onMenu }: { onMenu: () => void }) {
       {showFilters && (
         <>
           {environments.length > 0 && (
-            <select aria-label="Entorno" value={env} onChange={(e) => setEnv(e.target.value)}
+            <select aria-label={t("Entorno")} value={env} onChange={(e) => setEnv(e.target.value)}
               className="rounded-lg border border-line bg-panel px-2.5 py-1.5 text-xs text-ink">
-              <option value="">Todos los entornos</option>
+              <option value="">{t("Todos los entornos")}</option>
               {environments.map((e) => <option key={e} value={e}>{e}</option>)}
             </select>
           )}
-          <Segmented label="Rango de tiempo" options={RANGES} value={hours} onChange={setHours} />
+          <Segmented label={t("Rango de tiempo")} options={RANGES} value={hours} onChange={setHours} />
         </>
       )}
+      <Segmented label={t('Idioma')} options={LANGS} value={lang} onChange={setLang} />
       <LiveBadge />
-      <button type="button" onClick={refresh} aria-label="Actualizar"
+      <button type="button" onClick={refresh} aria-label={t("Actualizar")}
         className="rounded-md p-1.5 text-dim hover:bg-panel-2 hover:text-ink">
         <Icon name="refresh" className={`size-4 ${loading ? 'animate-spin' : ''}`} />
       </button>
@@ -113,18 +120,19 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
               <path d="M3 12h4l3-8 4 16 3-8h4" />
             </svg>
           </span>
-          <span className="text-sm font-semibold tracking-tight">Observatorio</span>
+          <span className="text-sm font-semibold tracking-tight">{t("Observatorio")}</span>
         </div>
-        <nav className="flex-1 space-y-1 p-3" aria-label="Principal">
+        <nav className="flex-1 space-y-1 p-3" aria-label={t("Principal")}>
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={navClass} onClick={onClose}>
-              <Icon name={n.icon} />{n.label}
+              <Icon name={n.icon} />{t(n.label)}
               {n.to === '/alerts' && <AlertBadge />}
             </NavLink>
           ))}
         </nav>
         <div className="border-t border-line p-4 text-[11px] text-faint">
-          Solo metadatos · datos locales
+          
+          {t("Solo metadatos · datos locales")}
         </div>
       </aside>
     </>
@@ -143,18 +151,19 @@ function Shell() {
         <AlertBanner />
         <main className="mx-auto w-full max-w-[1800px] p-4 lg:p-6">
           <ErrorBoundary>
-            <Suspense fallback={<div className="py-20 text-center text-sm text-faint">Cargando…</div>}>
+            <Suspense fallback={<div className="py-20 text-center text-sm text-faint">{t("Cargando…")}</div>}>
               <Routes>
                 <Route path="/" element={<Overview />} />
                 <Route path="/traces" element={<Traces />} />
                 <Route path="/traces/:traceId" element={<TraceDetail />} />
                 <Route path="/providers" element={<Providers />} />
                 <Route path="/alerts" element={<Alerts />} />
+                <Route path="/explore" element={<Explore />} />
                 <Route path="/evaluations" element={<Evaluations />} />
                 <Route path="*" element={
                   <div className="py-24 text-center">
                     <h1 className="text-3xl font-semibold">404</h1>
-                    <p className="mt-2 text-dim">Página no encontrada</p>
+                    <p className="mt-2 text-dim">{t("Página no encontrada")}</p>
                   </div>
                 } />
               </Routes>
@@ -168,10 +177,12 @@ function Shell() {
 
 export default function App() {
   return (
-    <FilterProvider>
-      <AlertsProvider>
-        <Shell />
-      </AlertsProvider>
-    </FilterProvider>
+    <LocaleProvider>
+      <FilterProvider>
+        <AlertsProvider>
+          <Shell />
+        </AlertsProvider>
+      </FilterProvider>
+    </LocaleProvider>
   );
 }

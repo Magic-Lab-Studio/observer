@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api } from './api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { parseApiDate } from './dates';
+import { t } from './i18n';
 import type { Trace } from './types';
 
 export const SAMPLE_LIMIT = 1000;
@@ -59,7 +60,7 @@ export function FilterProvider({ children }: { children: ReactNode }) {
       setError(null);
       setLastUpdated(Date.now());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error desconocido');
+      setError(e instanceof Error ? e.message : t('Error desconocido'));
     } finally {
       setLoading(false);
     }
