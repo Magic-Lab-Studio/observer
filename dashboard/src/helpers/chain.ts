@@ -1,3 +1,4 @@
+import { t } from '../i18n.ts';
 export interface Attempt { backend: string; model: string; result: string; ms: number | null }
 
 /** `groq:qwen/qwen3.8-27b=429@412ms>llamacpp:-=ok` -> attempts. Mirrors the backend parser; unreadable parts are skipped. */
@@ -32,11 +33,11 @@ export function resultTone(result: string): 'ok' | 'warn' | 'bad' | 'skip' {
 }
 
 export function resultLabel(result: string): string {
-  if (result === 'ok') return 'respondió';
-  if (result === '429') return 'límite (429)';
-  if (result === 'timeout') return 'tiempo agotado';
-  if (result.startsWith('skipped')) return 'omitido (sin cuota)';
-  return result.replace(/^error:/, 'error ');
+  if (result === 'ok') return t('respondió');
+  if (result === '429') return t('límite (429)');
+  if (result === 'timeout') return t('tiempo agotado');
+  if (result.startsWith('skipped')) return t('omitido (sin cuota)');
+  return result.replace(/^error:/, `${t('error')} `);
 }
 
 /** The same model appears as "groq · qwen/qwen3.8-27b" (what answered) and "qwen3.8-27b-groq" (registry id): one key for both. */

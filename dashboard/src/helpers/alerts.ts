@@ -1,3 +1,4 @@
+import { t } from '../i18n.ts';
 // Pure helpers for the alerts UI. Self-contained on purpose: the Node test runner loads this file
 // directly (no extensionless runtime imports).
 
@@ -59,9 +60,9 @@ export function describeRule(
   metric: { label: string; unit: MetricUnit } | undefined,
 ): string {
   const unit = metric?.unit ?? 'count';
-  const label = metric?.label ?? rule.metric;
+  const label = t(metric?.label ?? rule.metric);
   const scope = rule.scope ? ` (${rule.scope})` : '';
-  const window = unit === 'count' ? '' : ` en ${windowLabel(rule.window_minutes)}`;
+  const window = unit === 'count' ? '' : ` ${t('en')} ${windowLabel(rule.window_minutes)}`;
   return `${label}${scope} ${rule.comparator} ${formatMetricValue(unit, rule.threshold)}${window}`;
 }
 

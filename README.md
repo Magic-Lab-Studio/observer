@@ -19,8 +19,9 @@ as a CI artifact._
 ## What's new: a redesigned dashboard
 
 The dashboard was rebuilt as a dense, dark console: sidebar navigation, a global time range and
-environment filter, live updates, and charts that use the whole screen. The interface text is
-currently in Spanish.
+environment filter, live updates, and charts that use the whole screen. The interface is available in
+English and Spanish: pick the language with the ES/EN switch in the header (the choice is remembered; the
+default follows the browser language).
 
 - **Overview** — turns, error rate, p50/p95 latency, time to first token, fallback rate and cost
   (always shown, even at $0), with an activity/latency chart, latency histogram, per-stage time

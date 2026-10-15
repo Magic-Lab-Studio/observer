@@ -1,4 +1,5 @@
 import { parseApiDate } from '../dates';
+import { localeTag } from '../i18n';
 import type { Trace } from '../types';
 import { traceDurationMs } from './format';
 
@@ -52,9 +53,9 @@ export function bucketTraces(traces: Trace[], startMs: number, endMs: number, co
 export function bucketLabel(ms: number, spanMs: number): string {
   const d = parseApiDate(ms);
   if (spanMs <= 36 * 3600_000) {
-    return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit', hour12: false });
   }
-  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+  return d.toLocaleDateString(localeTag(), { day: '2-digit', month: 'short' });
 }
 
 export const LATENCY_EDGES = [1000, 2000, 5000, 10000, 20000, 40000];
