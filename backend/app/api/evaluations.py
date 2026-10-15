@@ -84,7 +84,7 @@ async def create_evaluation(
             "id": evaluation.id,
             "trace_id": evaluation.trace_id,
             "evaluator_type": evaluation.evaluator_type,
-            "score": float(evaluation.score) if evaluation.score else None,
+            "score": float(evaluation.score) if evaluation.score is not None else None,
             "created_at": evaluation.created_at.isoformat() if evaluation.created_at else None,
         },
     })
@@ -189,7 +189,7 @@ async def run_evaluation(
             "id": evaluation.id,
             "trace_id": evaluation.trace_id,
             "evaluator_type": evaluation.evaluator_type,
-            "score": float(evaluation.score) if evaluation.score else None,
+            "score": float(evaluation.score) if evaluation.score is not None else None,
             "created_at": evaluation.created_at.isoformat() if evaluation.created_at else None,
         },
     })

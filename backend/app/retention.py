@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.models.alerts import AlertEvent
 from app.models.evaluation import Evaluation
 from app.models.ingestion import IngestionReceipt
 from app.models.trace import Span, Trace
@@ -41,7 +42,7 @@ async def purge_older_than(
 ) -> dict[str, int]:
     """Delete what is older than ``days``; children first (SQLite foreign keys on or off)."""
     if days <= 0:
-        return {"traces": 0, "spans": 0, "evaluations": 0, "receipts": 0}
+        return {"traces": 0, "spans": 0, "evaluations": 0, "receipts": 0, "alert_events": 0}
     cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days)
     old_traces = select(Trace.id).where(Trace.created_at < cutoff)
     evaluations = await session.execute(
@@ -52,8 +53,10 @@ async def purge_older_than(
     receipts = await session.execute(
         delete(IngestionReceipt).where(IngestionReceipt.created_at < cutoff)
     )
+    alert_events = await session.execute(delete(AlertEvent).where(AlertEvent.fired_at < cutoff))
     await session.commit()
     return {
+        "alert_events": alert_events.rowcount or 0,
         "traces": traces.rowcount or 0,
         "spans": spans.rowcount or 0,
         "evaluations": evaluations.rowcount or 0,

@@ -137,3 +137,17 @@ export interface ProvidersResponse {
   fallback_depth: { depth: number; count: number }[];
   paths: { path: string; count: number }[];
 }
+
+export interface AlertMetric { id: string; label: string; unit: 'ratio' | 'ms' | 'count'; kind: string }
+export interface AlertRule {
+  id: string; name: string; metric: string; comparator: '>' | '>=' | '<' | '<='; threshold: number;
+  window_minutes: number; min_samples: number; scope: string | null; project_id: string;
+  environment: string | null; severity: 'info' | 'warning' | 'critical'; enabled: boolean;
+  cooldown_minutes: number; created_at: string | null;
+}
+export interface AlertEvent {
+  id: string; rule_id: string; rule_name: string; metric: string; scope: string | null;
+  comparator: string; severity: 'info' | 'warning' | 'critical'; state: 'open' | 'resolved';
+  value: number | null; threshold: number; window_minutes: number; fired_at: string | null;
+  resolved_at: string | null; acked_at: string | null; details: Record<string, unknown> | null;
+}

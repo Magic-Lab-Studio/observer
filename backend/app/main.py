@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
+from app.api import alerts as alerts_api
 from app.api import analytics, evaluations, manitos_ingest, providers, traces
 from app.auth import require_api_key
 from app.db.postgres import engine
@@ -23,15 +24,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
     import asyncio
 
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.alerts import alerts_loop
     from app.retention import retention_loop
 
     retention = asyncio.create_task(
         retention_loop(engine)
     )  # returns at once unless OBSERVATORY_RETENTION_DAYS > 0
+    alerting = asyncio.create_task(
+        alerts_loop(async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False))
+    )  # returns at once when OBSERVATORY_ALERTS=0
     try:
         yield
     finally:
         retention.cancel()
+        alerting.cancel()
         await engine.dispose()
 
 
@@ -84,6 +92,12 @@ app.include_router(
     analytics.router,
     prefix="/v1/analytics",
     tags=["analytics"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    alerts_api.router,
+    prefix="/v1/alerts",
+    tags=["alerts"],
     dependencies=[_app_auth],
 )
 app.include_router(

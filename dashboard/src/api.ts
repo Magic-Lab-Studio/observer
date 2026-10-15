@@ -12,6 +12,9 @@ import type {
   CostByModel,
   ManitOSQualitySummary,
   ProvidersResponse,
+  AlertMetric,
+  AlertRule,
+  AlertEvent,
 } from './types';
 
 const BASE_URL = '/api';
@@ -103,5 +106,33 @@ export const api = {
     const qs = new URLSearchParams({ hours: String(hours) });
     if (environment) qs.set('environment', environment);
     return request(`/v1/providers/?${qs.toString()}`);
+  },
+
+  // Alerts
+  async getAlertMetrics(): Promise<AlertMetric[]> {
+    return request('/v1/alerts/metrics');
+  },
+  async listAlertRules(): Promise<AlertRule[]> {
+    return request('/v1/alerts/rules');
+  },
+  async createAlertRule(rule: Partial<AlertRule>): Promise<AlertRule> {
+    return request('/v1/alerts/rules', { method: 'POST', body: JSON.stringify(rule) });
+  },
+  async updateAlertRule(id: string, patch: Partial<AlertRule>): Promise<AlertRule> {
+    return request(`/v1/alerts/rules/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+  async deleteAlertRule(id: string): Promise<void> {
+    await request(`/v1/alerts/rules/${id}`, { method: 'DELETE' });
+  },
+  async listAlertEvents(state?: 'open' | 'resolved', limit = 100): Promise<{ events: AlertEvent[]; open_count: number }> {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (state) qs.set('state', state);
+    return request(`/v1/alerts/events?${qs.toString()}`);
+  },
+  async ackAlertEvent(id: string): Promise<AlertEvent> {
+    return request(`/v1/alerts/events/${id}/ack`, { method: 'POST' });
+  },
+  async evaluateAlerts(): Promise<{ evaluated: number; opened: number; resolved: number }> {
+    return request('/v1/alerts/evaluate', { method: 'POST' });
   },
 };

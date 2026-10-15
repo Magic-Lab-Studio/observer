@@ -1,5 +1,10 @@
 """Shared isolated database and ASGI fixtures for backend tests."""
 
+import os
+
+# The app lifespan (TestClient) must never start the alert loop against the developer database.
+os.environ.setdefault("OBSERVATORY_ALERTS", "0")
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

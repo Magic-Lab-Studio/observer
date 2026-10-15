@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FilterProvider, useFilters } from './context';
+import { AlertsProvider, useAlerts } from './alerts-context';
+import { SEVERITY_LABEL, severityRank } from './helpers/alerts';
 import { Icon, Segmented } from './components/ui';
 import { clockTime } from './helpers/format';
 
@@ -10,11 +12,13 @@ const Traces = lazy(() => import('./pages/Traces'));
 const TraceDetail = lazy(() => import('./pages/TraceDetail'));
 const Evaluations = lazy(() => import('./pages/Evaluations'));
 const Providers = lazy(() => import('./pages/Providers'));
+const Alerts = lazy(() => import('./pages/Alerts'));
 
 const NAV = [
   { to: '/', label: 'Resumen', icon: 'overview', end: true },
   { to: '/traces', label: 'Trazas', icon: 'traces', end: false },
   { to: '/providers', label: 'Proveedores', icon: 'providers', end: false },
+  { to: '/alerts', label: 'Alertas', icon: 'bell', end: false },
   { to: '/evaluations', label: 'Evaluaciones', icon: 'evals', end: false },
 ];
 
@@ -30,6 +34,28 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
     isActive ? 'bg-raised text-ink' : 'text-dim hover:bg-panel-2 hover:text-ink'
   }`;
+
+function AlertBadge() {
+  const { openCount } = useAlerts();
+  if (openCount === 0) return null;
+  return <span className="ml-auto rounded-full bg-bad px-1.5 text-[10px] font-semibold text-canvas" aria-label={`${openCount} alertas abiertas`}>{openCount}</span>;
+}
+
+function AlertBanner() {
+  const { open } = useAlerts();
+  if (open.length === 0) return null;
+  const top = [...open].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))[0];
+  const tone = top.severity === 'critical' ? 'border-bad/40 bg-bad/10 text-bad'
+    : top.severity === 'warning' ? 'border-warn/40 bg-warn/10 text-warn' : 'border-accent/40 bg-accent/10 text-accent';
+  return (
+    <div role="status" className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-xs lg:px-6 ${tone}`}>
+      <Icon name="bell" className="size-4 shrink-0" />
+      <span className="font-semibold">{SEVERITY_LABEL[top.severity]}</span>
+      <span className="min-w-0 truncate">{top.rule_name}{open.length > 1 ? ` y ${open.length - 1} más` : ''}</span>
+      <NavLink to="/alerts" className="ml-auto underline">Ver alertas</NavLink>
+    </div>
+  );
+}
 
 function LiveBadge() {
   const { connected, lastUpdated } = useFilters();
@@ -93,6 +119,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={navClass} onClick={onClose}>
               <Icon name={n.icon} />{n.label}
+              {n.to === '/alerts' && <AlertBadge />}
             </NavLink>
           ))}
         </nav>
@@ -113,6 +140,7 @@ function Shell() {
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="lg:pl-56 min-w-0">
         <Header onMenu={() => setOpen(true)} />
+        <AlertBanner />
         <main className="mx-auto w-full max-w-[1800px] p-4 lg:p-6">
           <ErrorBoundary>
             <Suspense fallback={<div className="py-20 text-center text-sm text-faint">Cargando…</div>}>
@@ -121,6 +149,7 @@ function Shell() {
                 <Route path="/traces" element={<Traces />} />
                 <Route path="/traces/:traceId" element={<TraceDetail />} />
                 <Route path="/providers" element={<Providers />} />
+                <Route path="/alerts" element={<Alerts />} />
                 <Route path="/evaluations" element={<Evaluations />} />
                 <Route path="*" element={
                   <div className="py-24 text-center">
@@ -140,7 +169,9 @@ function Shell() {
 export default function App() {
   return (
     <FilterProvider>
-      <Shell />
+      <AlertsProvider>
+        <Shell />
+      </AlertsProvider>
     </FilterProvider>
   );
 }
