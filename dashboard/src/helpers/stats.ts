@@ -28,7 +28,7 @@ export function bucketTraces(traces: Trace[], startMs: number, endMs: number, co
   const size = span / count;
   const groups: Trace[][] = Array.from({ length: count }, () => []);
   for (const tr of traces) {
-    const at = parseApiDate(tr.created_at).getTime();
+    const at = parseApiDate(tr.start_time).getTime(); // when the turn ran, not when it was ingested (spooled retries arrive late)
     const i = Math.min(count - 1, Math.floor((at - startMs) / size));
     if (i >= 0) groups[i].push(tr);
   }

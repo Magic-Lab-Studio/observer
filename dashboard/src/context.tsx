@@ -90,9 +90,9 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     const requested = now - hours * 3600_000;
     const scoped = env ? sample.filter((t) => t.environment === env) : sample;
     const truncated = sample.length >= SAMPLE_LIMIT && totalTraces > sample.length;
-    const oldest = sample.length ? parseApiDate(sample[sample.length - 1].created_at).getTime() : requested;
+    const oldest = sample.length ? Math.min(...sample.map((t) => parseApiDate(t.start_time).getTime())) : requested;
     const windowStart = truncated ? Math.max(requested, oldest) : requested;
-    const windowTraces = scoped.filter((t) => parseApiDate(t.created_at).getTime() >= windowStart);
+    const windowTraces = scoped.filter((t) => parseApiDate(t.start_time).getTime() >= windowStart);
     return {
       hours, setHours, env, setEnv, environments, sample: scoped, windowTraces, windowStart, windowEnd: now,
       sampleTruncated: truncated && oldest > requested, totalTraces, loading, error,
