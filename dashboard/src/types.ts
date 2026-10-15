@@ -117,3 +117,23 @@ export interface WebSocketMessage {
   type: string;
   data: unknown;
 }
+
+export interface ProviderQuota { model: string; returns_in_sec: number; kind: string }
+export interface ProviderModel { model: string; label: string; role: string; fallback: boolean; selectable: boolean }
+export interface ProviderInfo {
+  id: string; label: string; kind: 'cloud' | 'local'; order: number; active: boolean; has_key: boolean;
+  models: ProviderModel[]; data_note: string; out_of_quota: ProviderQuota[];
+}
+export interface ProviderStats {
+  id: string; attempts: number; ok: number; rate_limited: number; timeout: number; error: number; skipped: number;
+  answered: number; answered_share: number; success_rate: number | null;
+  p50_ms: number | null; p95_ms: number | null; turn_p50_ms: number | null; last_seen: string | null;
+  models: { model: string; attempts: number; ok: number; p50_ms: number | null }[];
+}
+export interface ProvidersResponse {
+  hours: number; project_id: string; environment: string | null; turns: number;
+  snapshot: { generated_at: number; received_at: number; stale: boolean; age_sec: number; providers: ProviderInfo[] } | null;
+  providers: ProviderStats[];
+  fallback_depth: { depth: number; count: number }[];
+  paths: { path: string; count: number }[];
+}

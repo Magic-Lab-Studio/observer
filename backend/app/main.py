@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from app.api import analytics, evaluations, manitos_ingest, traces
+from app.api import analytics, evaluations, manitos_ingest, providers, traces
 from app.auth import require_api_key
 from app.db.postgres import engine
 from app.ratelimit import limiter
@@ -84,6 +84,12 @@ app.include_router(
     analytics.router,
     prefix="/v1/analytics",
     tags=["analytics"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    providers.router,
+    prefix="/v1/providers",
+    tags=["providers"],
     dependencies=[_app_auth],
 )
 app.include_router(

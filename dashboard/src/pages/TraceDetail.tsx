@@ -1,11 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import type { Trace, Span } from '../types';
 import TraceWaterfall from '../components/TraceWaterfall';
 import SpanDetail from '../components/SpanDetail';
-import { StatusBadge, InfoCard, formatDuration } from '../components/shared';
+import { Card, Chip, EmptyState, ErrorState, Icon, Kpi, Skeleton, StatusPill } from '../components/ui';
+import { fmtInt, fmtMs, fmtUsd, stageLabel, stageTimings, traceDurationMs } from '../helpers/format';
 import { parseApiDate } from '../dates';
+import { parseAttempts, resultLabel, resultTone } from '../helpers/chain';
+
+const CHAIN_TONE = { ok: 'border-ok/40 bg-ok/10 text-ok', warn: 'border-warn/40 bg-warn/10 text-warn', bad: 'border-bad/40 bg-bad/10 text-bad', skip: 'border-line-strong bg-raised text-faint' };
+
+function ChainView({ text, answeredBy }: { text: string; answeredBy: string }) {
+  const attempts = parseAttempts(text);
+  if (attempts.length === 0) return null;
+  return (
+    <Card title="Cadena de este turno" subtitle={answeredBy ? `Respondió ${answeredBy}` : undefined} className="mb-4">
+      <ol className="space-y-1.5">
+        {attempts.map((a, i) => (
+          <li key={i} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${CHAIN_TONE[resultTone(a.result)]}`}>
+            <span className="w-4 text-faint">{i + 1}</span>
+            <span className="font-semibold">{a.backend}</span>
+            <span className="min-w-0 flex-1 truncate font-mono opacity-80" title={a.model}>{a.model || ''}</span>
+            <span>{resultLabel(a.result)}</span>
+            {a.ms != null && <span className="font-medium">{fmtMs(a.ms)}</span>}
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
 
 function TraceDetail() {
   const { traceId } = useParams<{ traceId: string }>();
@@ -13,141 +37,107 @@ function TraceDetail() {
   const [spans, setSpans] = useState<Span[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSpan, setSelectedSpan] = useState<Span | null>(null);
+  const [selected, setSelected] = useState<Span | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!traceId) return;
-      try {
-        const [traceData, spansData] = await Promise.all([
-          api.getTrace(traceId),
-          api.getTraceSpans(traceId),
-        ]);
-        setTrace(traceData);
-        setSpans(spansData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    if (!traceId) return;
+    setLoading(true);
+    Promise.all([api.getTrace(traceId), api.getTraceSpans(traceId)])
+      .then(([t, s]) => { setTrace(t); setSpans(s); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Error desconocido'))
+      .finally(() => setLoading(false));
   }, [traceId]);
 
-  if (loading) {
-    return (
-      <div className="px-4 py-6 sm:px-0">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-400">Loading...</div>
-        </div>
-      </div>
-    );
-  }
+  const stages = useMemo(
+    () => trace ? Object.entries(stageTimings(trace)).map(([k, v]) => ({ name: stageLabel(k), ms: v })).sort((a, b) => b.ms - a.ms) : [],
+    [trace],
+  );
 
+  if (loading) {
+    return <div className="space-y-4"><Skeleton className="h-10 w-72" /><Skeleton className="h-24" /><Skeleton className="h-80" /></div>;
+  }
   if (error || !trace) {
     return (
-      <div className="px-4 py-6 sm:px-0">
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
-          <p className="text-red-400">Error: {error || 'Trace not found'}</p>
-          <Link to="/traces" className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">
-            Back to traces
-          </Link>
-        </div>
+      <div className="space-y-3">
+        <ErrorState message={error || 'Traza no encontrada'} />
+        <Link to="/traces" className="text-xs text-accent hover:underline">← Volver a trazas</Link>
       </div>
     );
   }
 
+  const dur = traceDurationMs(trace);
+  const tokens = spans.reduce((a, s) => a + (s.tokens_input ?? 0) + (s.tokens_output ?? 0), 0);
+  const cost = spans.reduce((a, s) => a + (s.cost_usd ?? 0), 0);
+  const stageTotal = stages.reduce((a, s) => a + s.ms, 0) || 1;
+  const meta = [
+    ['Proyecto', trace.project_id], ['Entorno', trace.environment], ['Instancia', trace.service_instance_id],
+    ['Sesión', trace.session_id], ['Turno', trace.turn_id], ['Esquema', trace.schema_version],
+  ].filter(([, v]) => v) as [string, string][];
+  const extraMeta = trace.metadata ? Object.fromEntries(Object.entries(trace.metadata).filter(([k]) => k !== 'stage_timings_ms')) : {};
+
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <Link to="/traces" className="text-blue-400 hover:text-blue-300 text-sm">
-          &larr; Back to traces
+    <div className="space-y-4">
+      <div>
+        <Link to="/traces" className="inline-flex items-center gap-1 text-xs text-dim hover:text-ink">
+          <Icon name="back" className="size-3.5" /> Trazas
         </Link>
-        <h1 className="text-2xl font-bold mt-2">{trace.name}</h1>
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <InfoCard label="Status" value={trace.status} />
-        <InfoCard label="Duration" value={formatDuration(trace.start_time, trace.end_time)} />
-        <InfoCard label="Spans" value={spans.length.toString()} />
-        <InfoCard label="Created" value={parseApiDate(trace.created_at).toLocaleString()} />
-      </div>
-
-      {(trace.project_id || trace.environment || trace.service_instance_id || trace.session_id || trace.turn_id) && (
-        <div className="mb-6 bg-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-400 mb-3">Runtime correlation</h3>
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              ['Project', trace.project_id],
-              ['Environment', trace.environment],
-              ['Service instance', trace.service_instance_id],
-              ['Session', trace.session_id],
-              ['Turn', trace.turn_id],
-              ['Schema', trace.schema_version],
-            ].filter(([, value]) => value).map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-xs uppercase tracking-wide text-gray-500">{label}</dt>
-                <dd className="mt-1 break-all text-sm text-white font-mono">{value}</dd>
-              </div>
-            ))}
-          </dl>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <h1 className="text-lg font-semibold tracking-tight">{trace.name}</h1>
+          <StatusPill status={trace.status} />
+          {trace.environment && <Chip>{trace.environment}</Chip>}
         </div>
+        <p className="mt-1 font-mono text-[11px] text-faint">{trace.id} · {parseApiDate(trace.created_at).toLocaleString('es-CO')}</p>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Kpi label="Duración" value={fmtMs(dur)} />
+        <Kpi label="Spans" value={fmtInt(spans.length)} />
+        <Kpi label="Tokens" value={tokens ? fmtInt(tokens) : '–'} />
+        <Kpi label="Costo" value={fmtUsd(cost)} />
+      </dl>
+
+      {stages.length > 0 && (
+        <Card title="Etapas del turno" subtitle={`Suma de etapas ${fmtMs(stageTotal)}`}>
+          <div className="flex h-3 overflow-hidden rounded-full bg-raised">
+            {stages.map((s, i) => (
+              <div key={s.name} title={`${s.name}: ${fmtMs(s.ms)}`} style={{ width: `${(s.ms / stageTotal) * 100}%`, background: ['#6c8cff', '#9b7bea', '#3fb68b', '#e5a33b', '#d6657e', '#4fb7d6'][i % 6] }} />
+            ))}
+          </div>
+          <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+            {stages.map((s, i) => (
+              <li key={s.name} className="inline-flex items-center gap-1.5 text-dim">
+                <span className="size-2 rounded-sm" style={{ background: ['#6c8cff', '#9b7bea', '#3fb68b', '#e5a33b', '#d6657e', '#4fb7d6'][i % 6] }} />
+                {s.name} <span className="font-medium text-ink">{fmtMs(s.ms)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
-      {trace.metadata && Object.keys(trace.metadata).length > 0 && (
-        <div className="mb-6 bg-gray-800 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">Metadata</h3>
-          <pre className="bg-gray-900 rounded p-3 text-sm text-gray-300 overflow-x-auto">
-            {JSON.stringify(trace.metadata, null, 2)}
-          </pre>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="space-y-4 min-w-0">
+          <TraceWaterfall traceId={traceId!} spans={spans} selectedId={selected?.id} onSelect={(s) => setSelected(selected?.id === s.id ? null : s)} />
+          <Card title="Correlación" bodyClass="p-4">
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              {meta.map(([label, value]) => (
+                <div key={label} className="min-w-0">
+                  <dt className="text-[11px] uppercase tracking-wider text-faint">{label}</dt>
+                  <dd className="mt-0.5 break-all font-mono text-xs text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {Object.keys(extraMeta).length > 0 && (
+              <pre className="mt-4 max-h-56 overflow-auto rounded-lg bg-canvas p-3 text-xs text-dim">{JSON.stringify(extraMeta, null, 2)}</pre>
+            )}
+          </Card>
         </div>
-      )}
-
-      <div className="mb-6">
-        <TraceWaterfall traceId={traceId!} spans={spans} />
-      </div>
-
-      <div className="bg-gray-800 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-700">
-          <h2 className="text-lg font-semibold">Spans</h2>
+        <div className="min-w-0 xl:sticky xl:top-[72px] xl:self-start">
+          {selected?.name === 'llm.chain' && <ChainView text={String((selected.attributes ?? {}).attempts_text ?? '')} answeredBy={String((selected.attributes ?? {}).answered_by ?? '')} />}
+          {selected ? <SpanDetail span={selected} /> : (
+            <Card title="Detalle del span"><EmptyState title="Selecciona un span en la cascada" hint="Verás sus atributos, entrada y salida." /></Card>
+          )}
         </div>
-        <table className="min-w-full divide-y divide-gray-700">
-          <thead className="bg-gray-700">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Duration</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tokens</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Cost</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700">
-            {spans.map((span) => (
-              <tr
-                key={span.id}
-                className={`hover:bg-gray-700 cursor-pointer ${selectedSpan?.id === span.id ? 'bg-gray-700' : ''}`}
-                onClick={() => setSelectedSpan(selectedSpan?.id === span.id ? null : span)}
-              >
-                <td className="px-4 py-3 text-sm text-white">{span.name}</td>
-                <td className="px-4 py-3 text-sm text-gray-300">{span.span_type}</td>
-                <td className="px-4 py-3"><StatusBadge status={span.status} /></td>
-                <td className="px-4 py-3 text-sm text-gray-300">{formatDuration(span.start_time, span.end_time)}</td>
-                <td className="px-4 py-3 text-sm text-gray-300">
-                  {span.tokens_input != null && span.tokens_output != null
-                    ? `${span.tokens_input} → ${span.tokens_output}`
-                    : '-'}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-300">
-                  {span.cost_usd != null ? `$${span.cost_usd.toFixed(6)}` : '-'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
-
-      {selectedSpan && <SpanDetail span={selectedSpan} />}
     </div>
   );
 }
