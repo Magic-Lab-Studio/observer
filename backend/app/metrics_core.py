@@ -62,6 +62,8 @@ class TurnSignals:
     answered_by: str = ""
     attempts: list[dict[str, Any]] = field(default_factory=list)
     seen_spans: set[str] = field(default_factory=set)
+    environment: str = ""
+    session_id: str = ""
 
 
 def aware(value: datetime | None) -> datetime | None:
@@ -133,7 +135,15 @@ async def load_turn_signals(
 ) -> list[TurnSignals]:
     """Signals of every turn created at or after ``since`` (newest first, capped at ``limit``)."""
     query = (
-        select(Trace.id, Trace.status, Trace.created_at, Trace.start_time, Trace.end_time)
+        select(
+            Trace.id,
+            Trace.status,
+            Trace.created_at,
+            Trace.start_time,
+            Trace.end_time,
+            Trace.environment,
+            Trace.session_id,
+        )
         .where(Trace.created_at >= since, Trace.project_id == project_id)
         .order_by(Trace.created_at.desc())
         .limit(limit)
@@ -152,7 +162,13 @@ async def load_signals_for(session: AsyncSession, trace_ids: list[str]) -> list[
         rows += (
             await session.execute(
                 select(
-                    Trace.id, Trace.status, Trace.created_at, Trace.start_time, Trace.end_time
+                    Trace.id,
+                    Trace.status,
+                    Trace.created_at,
+                    Trace.start_time,
+                    Trace.end_time,
+                    Trace.environment,
+                    Trace.session_id,
                 ).where(Trace.id.in_(chunk))
             )
         ).all()
@@ -161,9 +177,13 @@ async def load_signals_for(session: AsyncSession, trace_ids: list[str]) -> list[
 
 async def _signals_from_rows(session: AsyncSession, rows: list) -> list[TurnSignals]:
     turns: dict[str, TurnSignals] = {}
-    for tid, status, created, start, end in rows:
+    for tid, status, created, start, end, env, session_id in rows:
         signals = TurnSignals(
-            trace_id=str(tid), status=str(status or "ok"), created_at=aware(created)
+            trace_id=str(tid),
+            status=str(status or "ok"),
+            created_at=aware(created),
+            environment=str(env or ""),
+            session_id=str(session_id or ""),
         )
         if start is not None and end is not None:
             signals.duration_ms = (aware(end) - aware(start)).total_seconds() * 1000.0

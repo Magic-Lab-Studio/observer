@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.metrics_query import QueryError, QueryRequest, run_query
+from app.metrics_query import schema as query_schema
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
 
@@ -408,3 +410,18 @@ async def list_sessions(
         }
         for row in rows
     ]
+
+
+@router.get("/query/schema")
+async def get_query_schema() -> dict:
+    """Views, measures, dimensions and aggregations the query endpoint accepts."""
+    return query_schema()
+
+
+@router.post("/query")
+async def post_query(request: QueryRequest, session: AsyncSession = Depends(get_session)) -> dict:
+    """Aggregate turns, provider attempts or turn evaluations by dimension and time."""
+    try:
+        return await run_query(session, request)
+    except QueryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -145,6 +145,17 @@ export interface EvaluationsByModel {
 }
 export interface TurnCriterion { name: string; weight: number; score: number; detail: string }
 
+export interface QueryField { id: string; label: string }
+export interface QuerySchema {
+  views: Record<string, { label: string; measures: QueryField[]; dimensions: QueryField[]; filter_only: QueryField[] }>;
+  aggregations: string[];
+  granularities: string[];
+}
+export interface QueryResult {
+  view: string; from: string; to: string; granularity: string | null; samples: number; truncated: boolean;
+  rows: Record<string, string | number | null>[];
+}
+
 export interface AlertMetric { id: string; label: string; unit: 'ratio' | 'ms' | 'count'; kind: string }
 export interface AlertRule {
   id: string; name: string; metric: string; comparator: '>' | '>=' | '<' | '<='; threshold: number;
