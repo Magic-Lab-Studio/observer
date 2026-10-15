@@ -6,7 +6,11 @@ import {
 } from 'recharts';
 import { api } from '../api';
 import { useFilters, SAMPLE_LIMIT } from '../context';
-import type { ManitOSQualitySummary, SummaryData } from '../types';
+import type { ManitOSQualitySummary, QueryResult, SummaryData } from '../types';
+import { fillBuckets } from '../helpers/query';
+import type { Bucket } from '../helpers/stats';
+import { bucketLabel } from '../helpers/stats';
+import { parseApiDate } from '../dates';
 import { Card, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, PALETTE, Skeleton, StatusDot } from '../components/ui';
 import { mergeModelRows } from '../helpers/chain';
 import { bucketTraces, histogram, percentile, sortedDurations } from '../helpers/stats';
@@ -27,6 +31,47 @@ function Overview() {
       .catch(() => { if (live) setQuality(null); });
     return () => { live = false; };
   }, [hours, env, totalTraces]);
+
+  // The activity chart, sparklines and latency KPIs come from the metrics query, so a 7 d or 30 d range
+  // uses every turn instead of the last 1000 traces; the client-side numbers remain as the fallback.
+  const [serverStats, setServerStats] = useState<{ series: QueryResult; totals: QueryResult } | null>(null);
+  useEffect(() => {
+    let live = true;
+    const base = {
+      view: 'turns', hours, dimensions: [], row_limit: 1000,
+      filters: env ? [{ field: 'environment', op: '=', value: env }] : [],
+    };
+    const core = [
+      { measure: 'count', aggregation: 'count' }, { measure: 'duration_ms', aggregation: 'p50' },
+      { measure: 'duration_ms', aggregation: 'p95' },
+    ];
+    Promise.all([
+      api.queryMetrics({ ...base, granularity: 'auto', metrics: [...core, { measure: 'error', aggregation: 'sum' }] }),
+      api.queryMetrics({ ...base, metrics: [...core, { measure: 'error', aggregation: 'avg' }] }),
+    ]).then(([series, totals]) => { if (live) setServerStats({ series, totals }); })
+      .catch(() => { if (live) setServerStats(null); });
+    return () => { live = false; };
+  }, [hours, env, totalTraces]);
+
+  const server = useMemo(() => {
+    if (!serverStats || !serverStats.series.granularity) return null;
+    const { series, totals } = serverStats;
+    const granularity = series.granularity as string;
+    const start = parseApiDate(series.from).getTime();
+    const end = parseApiDate(series.to).getTime();
+    const num = (v: unknown) => (typeof v === 'number' ? v : null);
+    const rows = series.rows.map((r) => ({ t: parseApiDate(String(r.time)).getTime(), r }));
+    const buckets: Bucket[] = fillBuckets(rows, start, end, granularity).map(({ t, row }) => {
+      const count = num(row?.r.count) ?? 0;
+      const err = num(row?.r.sum_error) ?? 0;
+      return {
+        t, label: bucketLabel(t, end - start), ok: count - err, err, total: count,
+        p50: num(row?.r.p50_duration_ms), p95: num(row?.r.p95_duration_ms), errRate: count ? err / count : 0,
+      };
+    });
+    const tot = totals.rows[0] ?? {};
+    return { buckets, p50: num(tot.p50_duration_ms), p95: num(tot.p95_duration_ms), errRate: num(tot.avg_error), count: num(tot.count) ?? 0 };
+  }, [serverStats]);
 
   const model = useMemo(() => {
     const durations = sortedDurations(windowTraces);
@@ -58,9 +103,12 @@ function Overview() {
   if (error && windowTraces.length === 0) return <ErrorState message={error} onRetry={refresh} />;
 
   const q = quality;
-  const total = windowTraces.length;
-  const errRate = total ? model.errors / total : 0;
-  const hasData = total > 0;
+  const total = server ? server.count : windowTraces.length;
+  const errRate = server?.errRate ?? (windowTraces.length ? model.errors / windowTraces.length : 0);
+  const buckets = server?.buckets ?? model.buckets;
+  const p50v = server?.p50 ?? model.p50;
+  const p95v = server?.p95 ?? model.p95;
+  const hasData = total > 0 || windowTraces.length > 0;
   const modelsPie = mergeModelRows(q?.models ?? []).slice(0, 6);
   const langs = q?.languages ?? [];
 
@@ -80,7 +128,7 @@ function Overview() {
           <h1 className="text-lg font-semibold tracking-tight">{t("Resumen")}</h1>
           <p className="text-xs text-faint">
             {env ? t('Entorno {env}', { env }) : t('Todos los entornos')}
-            {sampleTruncated && ` · ${t('muestra de las últimas {n} trazas de {total}', { n: fmtInt(SAMPLE_LIMIT), total: fmtInt(totalTraces) })}`}
+            {sampleTruncated && ` · ${t('histograma, etapas y listas con una muestra de las últimas {n} trazas de {total}', { n: fmtInt(SAMPLE_LIMIT), total: fmtInt(totalTraces) })}`}
           </p>
         </div>
       </div>
@@ -90,15 +138,15 @@ function Overview() {
         {loading && !hasData ? Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-[118px]" />) : (
           <>
             <Kpi label={t("Turnos")} value={fmtInt(q?.total_turns ?? total)} hint={`${fmtInt(summary?.total_spans)} spans`}
-              series={model.buckets.map((b) => b.total)} color="#6c8cff" />
+              series={buckets.map((b) => b.total)} color="#6c8cff" />
             <Kpi label={t("Tasa de error")} value={fmtPct(q?.error_rate ?? errRate)}
               hint={t('{n} fallidos', { n: fmtInt(q?.error_count ?? model.errors) })}
               tone={(q?.error_rate ?? errRate) > 0.05 ? 'bad' : (q?.error_rate ?? errRate) > 0 ? 'warn' : 'good'}
-              series={model.buckets.map((b) => b.errRate)} color="#ef5b5b" />
-            <Kpi label={t("Latencia p50")} value={fmtMs(model.p50)} hint={`p95 ${fmtMs(model.p95)}`}
-              series={model.buckets.map((b) => b.p50 ?? 0)} color="#3fb68b" />
-            <Kpi label={t("Latencia p95")} value={fmtMs(model.p95)} hint={t("peor 5 % de turnos")}
-              series={model.buckets.map((b) => b.p95 ?? 0)} color="#e5a33b" />
+              series={buckets.map((b) => b.errRate)} color="#ef5b5b" />
+            <Kpi label={t("Latencia p50")} value={fmtMs(p50v)} hint={`p95 ${fmtMs(p95v)}`}
+              series={buckets.map((b) => b.p50 ?? 0)} color="#3fb68b" />
+            <Kpi label={t("Latencia p95")} value={fmtMs(p95v)} hint={t("peor 5 % de turnos")}
+              series={buckets.map((b) => b.p95 ?? 0)} color="#e5a33b" />
             <Kpi label={t("Primer token (media)")} value={fmtMs(q?.avg_ttft_ms)} hint={t('turno medio {v}', { v: fmtMs(q?.avg_duration_ms) })} />
             <Kpi label={t("Vía alterna")} value={fmtPct(q?.fallback_rate)} hint={t('{n} turnos', { n: fmtInt(q?.fallback_count) })}
               tone={(q?.fallback_rate ?? 0) > 0.25 ? 'warn' : 'neutral'} />
@@ -115,7 +163,7 @@ function Overview() {
           bodyClass="p-2 pt-3">
           {hasData ? (
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={model.buckets} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+              <ComposedChart data={buckets} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#232a38" vertical={false} />
                 <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={36} />
                 <YAxis yAxisId="n" {...AXIS} width={34} allowDecimals={false} />
@@ -149,7 +197,7 @@ function Overview() {
 
       {/* Distribution row */}
       <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-        <Card title={t("Distribución de latencia")} subtitle={hasData ? `p50 ${fmtMs(model.p50)} · p95 ${fmtMs(model.p95)} · ${t('máx')} ${fmtMs(model.durations[model.durations.length - 1])}` : undefined} bodyClass="p-2 pt-3">
+        <Card title={t("Distribución de latencia")} subtitle={hasData ? `p50 ${fmtMs(p50v)} · p95 ${fmtMs(p95v)} · ${t('máx')} ${fmtMs(model.durations[model.durations.length - 1])}` : undefined} bodyClass="p-2 pt-3">
           {hasData ? (
             <ResponsiveContainer width="100%" height={230}>
               <BarChart data={model.hist} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
