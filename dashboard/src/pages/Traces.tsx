@@ -1,23 +1,34 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useFilters } from '../context';
 import type { Trace } from '../types';
-import { StatusBadge, formatDuration, formatTimeAgo } from '../components/shared';
+import { Chip, EmptyState, ErrorState, Icon, Segmented, Skeleton, StatusDot } from '../components/ui';
+import { fmtInt, fmtMs, shortId, stageLabel, stageTimings, timeAgo, traceDurationMs } from '../helpers/format';
+
+const LIMIT = 25;
+const inputCls = 'rounded-lg border border-line bg-panel px-3 py-1.5 text-xs text-ink placeholder:text-faint focus:border-accent outline-none';
+
+function topStage(t: Trace): { name: string; ms: number } | null {
+  const entries = Object.entries(stageTimings(t));
+  if (!entries.length) return null;
+  const [k, v] = entries.reduce((a, b) => (b[1] > a[1] ? b : a));
+  return { name: stageLabel(k), ms: v };
+}
 
 function Traces() {
+  const { environments, newIds } = useFilters();
   const [traces, setTraces] = useState<Trace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [projectFilter, setProjectFilter] = useState('');
-  const [environmentFilter, setEnvironmentFilter] = useState('');
-  const [sessionFilter, setSessionFilter] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const limit = 20;
+  const [status, setStatus] = useState('');
+  const [envFilter, setEnvFilter] = useState('');
+  const [sessionFilter, setSessionFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -28,158 +39,120 @@ function Traces() {
     setLoading(true);
     try {
       const data = await api.listTraces({
-        limit,
-        offset,
-        status: statusFilter || undefined,
+        limit: LIMIT, offset,
+        status: status || undefined,
         search: debouncedSearch || undefined,
         project_id: projectFilter.trim() || undefined,
-        environment: environmentFilter.trim() || undefined,
+        environment: envFilter || undefined,
         session_id: sessionFilter.trim() || undefined,
       });
       setTraces(data.traces);
       setTotal(data.total);
-      setHasMore(offset + data.traces.length < data.total);
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, debouncedSearch, projectFilter, environmentFilter, sessionFilter]);
+  }, [status, debouncedSearch, projectFilter, envFilter, sessionFilter]);
 
-  useEffect(() => {
-    setPage(0);
-    fetchTraces(0);
-  }, [fetchTraces]);
+  useEffect(() => { setPage(0); void fetchTraces(0); }, [fetchTraces]);
 
-  const prevPageRef = useRef(page);
+  const prevPage = useRef(page);
   useEffect(() => {
-    if (prevPageRef.current !== page) {
-      prevPageRef.current = page;
-      fetchTraces(page * limit);
-    }
+    if (prevPage.current !== page) { prevPage.current = page; void fetchTraces(page * LIMIT); }
   }, [page, fetchTraces]);
 
-  return (
-    <div className="px-4 py-6 sm:px-0">
-      <h1 className="text-2xl font-bold mb-6">Traces</h1>
+  const maxDur = Math.max(1, ...traces.map((t) => traceDurationMs(t) ?? 0));
+  const pages = Math.max(1, Math.ceil(total / LIMIT));
 
-      <div className="bg-gray-800 rounded-lg p-4 mb-6">
-        <div className="flex flex-wrap gap-4">
-          <input
-            type="text"
-            placeholder="Search traces..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="bg-gray-700 text-white px-4 py-2 rounded-md flex-1 min-w-[200px]"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-gray-700 text-white px-4 py-2 rounded-md"
-          >
-            <option value="">All Statuses</option>
-            <option value="ok">OK</option>
-            <option value="error">Error</option>
-          </select>
-          <input
-            type="text"
-            aria-label="Project filter"
-            placeholder="Project (for example my-app)"
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            className="bg-gray-700 text-white px-4 py-2 rounded-md min-w-[220px]"
-          />
-          <input
-            type="text"
-            aria-label="Environment filter"
-            placeholder="Environment"
-            value={environmentFilter}
-            onChange={(e) => setEnvironmentFilter(e.target.value)}
-            className="bg-gray-700 text-white px-4 py-2 rounded-md min-w-[160px]"
-          />
-          <input
-            type="text"
-            aria-label="Session filter"
-            placeholder="Session ID"
-            value={sessionFilter}
-            onChange={(e) => setSessionFilter(e.target.value)}
-            className="bg-gray-700 text-white px-4 py-2 rounded-md min-w-[220px]"
-          />
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Trazas</h1>
+          <p className="text-xs text-faint">{fmtInt(total)} resultados</p>
         </div>
       </div>
 
-      {error ? (
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
-          <p className="text-red-400">Error: {error}</p>
-          <p className="text-gray-500 text-sm mt-2">Make sure the backend is running</p>
+      <div className="sticky top-14 z-10 -mx-4 flex flex-wrap items-center gap-2 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
+        <div className="relative min-w-[220px] flex-1 max-w-md">
+          <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-faint" />
+          <input type="text" aria-label="Buscar trazas" placeholder="Buscar por nombre…" value={search}
+            onChange={(e) => setSearch(e.target.value)} className={`${inputCls} w-full pl-8`} />
         </div>
-      ) : (
-        <div className="bg-gray-800 rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-700">
-            <thead className="bg-gray-700">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Project</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Session</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Duration</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Created</th>
+        <Segmented label="Estado" value={status} onChange={setStatus}
+          options={[{ label: 'Todas', value: '' }, { label: 'OK', value: 'ok' }, { label: 'Error', value: 'error' }]} />
+        <select aria-label="Entorno" value={envFilter} onChange={(e) => setEnvFilter(e.target.value)} className={inputCls}>
+          <option value="">Todos los entornos</option>
+          {environments.map((e) => <option key={e} value={e}>{e}</option>)}
+        </select>
+        <input type="text" aria-label="Project filter" placeholder="Proyecto" value={projectFilter}
+          onChange={(e) => setProjectFilter(e.target.value)} className={`${inputCls} w-32`} />
+        <input type="text" aria-label="Session filter" placeholder="ID de sesión" value={sessionFilter}
+          onChange={(e) => setSessionFilter(e.target.value)} className={`${inputCls} w-44 font-mono`} />
+      </div>
+
+      {error ? <ErrorState message={error} onRetry={() => void fetchTraces(page * LIMIT)} /> : (
+        <div className="overflow-x-auto rounded-xl border border-line bg-panel">
+          <table className="w-full min-w-[860px] text-left text-xs">
+            <thead>
+              <tr className="border-b border-line text-[11px] uppercase tracking-wider text-faint">
+                <th className="w-8 py-2.5 pl-4 font-medium"><span className="sr-only">Estado</span></th>
+                <th className="px-3 py-2.5 font-medium">Traza</th>
+                <th className="px-3 py-2.5 font-medium">Entorno</th>
+                <th className="px-3 py-2.5 font-medium">Sesión</th>
+                <th className="px-3 py-2.5 font-medium w-[26%]">Duración</th>
+                <th className="px-3 py-2.5 font-medium">Etapa más lenta</th>
+                <th className="px-4 py-2.5 text-right font-medium">Creada</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700">
-              {loading ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">Loading...</td></tr>
-              ) : traces.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">No traces found</td></tr>
-              ) : (
-                traces.map((trace) => (
-                  <tr key={trace.id} className="hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      <Link to={`/traces/${trace.id}`} className="hover:text-blue-400">{trace.name}</Link>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      <div>{trace.project_id || '-'}</div>
-                      {trace.environment && <div className="text-xs text-gray-500">{trace.environment}</div>}
-                    </td>
-                    <td className="px-6 py-4 max-w-[240px] truncate text-sm text-gray-300 font-mono" title={trace.session_id || undefined}>
-                      {trace.session_id || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={trace.status} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      {formatDuration(trace.start_time, trace.end_time)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      {formatTimeAgo(trace.created_at)}
-                    </td>
-                  </tr>
+            <tbody className="divide-y divide-line">
+              {loading && traces.length === 0 ? (
+                Array.from({ length: 8 }, (_, i) => (
+                  <tr key={i}><td colSpan={7} className="px-4 py-2"><Skeleton className="h-6" /></td></tr>
                 ))
-              )}
+              ) : traces.length === 0 ? (
+                <tr><td colSpan={7}><EmptyState title="No hay trazas con estos filtros" /></td></tr>
+              ) : traces.map((t) => {
+                const d = traceDurationMs(t);
+                const ts = topStage(t);
+                const slow = d != null && d > 20000;
+                return (
+                  <tr key={t.id} className={`group hover:bg-panel-2 ${newIds.has(t.id) ? 'flash-row' : ''}`}>
+                    <td className="py-2.5 pl-4"><StatusDot status={t.status} /></td>
+                    <td className="px-3 py-2.5">
+                      <Link to={`/traces/${t.id}`} className="font-medium text-ink hover:text-accent">{t.name}</Link>
+                      <div className="font-mono text-[11px] text-faint">{shortId(t.turn_id, 12)}</div>
+                    </td>
+                    <td className="px-3 py-2.5">{t.environment ? <Chip>{t.environment}</Chip> : <span className="text-faint">–</span>}</td>
+                    <td className="max-w-[180px] truncate px-3 py-2.5 font-mono text-dim" title={t.session_id ?? undefined}>{(t.session_id ?? '–').replace(/^session_\d{8}_/, '')}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-20 shrink-0 whitespace-nowrap text-right font-medium ${slow ? 'text-warn' : 'text-ink'}`}>{fmtMs(d)}</span>
+                        <div className="h-1.5 flex-1 rounded-full bg-raised">
+                          <div className={`h-full rounded-full ${t.status === 'error' ? 'bg-bad' : slow ? 'bg-warn' : 'bg-accent'}`}
+                            style={{ width: `${Math.max(2, ((d ?? 0) / maxDur) * 100)}%` }} />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-dim">{ts ? <>{ts.name} <span className="text-faint">· {fmtMs(ts.ms)}</span></> : '–'}</td>
+                    <td className="px-4 py-2.5 text-right text-faint whitespace-nowrap">{timeAgo(t.created_at)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      <div className="mt-4 flex items-center justify-between">
-        <div className="text-sm text-gray-400">
-          Page {page + 1} of {Math.max(1, Math.ceil(total / limit))} ({total} traces total)
-        </div>
+      <div className="flex items-center justify-between text-xs text-faint">
+        <span>Página {page + 1} de {pages}</span>
         <div className="flex gap-2">
-          <button
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="px-3 py-1 bg-gray-700 text-white rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={!hasMore}
-            className="px-3 py-1 bg-gray-700 text-white rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
+          <button type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+            className="rounded-lg border border-line bg-panel px-3 py-1.5 text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-panel">Anterior</button>
+          <button type="button" onClick={() => setPage((p) => p + 1)} disabled={page + 1 >= pages}
+            className="rounded-lg border border-line bg-panel px-3 py-1.5 text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-panel">Siguiente</button>
         </div>
       </div>
     </div>

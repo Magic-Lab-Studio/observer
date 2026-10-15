@@ -1,230 +1,268 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar,
+  Bar, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart,
 } from 'recharts';
-import { useWebSocket } from '../hooks/useWebSocket';
 import { api } from '../api';
-import type { SummaryData, TimelinePoint, CostByModel, ManitOSQualitySummary } from '../types';
-import { StatCard } from '../components/shared';
-import { parseApiDate } from '../dates';
+import { useFilters, SAMPLE_LIMIT } from '../context';
+import type { ManitOSQualitySummary, SummaryData } from '../types';
+import { Card, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, PALETTE, Skeleton, StatusDot } from '../components/ui';
+import { mergeModelRows } from '../helpers/chain';
+import { bucketTraces, histogram, percentile, sortedDurations } from '../helpers/stats';
+import { fmtAxisMs, fmtInt, fmtMs, fmtPct, fmtUsd, shortId, stageLabel, stageTimings, timeAgo, traceDurationMs } from '../helpers/format';
 
-const TIME_RANGES = [
-  { label: '1h', hours: 1 },
-  { label: '6h', hours: 6 },
-  { label: '24h', hours: 24 },
-  { label: '7d', hours: 168 },
-  { label: '30d', hours: 720 },
-];
+const AXIS = { stroke: 'transparent', tickLine: false, axisLine: false } as const;
 
 function Overview() {
-  const [summary, setSummary] = useState<SummaryData | null>(null);
-  const [timeline, setTimeline] = useState<TimelinePoint[]>([]);
-  const [costByModel, setCostByModel] = useState<CostByModel[]>([]);
+  const { hours, env, windowTraces, windowStart, windowEnd, sampleTruncated, totalTraces, loading, error, refresh, newIds } = useFilters();
   const [quality, setQuality] = useState<ManitOSQualitySummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [hours, setHours] = useState(168);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const [summaryData, timelineData, costData, qualityData] = await Promise.all([
-        api.getSummary(hours),
-        api.getTimeline(hours, hours <= 6 ? 30 : hours <= 24 ? 60 : 360),
-        api.getCostByModel(hours),
-        api.getManitOSQuality(hours),
-      ]);
-      setSummary(summaryData);
-      setTimeline(timelineData);
-      setCostByModel(costData);
-      setQuality(qualityData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }, [hours]);
+  const [summary, setSummary] = useState<SummaryData | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    fetchData();
-  }, [fetchData]);
+    let live = true;
+    Promise.all([api.getManitOSQuality(hours, 'manitos', env || undefined), api.getSummary(hours)])
+      .then(([q, s]) => { if (live) { setQuality(q); setSummary(s); } })
+      .catch(() => { if (live) setQuality(null); });
+    return () => { live = false; };
+  }, [hours, env, totalTraces]);
 
-  useWebSocket({
-    onMessage: useCallback((msg: { type: string }) => {
-      if (msg.type === 'new_trace' || msg.type === 'new_evaluation') {
-        fetchData();
+  const model = useMemo(() => {
+    const durations = sortedDurations(windowTraces);
+    const buckets = bucketTraces(windowTraces, windowStart, windowEnd, hours <= 1 ? 30 : 48);
+    const stages = new Map<string, number[]>();
+    for (const t of windowTraces) {
+      for (const [k, v] of Object.entries(stageTimings(t))) {
+        const key = stageLabel(k);
+        if (!stages.has(key)) stages.set(key, []);
+        stages.get(key)!.push(v);
       }
-    }, [fetchData]),
-  });
+    }
+    const stageRows = Array.from(stages, ([stage, vals]) => {
+      const s = [...vals].sort((a, b) => a - b);
+      return { stage, avg: s.reduce((a, b) => a + b, 0) / s.length, p95: percentile(s, 0.95) ?? 0, n: s.length };
+    }).sort((a, b) => b.avg - a.avg).slice(0, 8);
+    const slowest = [...windowTraces]
+      .map((t) => ({ t, d: traceDurationMs(t) ?? 0 }))
+      .sort((a, b) => b.d - a.d)
+      .slice(0, 6);
+    const errors = windowTraces.filter((t) => t.status === 'error').length;
+    return {
+      durations, buckets, stageRows, slowest,
+      p50: percentile(durations, 0.5), p95: percentile(durations, 0.95),
+      errors, hist: histogram(durations),
+    };
+  }, [windowTraces, windowStart, windowEnd, hours]);
 
-  if (loading) {
-    return (
-      <div className="px-4 py-6 sm:px-0">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-400">Loading...</div>
-        </div>
-      </div>
-    );
-  }
+  if (error && windowTraces.length === 0) return <ErrorState message={error} onRetry={refresh} />;
 
-  if (error) {
-    return (
-      <div className="px-4 py-6 sm:px-0">
-        <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
-          <p className="text-red-400">Error: {error}</p>
-          <p className="text-gray-500 text-sm mt-2">Make sure the backend is running</p>
-        </div>
-      </div>
-    );
-  }
+  const q = quality;
+  const total = windowTraces.length;
+  const errRate = total ? model.errors / total : 0;
+  const hasData = total > 0;
+  const modelsPie = mergeModelRows(q?.models ?? []).slice(0, 6);
+  const langs = q?.languages ?? [];
+
+  const qualityRows = q ? [
+    { label: 'Errores', n: q.error_count, rate: q.error_rate, tone: 'bad' as const },
+    { label: 'Respuesta degradada', n: q.degraded_count, rate: q.degraded_rate, tone: 'warn' as const },
+    { label: 'Truncadas', n: q.truncated_count, rate: q.truncated_rate, tone: 'warn' as const },
+    { label: 'Error en herramientas', n: q.tool_error_count, rate: q.tool_error_rate, tone: 'bad' as const },
+    { label: 'Vía alterna (fallback)', n: q.fallback_count, rate: q.fallback_rate, tone: 'accent' as const },
+    { label: 'Error de voz (TTS)', n: q.tts_error_count, rate: q.tts_error_rate, tone: 'bad' as const },
+  ] : [];
 
   return (
-    <div className="px-4 py-6 sm:px-0">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Dashboard Overview</h1>
-        <div className="flex gap-1">
-          {TIME_RANGES.map((r) => (
-            <button
-              key={r.hours}
-              onClick={() => setHours(r.hours)}
-              className={`px-3 py-1 rounded text-sm ${
-                hours === r.hours
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Resumen</h1>
+          <p className="text-xs text-faint">
+            {env ? `Entorno ${env}` : 'Todos los entornos'}
+            {sampleTruncated && ` · muestra de las últimas ${fmtInt(SAMPLE_LIMIT)} trazas de ${fmtInt(totalTraces)}`}
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Traces" value={summary?.total_traces.toLocaleString() ?? '0'} />
-        <StatCard title="Total Spans" value={summary?.total_spans.toLocaleString() ?? '0'} />
-        <StatCard title="Total Cost" value={`$${(summary?.total_cost_usd ?? 0).toFixed(4)}`} />
-        <StatCard title="Avg Latency" value={`${Math.round(summary?.avg_latency_ms ?? 0)}ms`} />
-      </div>
+      {/* KPI strip */}
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        {loading && !hasData ? Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-[118px]" />) : (
+          <>
+            <Kpi label="Turnos" value={fmtInt(q?.total_turns ?? total)} hint={`${fmtInt(summary?.total_spans)} spans`}
+              series={model.buckets.map((b) => b.total)} color="#6c8cff" />
+            <Kpi label="Tasa de error" value={fmtPct(q?.error_rate ?? errRate)}
+              hint={`${fmtInt(q?.error_count ?? model.errors)} fallidos`}
+              tone={(q?.error_rate ?? errRate) > 0.05 ? 'bad' : (q?.error_rate ?? errRate) > 0 ? 'warn' : 'good'}
+              series={model.buckets.map((b) => b.errRate)} color="#ef5b5b" />
+            <Kpi label="Latencia p50" value={fmtMs(model.p50)} hint={`p95 ${fmtMs(model.p95)}`}
+              series={model.buckets.map((b) => b.p50 ?? 0)} color="#3fb68b" />
+            <Kpi label="Latencia p95" value={fmtMs(model.p95)} hint="peor 5 % de turnos"
+              series={model.buckets.map((b) => b.p95 ?? 0)} color="#e5a33b" />
+            <Kpi label="Primer token (media)" value={fmtMs(q?.avg_ttft_ms)} hint={`turno medio ${fmtMs(q?.avg_duration_ms)}`} />
+            <Kpi label="Vía alterna" value={fmtPct(q?.fallback_rate)} hint={`${fmtInt(q?.fallback_count)} turnos`}
+              tone={(q?.fallback_rate ?? 0) > 0.25 ? 'warn' : 'neutral'} />
+            <Kpi label="Costo" value={fmtUsd(summary?.total_cost_usd ?? 0)}
+              hint={(summary?.total_cost_usd ?? 0) === 0 ? 'modelos gratuitos o locales' : `${fmtInt(summary?.total_spans)} spans`} />
+          </>
+        )}
+      </dl>
 
-      {summary && summary.error_count > 0 && (
-        <div className="mt-4 bg-red-900/20 border border-red-500 rounded-lg p-4">
-          <p className="text-red-400">
-            {summary.error_count} error{summary.error_count !== 1 ? 's' : ''}{' '}
-            ({(summary.error_rate * 100).toFixed(1)}% error rate)
-          </p>
-        </div>
-      )}
-
-      {summary && summary.total_evaluations > 0 && (
-        <div className="mt-4 bg-gray-800 border border-gray-700 rounded-lg p-4">
-          <p className="text-gray-300">
-            {summary.total_evaluations} evaluation{summary.total_evaluations !== 1 ? 's' : ''}{' '}
-            &middot; avg score: {(summary.avg_evaluation_score ?? 0).toFixed(2)}
-          </p>
-        </div>
-      )}
-
-      <section className="mt-8" aria-labelledby="integration-quality-heading">
-        <div className="flex items-baseline justify-between mb-4">
-          <h2 id="integration-quality-heading" className="text-xl font-semibold">Integration Quality</h2>
-          <span className="text-sm text-gray-500">
-            metadata only · project: {quality?.project_id ?? 'configured integration'}
-          </span>
-        </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard title="Turns" value={quality?.total_turns.toLocaleString() ?? '0'} />
-          <StatCard title="Error Rate" value={`${((quality?.error_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Quality Warning Rate" value={`${((quality?.degraded_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Alternate Path Rate" value={`${((quality?.fallback_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Avg Turn Latency" value={`${Math.round(quality?.avg_duration_ms ?? 0)}ms`} />
-          <StatCard title="Avg TTFT" value={`${Math.round(quality?.avg_ttft_ms ?? 0)}ms`} />
-          <StatCard title="Truncated Rate" value={`${((quality?.truncated_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Operation Error Rate" value={`${((quality?.tool_error_rate ?? 0) * 100).toFixed(1)}%`} />
-          <StatCard title="Component Error Rate" value={`${((quality?.tts_error_rate ?? 0) * 100).toFixed(1)}%`} />
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {[
-            { title: 'Models', values: quality?.models ?? [] },
-            { title: 'Languages', values: quality?.languages ?? [] },
-          ].map((group) => (
-            <div key={group.title} className="bg-gray-800 rounded-lg p-6">
-              <h3 className="text-lg font-semibold mb-4">{group.title}</h3>
-              {group.values.length > 0 ? (
-                <div className="space-y-3">
-                  {group.values.map((item) => (
-                    <div key={item.key} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-200">{item.key}</span>
-                      <span className="text-gray-400">
-                        {item.count} turn{item.count === 1 ? '' : 's'} · {(item.rate * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-gray-500">No integration data yet</div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Cost Over Time</h2>
-          {timeline.length > 0 ? (
-            <ResponsiveContainer width="100%" height={256}>
-              <LineChart data={timeline}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis
-                  dataKey="timestamp"
-                  stroke="#9CA3AF"
-                  tickFormatter={(ts) => {
-                    const d = parseApiDate(ts);
-                    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:00`;
-                  }}
-                />
-                <YAxis stroke="#9CA3AF" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
-                  labelStyle={{ color: '#F3F4F6' }}
-                  formatter={(value: number) => [`$${value.toFixed(4)}`, 'Cost']}
-                  labelFormatter={(ts) => parseApiDate(ts).toLocaleString()}
-                />
-                <Line type="monotone" dataKey="cost_usd" stroke="#10B981" strokeWidth={2} dot={false} />
-              </LineChart>
+      {/* Main chart + quality */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Card title="Actividad y latencia"
+          subtitle="Turnos por intervalo (barras, rojo = error) y latencia p95 (línea)"
+          bodyClass="p-2 pt-3">
+          {hasData ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={model.buckets} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#232a38" vertical={false} />
+                <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={36} />
+                <YAxis yAxisId="n" {...AXIS} width={34} allowDecimals={false} />
+                <YAxis yAxisId="ms" orientation="right" {...AXIS} width={46} tickFormatter={fmtAxisMs} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }}
+                  content={<ChartTooltip valueFormatter={(v, n) => (n.startsWith('Latencia') ? fmtMs(Number(v)) : String(v))} />} />
+                <Bar isAnimationActive={false} yAxisId="n" dataKey="ok" name="Correctos" stackId="a" fill="#6c8cff" fillOpacity={0.85} radius={[0, 0, 0, 0]} />
+                <Bar isAnimationActive={false} yAxisId="n" dataKey="err" name="Errores" stackId="a" fill="#ef5b5b" radius={[3, 3, 0, 0]} />
+                <Line isAnimationActive={false} yAxisId="ms" dataKey="p95" name="Latencia p95" stroke="#e5a33b" strokeWidth={2} dot={false} connectNulls />
+              </ComposedChart>
             </ResponsiveContainer>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-500">
-              No data yet
-            </div>
-          )}
-        </div>
+          ) : <EmptyState title="Sin turnos en este rango" hint="Prueba un rango más amplio." />}
+        </Card>
 
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">Cost by Model</h2>
-          {costByModel.length > 0 ? (
-            <ResponsiveContainer width="100%" height={256}>
-              <BarChart data={costByModel}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="model" stroke="#9CA3AF" />
-                <YAxis stroke="#9CA3AF" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151' }}
-                  labelStyle={{ color: '#F3F4F6' }}
-                  formatter={(value: number) => [`$${value.toFixed(4)}`, 'Cost']}
-                />
-                <Bar dataKey="cost_usd" fill="#6366F1" />
+        <Card title="Calidad de turnos" subtitle={q ? `${fmtInt(q.total_turns)} turnos · ${hours >= 24 ? `${Math.round(hours / 24)} d` : `${hours} h`}` : undefined}>
+          {q ? (
+            <ul className="space-y-3.5">
+              {qualityRows.map((r) => (
+                <li key={r.label}>
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="text-dim">{r.label}</span>
+                    <span className="text-ink font-medium">{fmtPct(r.rate)} <span className="text-faint font-normal">· {fmtInt(r.n)}</span></span>
+                  </div>
+                  <Meter rate={r.rate} tone={r.tone} />
+                </li>
+              ))}
+            </ul>
+          ) : <Skeleton className="h-60" />}
+        </Card>
+      </div>
+
+      {/* Distribution row */}
+      <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <Card title="Distribución de latencia" subtitle={hasData ? `p50 ${fmtMs(model.p50)} · p95 ${fmtMs(model.p95)} · máx ${fmtMs(model.durations[model.durations.length - 1])}` : undefined} bodyClass="p-2 pt-3">
+          {hasData ? (
+            <ResponsiveContainer width="100%" height={230}>
+              <BarChart data={model.hist} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#232a38" vertical={false} />
+                <XAxis dataKey="range" {...AXIS} />
+                <YAxis {...AXIS} width={34} allowDecimals={false} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} content={<ChartTooltip valueFormatter={(v) => `${v} turnos`} />} />
+                <Bar isAnimationActive={false} dataKey="count" name="Turnos" radius={[3, 3, 0, 0]}>
+                  {model.hist.map((h) => (
+                    <Cell key={h.range} fill={h.from >= 20000 ? '#ef5b5b' : h.from >= 10000 ? '#e5a33b' : '#3fb68b'} fillOpacity={0.85} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-500">
-              No data yet
+          ) : <EmptyState title="Sin datos" />}
+        </Card>
+
+        <Card title="Tiempo por etapa" subtitle="Media y p95 por etapa del turno" bodyClass="p-2 pt-3">
+          {model.stageRows.length > 0 ? (
+            <ResponsiveContainer width="100%" height={230}>
+              <BarChart data={model.stageRows} layout="vertical" margin={{ top: 0, right: 16, left: 4, bottom: 0 }} barGap={2}>
+                <CartesianGrid stroke="#232a38" horizontal={false} />
+                <XAxis type="number" {...AXIS} tickFormatter={fmtAxisMs} />
+                <YAxis type="category" dataKey="stage" {...AXIS} width={118} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} content={<ChartTooltip valueFormatter={(v) => fmtMs(Number(v))} />} />
+                <Bar isAnimationActive={false} dataKey="avg" name="Media" fill="#6c8cff" radius={[0, 3, 3, 0]} barSize={8} />
+                <Bar isAnimationActive={false} dataKey="p95" name="p95" fill="#e5a33b" fillOpacity={0.7} radius={[0, 3, 3, 0]} barSize={8} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyState title="Sin tiempos por etapa" />}
+        </Card>
+
+        <Card title="Modelos" subtitle="Quién respondió cada turno" className="lg:col-span-2 2xl:col-span-1">
+          {modelsPie.length > 0 ? (
+            <div className="flex items-center gap-4">
+              <div className="size-[150px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie isAnimationActive={false} data={modelsPie} dataKey="count" nameKey="key" innerRadius={46} outerRadius={70} paddingAngle={2} stroke="none">
+                      {modelsPie.map((m, i) => <Cell key={m.key} fill={PALETTE[i % PALETTE.length]} />)}
+                    </Pie>
+                    <Tooltip content={<ChartTooltip valueFormatter={(v) => `${v} turnos`} />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="min-w-0 flex-1 space-y-2">
+                {modelsPie.map((m, i) => (
+                  <li key={m.key} className="flex items-center gap-2 text-xs" title={m.key}>
+                    <span className="size-2 shrink-0 rounded-sm" style={{ background: PALETTE[i % PALETTE.length] }} />
+                    <span className="truncate text-dim">{m.key}</span>
+                    <span className="ml-auto shrink-0 font-medium text-ink">{fmtPct(m.rate, 0)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : <EmptyState title="Sin datos de modelos" />}
+          {langs.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-line pt-3 text-xs text-faint">
+              Idiomas:
+              {langs.map((l) => (
+                <span key={l.key} className="rounded-md bg-raised px-1.5 py-0.5 text-dim">{l.key} · {fmtPct(l.rate, 0)}</span>
+              ))}
             </div>
           )}
-        </div>
+        </Card>
       </div>
+
+      {/* Lists */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <Card title="Turnos recientes" subtitle="Se actualiza en vivo"
+          actions={<Link to="/traces" className="text-xs text-accent hover:underline">Ver todas</Link>} bodyClass="p-0 pt-2">
+          {hasData ? (
+            <ul className="divide-y divide-line">
+              {windowTraces.slice(0, 10).map((t) => {
+                const d = traceDurationMs(t);
+                return (
+                  <li key={t.id} className={newIds.has(t.id) ? 'flash-row' : undefined}>
+                    <Link to={`/traces/${t.id}`} className="flex items-center gap-3 px-4 py-2 text-xs hover:bg-panel-2">
+                      <StatusDot status={t.status} />
+                      <span className="w-24 shrink-0 font-mono text-dim">{shortId(t.turn_id, 7)}</span>
+                      <span className="hidden w-20 shrink-0 text-faint sm:inline">{t.environment ?? '–'}</span>
+                      <span className="flex-1" />
+                      <span className="w-16 text-right font-medium text-ink">{fmtMs(d)}</span>
+                      <span className="w-20 text-right text-faint">{timeAgo(t.created_at)}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <EmptyState title="Sin turnos recientes" />}
+        </Card>
+
+        <Card title="Turnos más lentos" subtitle="Mayor latencia en el rango" bodyClass="p-0 pt-2">
+          {model.slowest.length > 0 ? (
+            <ul className="divide-y divide-line">
+              {model.slowest.map(({ t, d }) => {
+                const pct = model.durations.length ? d / model.durations[model.durations.length - 1] : 0;
+                return (
+                  <li key={t.id}>
+                    <Link to={`/traces/${t.id}`} className="block px-4 py-2 hover:bg-panel-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono text-dim">{shortId(t.turn_id, 7)}</span>
+                        <span className="font-medium text-ink">{fmtMs(d)}</span>
+                      </div>
+                      <div className="mt-1.5"><Meter rate={pct} tone={t.status === 'error' ? 'bad' : 'warn'} /></div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <EmptyState title="Sin datos" />}
+        </Card>
+      </div>
+
     </div>
   );
 }

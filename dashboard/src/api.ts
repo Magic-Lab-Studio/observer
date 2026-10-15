@@ -11,6 +11,7 @@ import type {
   TimelinePoint,
   CostByModel,
   ManitOSQualitySummary,
+  ProvidersResponse,
 } from './types';
 
 const BASE_URL = '/api';
@@ -92,8 +93,15 @@ export const api = {
     return request(`/v1/analytics/cost-by-model?hours=${hours}`);
   },
 
-  async getManitOSQuality(hours = 168, projectId = 'manitos'): Promise<ManitOSQualitySummary> {
+  async getManitOSQuality(hours = 168, projectId = 'manitos', environment?: string): Promise<ManitOSQualitySummary> {
     const qs = new URLSearchParams({ hours: String(hours), project_id: projectId });
+    if (environment) qs.set('environment', environment);
     return request(`/v1/analytics/manitos-quality?${qs.toString()}`);
+  },
+
+  async getProviders(hours = 24, environment?: string): Promise<ProvidersResponse> {
+    const qs = new URLSearchParams({ hours: String(hours) });
+    if (environment) qs.set('environment', environment);
+    return request(`/v1/providers/?${qs.toString()}`);
   },
 };

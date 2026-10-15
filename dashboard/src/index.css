@@ -1,6 +1,51 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+@theme {
+  --color-canvas: #0b0e14;
+  --color-panel: #12161f;
+  --color-panel-2: #171c27;
+  --color-raised: #1d2330;
+  --color-line: #232a38;
+  --color-line-strong: #2f384a;
+  --color-ink: #e7eaf1;
+  --color-dim: #9aa4b8;
+  --color-faint: #6b768c;
+  --color-accent: #6c8cff;
+  --color-ok: #3fb68b;
+  --color-bad: #ef5b5b;
+  --color-warn: #e5a33b;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
 }
+
+:root { color-scheme: dark; }
+
+html, body, #root { height: 100%; }
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
+
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.live-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+@keyframes flash-row { from { background: rgb(108 140 255 / .22); } to { background: transparent; } }
+.flash-row { animation: flash-row 2.2s ease-out; }
+@keyframes shimmer { 0% { background-position: -300px 0; } 100% { background-position: 300px 0; } }
+.skeleton {
+  background: linear-gradient(90deg, var(--color-panel-2) 0, var(--color-raised) 150px, var(--color-panel-2) 300px);
+  background-size: 600px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) { .live-dot, .flash-row, .skeleton { animation: none; } }
+
+.recharts-text { fill: var(--color-faint); font-size: 11px; }
+.recharts-cartesian-axis-tick-value { fill: var(--color-faint); }

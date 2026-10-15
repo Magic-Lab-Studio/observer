@@ -140,3 +140,15 @@ alembic upgrade head
 
 Alembic reads `DATABASE_URL` at runtime. The released migration is reversible on
 SQLite and PostgreSQL and remains unchanged for compatibility.
+
+## LLM provider chain (Proveedores page)
+
+Two sources feed the dashboard's **Proveedores** page (`GET /v1/providers/`):
+
+- **Spans.** `llm.chain` carries `attempts_text` = `provider:model=result[@ms]>...` (result: `ok`, `429`, `timeout`,
+  `skipped_exhausted`, `error:<Type>`; `@ms` is that call's own time) and `answered_by`. Per-provider attempts, success
+  rate, p50/p95, answered share, fallback depth and common routes are aggregated from stored spans.
+- **Snapshot.** The integration may `POST /v1/providers/snapshot` (metadata only, never keys): provider order, on/off,
+  models, data-terms note and quota cooldowns. Manitos pushes it at boot and every 60 s
+  (`manitos/llm/provider_snapshot.py`, only when `MANITOS_OBSERVER_ENABLED=1` and the URL is local). The backend keeps the
+  latest in `providers_snapshot.json` (`OBSERVATORY_PROVIDERS_SNAPSHOT` overrides the path) and flags it stale after 3 min.

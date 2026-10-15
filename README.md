@@ -15,6 +15,33 @@ account.
 _The dashboard above was rendered from synthetic telemetry by the clean-runner
 [quickstart smoke test](.github/workflows/quickstart-smoke.yml)._
 
+## What's new: a redesigned dashboard
+
+The dashboard was rebuilt as a dense, dark console: sidebar navigation, a global time range and
+environment filter, live updates, and charts that use the whole screen. The interface text is
+currently in Spanish.
+
+![Overview: KPIs with sparklines, activity and p95 latency, latency distribution, time per stage, models](docs/assets/ui-overview.png)
+
+- **Overview** — turns, error rate, p50/p95 latency, time to first token, fallback rate and cost
+  (always shown, even at $0), with an activity/latency chart, latency histogram, per-stage time
+  and model share.
+- **Providers** (new) — your LLM fallback chain in the order it is tried, with per-provider success
+  rate, 429/timeout/error counts, p50/p95 latency, how often each one actually answered, fallback
+  depth and common routes. It flags providers that are configured but never reached.
+
+![Providers: fallback chain, per-provider table, fallback depth, latency and routes](docs/assets/ui-providers.png)
+
+- **Trace detail** — a hierarchical waterfall, a per-stage time bar and, for `llm.chain` spans,
+  the provider-by-provider attempts of that turn.
+
+![Trace detail with the llm.chain attempts of one turn](docs/assets/ui-trace-detail.png)
+
+The Providers page reads `llm.chain` spans and an optional metadata-only provider snapshot
+(`POST /v1/providers/snapshot`, never keys); see
+[docs/manitos-integration.md](docs/manitos-integration.md#llm-provider-chain-proveedores-page).
+_These screenshots were rendered from synthetic telemetry._
+
 ## Features
 
 - **Multi-framework tracing** — Auto-instrument OpenAI, Anthropic, LangChain
