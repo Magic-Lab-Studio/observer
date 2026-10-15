@@ -153,3 +153,20 @@ async def test_by_model_endpoint_and_route_order(client, db_session):
     assert data["providers"][0]["key"] == "groq"
     # "by-model" must not be read as an evaluation id
     assert (await client.get("/v1/evaluations/by-model")).status_code == 200
+
+
+@pytest.mark.anyio
+async def test_sweep_reaches_turns_older_than_the_newest_page(db_session):
+    # batch=1 pages through the newest 200 turns at a time: older turns must still be scored
+    for i in range(205):
+        await _turn(db_session, ago_min=1 + i * 0.01)
+    await db_session.commit()
+    done = 0
+    for _ in range(210):
+        got = await evaluate_new_turns(db_session, batch=1)
+        done += got
+        if not got:
+            break
+    assert done == 205
+    total = (await db_session.execute(select(func.count()).select_from(Evaluation))).scalar()
+    assert total == 205

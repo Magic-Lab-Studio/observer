@@ -28,6 +28,7 @@ logger = logging.getLogger("observatory.auto_eval")
 _NAMESPACE = uuid.UUID("6f0c2b52-0c1e-4a5e-9d5e-4f7a1c0a0b11")
 EVALUATOR_TYPE = "rule_based"
 BATCH = 200
+_MAX_PAGES = 25  # bounds one sweep to ~20 000 turns of look-back with the default batch
 _BROADCAST_CAP = 20
 
 
@@ -62,23 +63,39 @@ async def evaluate_new_turns(
     """Score up to ``batch`` recent turns without an evaluation; returns how many were created."""
     now = now or datetime.now(timezone.utc)
     since = now - timedelta(days=days)
-    recent = (
-        await session.execute(
-            select(Trace.id)
-            .where(Trace.project_id == project_id, Trace.created_at >= since)
-            .order_by(Trace.created_at.desc())
-            .limit(batch * 4)
+    # Walk the window newest-first in pages until a batch of unevaluated turns is found. Looking
+    # only at the newest few turns left everything older unscored forever once those were done.
+    todo: list[str] = []
+    page = max(batch * 4, 200)
+    for offset in range(0, page * _MAX_PAGES, page):
+        ids = [
+            str(tid)
+            for tid in (
+                await session.execute(
+                    select(Trace.id)
+                    .where(Trace.project_id == project_id, Trace.created_at >= since)
+                    .order_by(Trace.created_at.desc())
+                    .limit(page)
+                    .offset(offset)
+                )
+            )
+            .scalars()
+            .all()
+        ]
+        if not ids:
+            break
+        by_eval = {evaluation_id(tid): tid for tid in ids}
+        existing = set(
+            (await session.execute(select(Evaluation.id).where(Evaluation.id.in_(list(by_eval)))))
+            .scalars()
+            .all()
         )
-    ).scalars()
-    by_eval = {evaluation_id(str(tid)): str(tid) for tid in recent}
-    if not by_eval:
+        todo += [tid for eid, tid in by_eval.items() if eid not in existing]
+        if len(todo) >= batch or len(ids) < page:
+            break
+    todo = todo[:batch]
+    if not todo:
         return 0
-    existing = set(
-        (await session.execute(select(Evaluation.id).where(Evaluation.id.in_(list(by_eval)))))
-        .scalars()
-        .all()
-    )
-    todo = [tid for eid, tid in by_eval.items() if eid not in existing][:batch]
     created: list[Evaluation] = []
     for signals in await load_signals_for(session, todo):
         if "manitos.turn.lifecycle" not in signals.seen_spans:
