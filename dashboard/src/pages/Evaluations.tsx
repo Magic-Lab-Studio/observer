@@ -2,9 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '../api';
-import type { Evaluation } from '../types';
+import type { Evaluation, EvaluationsByModel, TurnCriterion } from '../types';
+import { useFilters } from '../context';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { CRITERION_LABEL } from '../helpers/alerts';
 import { Card, Chip, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, Segmented, Skeleton } from '../components/ui';
-import { fmtInt, timeAgo } from '../helpers/format';
+import { fmtInt, fmtPct, timeAgo } from '../helpers/format';
 import { t } from '../i18n';
 
 const LIMIT = 50;
@@ -21,6 +24,18 @@ const avg = (xs: Evaluation[]) => {
   return s.length ? s.reduce((a, e) => a + (e.score ?? 0), 0) / s.length : null;
 };
 
+function criteriaText(e: Evaluation): string {
+  const names = (e.criteria as { criteria?: unknown } | null)?.criteria;
+  if (Array.isArray(names)) return names.map((n) => t(CRITERION_LABEL[String(n)] ?? String(n))).join(', ');
+  return e.criteria ? Object.keys(e.criteria).join(', ') : '–';
+}
+
+function turnCriteria(e: Evaluation): { grade?: string; passed?: boolean; items: TurnCriterion[] } | null {
+  const r = e.result as { criteria?: unknown; grade?: string; passed?: boolean } | null;
+  if (!r || !Array.isArray(r.criteria) || r.criteria.length === 0 || typeof (r.criteria[0] as TurnCriterion)?.weight !== 'number') return null;
+  return { grade: r.grade, passed: r.passed, items: r.criteria as TurnCriterion[] };
+}
+
 function Evaluations() {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +44,8 @@ function Evaluations() {
   const [total, setTotal] = useState(0);
   const [type, setType] = useState('');
   const [selected, setSelected] = useState<Evaluation | null>(null);
+  const { hours } = useFilters();
+  const [byModel, setByModel] = useState<EvaluationsByModel | null>(null);
 
   const fetchEvaluations = useCallback(async (offset: number) => {
     setLoading(true);
@@ -44,13 +61,29 @@ function Evaluations() {
     }
   }, [type]);
 
+  const loadByModel = useCallback(() => {
+    api.getEvaluationsByModel(hours).then(setByModel).catch(() => setByModel(null));
+  }, [hours]);
+
+  useEffect(() => { loadByModel(); }, [loadByModel]);
+
+  useWebSocket({
+    onMessage: useCallback((m: { type: string }) => {
+      if (m.type === 'new_evaluation') { void fetchEvaluations(0); loadByModel(); }
+    }, [fetchEvaluations, loadByModel]),
+  });
+
   useEffect(() => { setPage(0); void fetchEvaluations(0); }, [fetchEvaluations]);
   useEffect(() => { if (page > 0) void fetchEvaluations(page * LIMIT); }, [page, fetchEvaluations]);
 
   const groups = useMemo(() => (['llm_judge', 'rule_based', 'human'] as const).map((k) => {
     const items = evaluations.filter((e) => e.evaluator_type === k);
-    return { key: k, items, avg: avg(items), pass: items.length ? items.filter((e) => (e.score ?? 0) >= 0.8).length / items.length : null };
-  }), [evaluations]);
+    // Rule-based turn evaluations: totals for the whole range come from the backend, not the visible page.
+    if (k === 'rule_based' && byModel && byModel.count > 0) {
+      return { key: k, count: byModel.count, avg: byModel.avg_score, passRate: byModel.pass_rate, passed: true };
+    }
+    return { key: k, count: items.length, avg: avg(items), passRate: items.length ? items.filter((e) => (e.score ?? 0) >= 0.8).length / items.length : null, passed: false };
+  }), [evaluations, byModel]);
 
   const hist = useMemo(() => {
     const bins = Array.from({ length: 10 }, (_, i) => ({ range: `${(i / 10).toFixed(1)}–${((i + 1) / 10).toFixed(1)}`, count: 0, low: i < 5 }));
@@ -73,10 +106,41 @@ function Evaluations() {
       <dl className="grid gap-3 sm:grid-cols-3">
         {groups.map((g) => (
           <Kpi key={g.key} label={t(TYPE_NAME[g.key])} value={g.avg != null ? g.avg.toFixed(2) : '–'}
-            hint={g.items.length ? t('{n} evaluaciones · {p} % ≥ 0.8', { n: g.items.length, p: (g.pass! * 100).toFixed(0) }) : t('Sin datos')}
+            hint={g.count ? (g.passed ? t('{n} evaluaciones · {p} % aprobadas', { n: fmtInt(g.count), p: ((g.passRate ?? 0) * 100).toFixed(0) }) : t('{n} evaluaciones · {p} % ≥ 0.8', { n: g.count, p: ((g.passRate ?? 0) * 100).toFixed(0) })) : t('Sin datos')}
             tone={g.avg == null ? 'neutral' : g.avg >= 0.8 ? 'good' : g.avg >= 0.5 ? 'warn' : 'bad'} />
         ))}
       </dl>
+
+      {byModel && byModel.count > 0 && (
+        <Card title={t('Calidad por modelo')}
+          subtitle={t('Puntaje medio de las evaluaciones automáticas por reglas · {n} turnos', { n: fmtInt(byModel.count) })}
+          bodyClass="p-2 pt-3">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <ResponsiveContainer width="100%" height={Math.max(150, byModel.models.slice(0, 8).length * 34 + 30)}>
+              <BarChart data={byModel.models.slice(0, 8).map((m) => ({ key: m.key, score: m.avg_score ?? 0 }))}
+                layout="vertical" margin={{ top: 0, right: 16, left: 4, bottom: 0 }}>
+                <CartesianGrid stroke="#232a38" horizontal={false} />
+                <XAxis type="number" domain={[0, 1]} stroke="transparent" tickLine={false} />
+                <YAxis type="category" dataKey="key" stroke="transparent" tickLine={false} width={190} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} content={<ChartTooltip valueFormatter={(v) => Number(v).toFixed(2)} />} />
+                <Bar isAnimationActive={false} dataKey="score" name={t('Puntaje medio')} radius={[0, 3, 3, 0]} barSize={14}>
+                  {byModel.models.slice(0, 8).map((m) => (
+                    <Cell key={m.key} fill={(m.avg_score ?? 0) >= 0.8 ? '#3fb68b' : (m.avg_score ?? 0) >= 0.6 ? '#e5a33b' : '#ef5b5b'} fillOpacity={0.85} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <ul className="space-y-2.5 px-2">
+              {byModel.models.slice(0, 8).map((m) => (
+                <li key={m.key} className="flex items-baseline justify-between gap-3 text-xs">
+                  <span className="min-w-0 truncate font-mono text-dim" title={m.key}>{m.key}</span>
+                  <span className="shrink-0 text-ink">{fmtPct(m.pass_rate, 0)} <span className="text-faint">{t('aprobadas')} · {fmtInt(m.count)}</span></span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Card>
+      )}
 
       {error ? <ErrorState message={error} onRetry={() => void fetchEvaluations(page * LIMIT)} /> : (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -125,7 +189,7 @@ function Evaluations() {
                             <Meter rate={e.score} tone={e.score >= 0.8 ? 'accent' : 'warn'} /></div>
                         ) : '–'}
                       </td>
-                      <td className="px-3 py-2.5 text-dim">{e.criteria ? Object.keys(e.criteria).join(', ') : '–'}</td>
+                      <td className="px-3 py-2.5 text-dim">{criteriaText(e)}</td>
                       <td className="px-4 py-2.5 text-right text-faint whitespace-nowrap">{timeAgo(e.created_at)}</td>
                     </tr>
                   ))}
@@ -147,7 +211,26 @@ function Evaluations() {
             {selected ? (
               <Card title={t("Detalle de evaluación")} subtitle={<span className="font-mono">{selected.id}</span>}>
                 <p className="mb-3 text-xs text-dim">{t("Puntaje:")} <span className="font-medium text-ink">{selected.score != null ? selected.score.toFixed(4) : 'N/D'}</span></p>
-                {selected.criteria && <><h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-faint">{t("Criterios")}</h4>
+                {turnCriteria(selected) && (
+                  <div className="mb-4">
+                    <div className="mb-2 flex items-center gap-2 text-xs">
+                      <Chip tone="accent">{t('Nota')} {turnCriteria(selected)?.grade}</Chip>
+                      <Chip tone={turnCriteria(selected)?.passed ? 'accent' : 'warn'}>{turnCriteria(selected)?.passed ? t('Aprobada') : t('No aprobada')}</Chip>
+                    </div>
+                    <ul className="space-y-2.5">
+                      {turnCriteria(selected)?.items.map((c) => (
+                        <li key={c.name}>
+                          <div className="mb-1 flex items-baseline justify-between text-xs">
+                            <span className="text-dim">{t(CRITERION_LABEL[c.name] ?? c.name)} <span className="text-faint">· {c.detail}</span></span>
+                            <span className="font-medium text-ink">{c.score.toFixed(2)}</span>
+                          </div>
+                          <Meter rate={c.score} tone={c.score >= 0.8 ? 'accent' : c.score >= 0.4 ? 'warn' : 'bad'} />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {selected.criteria && !turnCriteria(selected) && <><h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-faint">{t("Criterios")}</h4>
                   <pre className="mb-3 max-h-60 overflow-auto rounded-lg bg-canvas p-3 text-xs text-dim">{JSON.stringify(selected.criteria, null, 2)}</pre></>}
                 {selected.result && <><h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-faint">{t("Resultado")}</h4>
                   <pre className="max-h-72 overflow-auto rounded-lg bg-canvas p-3 text-xs text-dim">{JSON.stringify(selected.result, null, 2)}</pre></>}

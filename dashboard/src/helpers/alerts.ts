@@ -3,6 +3,16 @@ import { t } from '../i18n.ts';
 // directly (no extensionless runtime imports).
 
 export type MetricUnit = 'ratio' | 'ms' | 'count';
+/** Labels (Spanish keys) of the rule-based turn criteria scored by the backend. */
+export const CRITERION_LABEL: Record<string, string> = {
+  health: 'Salud',
+  complete: 'Completitud',
+  quality: 'Calidad',
+  fallback: 'Vía alterna',
+  latency: 'Latencia',
+  ttft: 'Primer token',
+};
+
 export type Severity = 'info' | 'warning' | 'critical';
 
 export const SEVERITY_LABEL: Record<Severity, string> = {

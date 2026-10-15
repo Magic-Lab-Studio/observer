@@ -16,11 +16,13 @@ const TraceDetail = lazy(() => import('./pages/TraceDetail'));
 const Evaluations = lazy(() => import('./pages/Evaluations'));
 const Providers = lazy(() => import('./pages/Providers'));
 const Alerts = lazy(() => import('./pages/Alerts'));
+const Explore = lazy(() => import('./pages/Explore'));
 
 const NAV = [
   { to: '/', label: 'Resumen', icon: 'overview', end: true },
   { to: '/traces', label: 'Trazas', icon: 'traces', end: false },
   { to: '/providers', label: 'Proveedores', icon: 'providers', end: false },
+  { to: '/explore', label: 'Explorar', icon: 'explore', end: false },
   { to: '/alerts', label: 'Alertas', icon: 'bell', end: false },
   { to: '/evaluations', label: 'Evaluaciones', icon: 'evals', end: false },
 ];
@@ -75,7 +77,7 @@ function Header({ onMenu }: { onMenu: () => void }) {
   const { hours, setHours, env, setEnv, environments, refresh, loading } = useFilters();
   const { lang, setLang } = useLocale();
   const { pathname } = useLocation();
-  const showFilters = pathname === '/' || pathname === '/providers';
+  const showFilters = pathname === '/' || pathname === '/providers' || pathname === '/evaluations' || pathname === '/explore';
   return (
     <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b py-2 border-line bg-canvas/85 px-4 backdrop-blur lg:px-6">
       <button type="button" onClick={onMenu} aria-label={t("Abrir menú")}
@@ -156,6 +158,7 @@ function Shell() {
                 <Route path="/traces/:traceId" element={<TraceDetail />} />
                 <Route path="/providers" element={<Providers />} />
                 <Route path="/alerts" element={<Alerts />} />
+                <Route path="/explore" element={<Explore />} />
                 <Route path="/evaluations" element={<Evaluations />} />
                 <Route path="*" element={
                   <div className="py-24 text-center">

@@ -2,8 +2,9 @@
 
 import os
 
-# The app lifespan (TestClient) must never start the alert loop against the developer database.
+# The app lifespan (TestClient) must never start the background loops on the developer database.
 os.environ.setdefault("OBSERVATORY_ALERTS", "0")
+os.environ.setdefault("OBSERVATORY_AUTO_EVAL", "0")
 
 import pytest
 from httpx import ASGITransport, AsyncClient

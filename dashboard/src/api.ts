@@ -15,6 +15,9 @@ import type {
   AlertMetric,
   AlertRule,
   AlertEvent,
+  EvaluationsByModel,
+  QueryResult,
+  QuerySchema,
 } from './types';
 
 const BASE_URL = '/api';
@@ -106,6 +109,17 @@ export const api = {
     const qs = new URLSearchParams({ hours: String(hours) });
     if (environment) qs.set('environment', environment);
     return request(`/v1/providers/?${qs.toString()}`);
+  },
+
+  async getEvaluationsByModel(hours = 168): Promise<EvaluationsByModel> {
+    return request(`/v1/evaluations/by-model?hours=${hours}`);
+  },
+
+  async getQuerySchema(): Promise<QuerySchema> {
+    return request('/v1/analytics/query/schema');
+  },
+  async queryMetrics(body: unknown): Promise<QueryResult> {
+    return request('/v1/analytics/query', { method: 'POST', body: JSON.stringify(body) });
   },
 
   // Alerts
