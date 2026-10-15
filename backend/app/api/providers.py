@@ -1,8 +1,9 @@
-"""LLM provider chain: what is configured (pushed by the integration) and what actually happened (``llm.chain`` spans).
+"""LLM provider chain: what is configured and what actually happened.
 
-Two sources on purpose. The snapshot is metadata the integration pushes (provider order, on/off, models, data terms, quota
-cooldowns; never a key). The statistics come from spans already stored, so they need no new telemetry and work back in time.
-The fallback-depth idea (how many calls failed before one answered) follows LiteLLM's ``attempted_fallbacks``; grouping by
+Two sources on purpose. The snapshot is metadata the integration pushes (provider order, on/off,
+models, data terms, quota cooldowns; never a key). The statistics come from ``llm.chain`` spans
+already stored, so they need no new telemetry and work back in time. The fallback-depth idea (how
+many calls failed before one answered) follows LiteLLM's ``attempted_fallbacks``; grouping by
 provider/model with percentiles follows Langfuse's metrics API.
 """
 
@@ -33,7 +34,10 @@ _ROW_LIMIT = 20000
 
 
 def _snapshot_path() -> Path:
-    return Path(os.getenv("OBSERVATORY_PROVIDERS_SNAPSHOT") or Path(__file__).resolve().parents[2] / "providers_snapshot.json")
+    return Path(
+        os.getenv("OBSERVATORY_PROVIDERS_SNAPSHOT")
+        or Path(__file__).resolve().parents[2] / "providers_snapshot.json"
+    )
 
 
 class QuotaWindow(BaseModel):
@@ -94,7 +98,10 @@ async def post_snapshot(snapshot: ProviderSnapshot) -> dict[str, Any]:
 
 
 def parse_attempts(text: str) -> list[dict[str, Any]]:
-    """``groq:qwen/qwen3.8-27b=429@412ms>llamacpp:-=ok`` -> [{backend, model, result, ms}]. Unreadable parts are skipped."""
+    """Parse ``groq:qwen/qwen3.8-27b=429@412ms>llamacpp:-=ok`` into attempt dicts.
+
+    Each is ``{backend, model, result, ms}``; unreadable parts are skipped.
+    """
     out: list[dict[str, Any]] = []
     for part in (text or "").split(">"):
         head, sep, tail = part.rpartition("=")
@@ -111,7 +118,9 @@ def parse_attempts(text: str) -> list[dict[str, Any]]:
         backend = backend.strip().lower()
         if not backend or not tail:
             continue
-        out.append({"backend": backend, "model": "" if model == "-" else model, "result": tail, "ms": ms})
+        out.append(
+            {"backend": backend, "model": "" if model == "-" else model, "result": tail, "ms": ms}
+        )
     return out
 
 
@@ -141,11 +150,25 @@ def _aware(value: datetime | None) -> datetime | None:
 
 
 def aggregate(rows: list[tuple[dict[str, Any], datetime | None, float | None]]) -> dict[str, Any]:
-    """Per-provider and per-model counters from ``(llm.chain attributes, trace created_at, turn duration ms)`` rows."""
-    providers: dict[str, dict[str, Any]] = defaultdict(lambda: {
-        "attempts": 0, "ok": 0, "rate_limited": 0, "timeout": 0, "error": 0, "skipped": 0, "answered": 0,
-        "ok_ms": [], "turn_ms": [], "last_seen": None, "models": defaultdict(lambda: {"attempts": 0, "ok": 0, "ok_ms": []}),
-    })
+    """Per-provider and per-model counters.
+
+    Rows are ``(llm.chain attributes, trace created_at, turn duration ms)``.
+    """
+    providers: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "attempts": 0,
+            "ok": 0,
+            "rate_limited": 0,
+            "timeout": 0,
+            "error": 0,
+            "skipped": 0,
+            "answered": 0,
+            "ok_ms": [],
+            "turn_ms": [],
+            "last_seen": None,
+            "models": defaultdict(lambda: {"attempts": 0, "ok": 0, "ok_ms": []}),
+        }
+    )
     depth: Counter[int] = Counter()
     paths: Counter[str] = Counter()
     turns = 0
@@ -192,31 +215,43 @@ def aggregate(rows: list[tuple[dict[str, Any], datetime | None, float | None]]) 
     result = []
     for pid, p in providers.items():
         tried = p["attempts"] - p["skipped"]
-        result.append({
-            "id": pid,
-            "attempts": p["attempts"],
-            "ok": p["ok"],
-            "rate_limited": p["rate_limited"],
-            "timeout": p["timeout"],
-            "error": p["error"],
-            "skipped": p["skipped"],
-            "answered": p["answered"],
-            "answered_share": p["answered"] / turns if turns else 0.0,
-            "success_rate": p["ok"] / tried if tried else None,
-            "p50_ms": _pct(p["ok_ms"], 0.5),
-            "p95_ms": _pct(p["ok_ms"], 0.95),
-            "turn_p50_ms": _pct(p["turn_ms"], 0.5),
-            "last_seen": p["last_seen"].isoformat() if p["last_seen"] else None,
-            "models": sorted(
-                ({"model": k, "attempts": v["attempts"], "ok": v["ok"], "p50_ms": _pct(v["ok_ms"], 0.5)} for k, v in p["models"].items()),
-                key=lambda x: -x["attempts"],
-            ),
-        })
+        result.append(
+            {
+                "id": pid,
+                "attempts": p["attempts"],
+                "ok": p["ok"],
+                "rate_limited": p["rate_limited"],
+                "timeout": p["timeout"],
+                "error": p["error"],
+                "skipped": p["skipped"],
+                "answered": p["answered"],
+                "answered_share": p["answered"] / turns if turns else 0.0,
+                "success_rate": p["ok"] / tried if tried else None,
+                "p50_ms": _pct(p["ok_ms"], 0.5),
+                "p95_ms": _pct(p["ok_ms"], 0.95),
+                "turn_p50_ms": _pct(p["turn_ms"], 0.5),
+                "last_seen": p["last_seen"].isoformat() if p["last_seen"] else None,
+                "models": sorted(
+                    (
+                        {
+                            "model": k,
+                            "attempts": v["attempts"],
+                            "ok": v["ok"],
+                            "p50_ms": _pct(v["ok_ms"], 0.5),
+                        }
+                        for k, v in p["models"].items()
+                    ),
+                    key=lambda x: -x["attempts"],
+                ),
+            }
+        )
     result.sort(key=lambda x: -x["attempts"])
     return {
         "turns": turns,
         "providers": result,
-        "fallback_depth": [{"depth": d, "count": depth.get(d, 0)} for d in range(0, max(depth, default=0) + 1)],
+        "fallback_depth": [
+            {"depth": d, "count": depth.get(d, 0)} for d in range(0, max(depth, default=0) + 1)
+        ],
         "paths": [{"path": k, "count": v} for k, v in paths.most_common(8)],
     }
 
@@ -251,4 +286,10 @@ async def get_providers(
         age = time.time() - float(snapshot.get("received_at") or 0)
         snapshot["stale"] = age > _STALE_AFTER_SEC
         snapshot["age_sec"] = int(age)
-    return {"hours": hours, "project_id": project_id, "environment": environment, "snapshot": snapshot, **stats}
+    return {
+        "hours": hours,
+        "project_id": project_id,
+        "environment": environment,
+        "snapshot": snapshot,
+        **stats,
+    }
