@@ -61,6 +61,7 @@ class TurnSignals:
     intent: str = ""
     answered_by: str = ""
     attempts: list[dict[str, Any]] = field(default_factory=list)
+    seen_spans: set[str] = field(default_factory=set)
 
 
 def aware(value: datetime | None) -> datetime | None:
@@ -140,6 +141,25 @@ async def load_turn_signals(
     if environment:
         query = query.where(Trace.environment == environment)
     rows = (await session.execute(query)).all()
+    return await _signals_from_rows(session, rows)
+
+
+async def load_signals_for(session: AsyncSession, trace_ids: list[str]) -> list[TurnSignals]:
+    """Signals of the given traces (used by the evaluation sweep)."""
+    rows: list = []
+    for i in range(0, len(trace_ids), _CHUNK):
+        chunk = trace_ids[i : i + _CHUNK]
+        rows += (
+            await session.execute(
+                select(
+                    Trace.id, Trace.status, Trace.created_at, Trace.start_time, Trace.end_time
+                ).where(Trace.id.in_(chunk))
+            )
+        ).all()
+    return await _signals_from_rows(session, rows)
+
+
+async def _signals_from_rows(session: AsyncSession, rows: list) -> list[TurnSignals]:
     turns: dict[str, TurnSignals] = {}
     for tid, status, created, start, end in rows:
         signals = TurnSignals(
@@ -159,6 +179,7 @@ async def load_turn_signals(
             signals = turns.get(str(trace_id))
             if signals is None:
                 continue
+            signals.seen_spans.add(str(name))
             _apply_span(signals, str(name), attrs if isinstance(attrs, dict) else {})
     return list(turns.values())
 

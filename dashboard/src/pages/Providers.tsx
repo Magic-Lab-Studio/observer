@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '../api';
 import { useFilters } from '../context';
-import type { ProviderInfo, ProviderStats, ProvidersResponse } from '../types';
+import type { EvaluationsByModel, ProviderInfo, ProviderStats, ProvidersResponse } from '../types';
 import { Card, ChartTooltip, Chip, EmptyState, ErrorState, Kpi, Meter, Skeleton } from '../components/ui';
 import { fmtAxisMs, fmtInt, fmtMs, fmtPct, timeAgo } from '../helpers/format';
 import { t } from '../i18n';
@@ -37,6 +37,7 @@ function Providers() {
   const [data, setData] = useState<ProvidersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [scores, setScores] = useState<EvaluationsByModel | null>(null);
 
   const load = useCallback(() => {
     api.getProviders(hours, env || undefined).then((d) => { setData(d); setError(null); })
@@ -44,6 +45,7 @@ function Providers() {
   }, [hours, env]);
 
   useEffect(() => {
+    api.getEvaluationsByModel(hours).then(setScores).catch(() => setScores(null)); // optional: never an error here
     load();
     const id = setInterval(load, 30_000);
     return () => clearInterval(id);
@@ -52,6 +54,10 @@ function Providers() {
   if (error && !data) return <ErrorState message={error} onRetry={load} />;
   if (!data) return <div className="space-y-4"><Skeleton className="h-28" /><Skeleton className="h-80" /></div>;
 
+  const scoreOf = (id: string) => {
+    const g = scores?.providers.find((p) => p.key === id);
+    return g?.avg_score != null ? g.avg_score.toFixed(2) : '–';
+  };
   const stats = new Map<string, ProviderStats>(data.providers.map((p) => [p.id, p]));
   const snap = data.snapshot;
   const chain = snap?.providers ?? [];
@@ -159,6 +165,7 @@ function Providers() {
                 <th className="px-3 py-2.5 text-right font-medium">{t("Error")}</th>
                 <th className="px-3 py-2.5 text-right font-medium">{t("p50 / p95")}</th>
                 <th className="px-3 py-2.5 font-medium w-[14%]">{t("Respondió")}</th>
+                <th className="px-3 py-2.5 text-right font-medium">{t("Puntaje")}</th>
                 <th className="px-4 py-2.5 text-right font-medium">{t("Última vez")}</th>
               </tr>
             </thead>
@@ -182,11 +189,12 @@ function Providers() {
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2"><span className="w-9 text-ink">{fmtPct(s?.answered_share ?? 0, 0)}</span><Meter rate={s?.answered_share ?? 0} /></div>
                       </td>
+                      <td className="px-3 py-2.5 text-right">{scoreOf(id)}</td>
                       <td className="px-4 py-2.5 text-right text-faint whitespace-nowrap">{s?.last_seen ? timeAgo(s.last_seen) : t('nunca')}</td>
                     </tr>
                     {isOpen && (
                       <tr className="bg-panel-2">
-                        <td colSpan={10} className="px-4 py-3">
+                        <td colSpan={11} className="px-4 py-3">
                           <div className="grid gap-4 md:grid-cols-2">
                             <div>
                               <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint">{t("Modelos")}</h4>

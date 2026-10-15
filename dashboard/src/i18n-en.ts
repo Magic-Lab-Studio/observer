@@ -222,6 +222,21 @@ export const EN: Record<string, string> = {
   'Detalle de evaluación': 'Evaluation detail',
   'Selecciona una fila': 'Select a row',
 
+  'Calidad por modelo': 'Quality by model',
+  'Puntaje medio de las evaluaciones automáticas por reglas · {n} turnos':
+    'Average score of the automatic rule-based evaluations · {n} turns',
+  'Puntaje medio': 'Average score',
+  aprobadas: 'passed',
+  '{n} evaluaciones · {p} % aprobadas': '{n} evaluations · {p} % passed',
+  Nota: 'Grade',
+  Aprobada: 'Passed',
+  'No aprobada': 'Not passed',
+  Salud: 'Health',
+  Completitud: 'Completeness',
+  Calidad: 'Quality',
+  'Primer token': 'First token',
+  Latencia: 'Latency',
+
   // Alerts
   'Reglas que vigilan el Observer cada minuto y avisan al cruzar un umbral':
     'Rules that watch the Observer every minute and warn when a threshold is crossed',

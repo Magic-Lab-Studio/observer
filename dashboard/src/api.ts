@@ -15,6 +15,7 @@ import type {
   AlertMetric,
   AlertRule,
   AlertEvent,
+  EvaluationsByModel,
 } from './types';
 
 const BASE_URL = '/api';
@@ -106,6 +107,10 @@ export const api = {
     const qs = new URLSearchParams({ hours: String(hours) });
     if (environment) qs.set('environment', environment);
     return request(`/v1/providers/?${qs.toString()}`);
+  },
+
+  async getEvaluationsByModel(hours = 168): Promise<EvaluationsByModel> {
+    return request(`/v1/evaluations/by-model?hours=${hours}`);
   },
 
   // Alerts

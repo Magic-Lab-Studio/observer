@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from app.alerts import alerts_loop
+    from app.auto_eval import auto_eval_loop
     from app.retention import retention_loop
 
     retention = asyncio.create_task(
@@ -35,11 +36,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     alerting = asyncio.create_task(
         alerts_loop(async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False))
     )  # returns at once when OBSERVATORY_ALERTS=0
+    scoring = asyncio.create_task(
+        auto_eval_loop(async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False))
+    )  # returns at once when OBSERVATORY_AUTO_EVAL=0
     try:
         yield
     finally:
         retention.cancel()
         alerting.cancel()
+        scoring.cancel()
         await engine.dispose()
 
 

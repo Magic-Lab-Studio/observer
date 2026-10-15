@@ -75,7 +75,7 @@ function Header({ onMenu }: { onMenu: () => void }) {
   const { hours, setHours, env, setEnv, environments, refresh, loading } = useFilters();
   const { lang, setLang } = useLocale();
   const { pathname } = useLocation();
-  const showFilters = pathname === '/' || pathname === '/providers';
+  const showFilters = pathname === '/' || pathname === '/providers' || pathname === '/evaluations';
   return (
     <header className="sticky top-0 z-20 flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b py-2 border-line bg-canvas/85 px-4 backdrop-blur lg:px-6">
       <button type="button" onClick={onMenu} aria-label={t("Abrir menú")}

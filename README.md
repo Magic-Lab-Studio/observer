@@ -208,10 +208,21 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/alerts/events`               | Alert events (`?state=open`)      |
 | `POST`   | `/v1/alerts/events/{id}/ack`      | Mark an alert as seen             |
 | `POST`   | `/v1/alerts/evaluate`             | Evaluate all rules now            |
+| `GET`    | `/v1/evaluations/by-model`        | Turn quality by model and provider|
 
 The integration endpoint uses the versioned `manitos.telemetry.v1` envelope, accepts
 opaque session identifiers, and safely deduplicates exporter retries. See
 [docs/manitos-integration.md](docs/manitos-integration.md) for the published contract.
+
+### Automatic turn evaluations
+
+Every Manitos turn is scored without a model by a deterministic rubric (`manitos_turn@1`): health
+(error / tool error), completeness (truncated), quality (degraded), fallback, latency and time to
+first token, with fixed weights; a turn passes at 0.6 unless it failed outright. A background sweep
+(`OBSERVATORY_AUTO_EVAL_INTERVAL_SEC`, default 60; `OBSERVATORY_AUTO_EVAL=0` turns it off;
+`OBSERVATORY_AUTO_EVAL_DAYS`, default 7) scores recent turns that have no evaluation yet and also
+backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
+Evaluations page shows the score by model, the grade and the per-criterion breakdown of each turn.
 
 ### Alerts
 
@@ -380,7 +391,7 @@ export OBSERVATORY_JUDGE_MODEL=gpt-4o  # default
 ### Run tests
 
 ```bash
-# Backend (149 tests)
+# Backend (162 tests)
 cd backend && pytest
 
 # Python SDK (37 tests)
