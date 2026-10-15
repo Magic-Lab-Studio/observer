@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: npm
     directory: /sdk/typescript
     schedule:
-      interval: quarterly
+      interval: monthly
     groups:
       npm-minor-and-patch:
         patterns:
@@ -15,7 +15,7 @@ updates:
   - package-ecosystem: npm
     directory: /dashboard
     schedule:
-      interval: quarterly
+      interval: monthly
     groups:
       npm-minor-and-patch:
         patterns:
@@ -27,7 +27,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: quarterly
+      interval: monthly
     groups:
       actions-minor-and-patch:
         patterns:
