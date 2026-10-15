@@ -1,4 +1,5 @@
 import { parseApiDate } from '../dates';
+import { localeTag, t } from '../i18n';
 import type { Trace } from '../types';
 
 export function fmtMs(ms: number | null | undefined): string {
@@ -16,7 +17,7 @@ export function fmtPct(rate: number | null | undefined, digits = 1): string {
 }
 
 export function fmtInt(n: number | null | undefined): string {
-  return n == null ? '–' : n.toLocaleString('es-CO');
+  return n == null ? '–' : n.toLocaleString(localeTag());
 }
 
 export function fmtUsd(n: number | null | undefined): string {
@@ -32,18 +33,18 @@ export function shortId(id: string | null | undefined, n = 8): string {
 
 export function timeAgo(value: string): string {
   const s = Math.max(0, Math.floor((Date.now() - parseApiDate(value).getTime()) / 1000));
-  if (s < 5) return 'ahora';
-  if (s < 60) return `hace ${s} s`;
+  if (s < 5) return t('ahora');
+  if (s < 60) return t('hace {n} s', { n: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `hace ${m} min`;
+  if (m < 60) return t('hace {n} min', { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `hace ${h} h`;
-  return `hace ${Math.floor(h / 24)} d`;
+  if (h < 24) return t('hace {n} h', { n: h });
+  return t('hace {n} d', { n: Math.floor(h / 24) });
 }
 
 export function clockTime(value: string | number): string {
   const d = parseApiDate(value);
-  return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  return d.toLocaleTimeString(localeTag(), { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
 export function traceDurationMs(t: Pick<Trace, 'start_time' | 'end_time'>): number | null {

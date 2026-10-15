@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api } from './api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { notificationBody } from './helpers/alerts';
+import { t } from './i18n';
 import type { AlertEvent, AlertMetric } from './types';
 
 const PREF_KEY = 'observer.desktopNotifications';
@@ -68,7 +69,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     if (!supported || !enabledRef.current || Notification.permission !== 'granted') return;
     try {
       const unit = metricsRef.current.find((m) => m.id === e.metric);
-      new Notification(`Observatorio · ${e.rule_name}`, {
+      new Notification(`${t('Observatorio')} · ${t(e.rule_name)}`, {
         body: notificationBody(e, unit),
         tag: e.id,
       });

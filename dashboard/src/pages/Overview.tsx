@@ -6,11 +6,16 @@ import {
 } from 'recharts';
 import { api } from '../api';
 import { useFilters, SAMPLE_LIMIT } from '../context';
-import type { ManitOSQualitySummary, SummaryData } from '../types';
+import type { ManitOSQualitySummary, QueryResult, SummaryData } from '../types';
+import { fillBuckets } from '../helpers/query';
+import type { Bucket } from '../helpers/stats';
+import { bucketLabel } from '../helpers/stats';
+import { parseApiDate } from '../dates';
 import { Card, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, PALETTE, Skeleton, StatusDot } from '../components/ui';
 import { mergeModelRows } from '../helpers/chain';
 import { bucketTraces, histogram, percentile, sortedDurations } from '../helpers/stats';
 import { fmtAxisMs, fmtInt, fmtMs, fmtPct, fmtUsd, shortId, stageLabel, stageTimings, timeAgo, traceDurationMs } from '../helpers/format';
+import { t } from '../i18n';
 
 const AXIS = { stroke: 'transparent', tickLine: false, axisLine: false } as const;
 
@@ -26,6 +31,47 @@ function Overview() {
       .catch(() => { if (live) setQuality(null); });
     return () => { live = false; };
   }, [hours, env, totalTraces]);
+
+  // The activity chart, sparklines and latency KPIs come from the metrics query, so a 7 d or 30 d range
+  // uses every turn instead of the last 1000 traces; the client-side numbers remain as the fallback.
+  const [serverStats, setServerStats] = useState<{ series: QueryResult; totals: QueryResult } | null>(null);
+  useEffect(() => {
+    let live = true;
+    const base = {
+      view: 'turns', hours, dimensions: [], row_limit: 1000,
+      filters: env ? [{ field: 'environment', op: '=', value: env }] : [],
+    };
+    const core = [
+      { measure: 'count', aggregation: 'count' }, { measure: 'duration_ms', aggregation: 'p50' },
+      { measure: 'duration_ms', aggregation: 'p95' },
+    ];
+    Promise.all([
+      api.queryMetrics({ ...base, granularity: 'auto', metrics: [...core, { measure: 'error', aggregation: 'sum' }] }),
+      api.queryMetrics({ ...base, metrics: [...core, { measure: 'error', aggregation: 'avg' }] }),
+    ]).then(([series, totals]) => { if (live) setServerStats({ series, totals }); })
+      .catch(() => { if (live) setServerStats(null); });
+    return () => { live = false; };
+  }, [hours, env, totalTraces]);
+
+  const server = useMemo(() => {
+    if (!serverStats || !serverStats.series.granularity) return null;
+    const { series, totals } = serverStats;
+    const granularity = series.granularity as string;
+    const start = parseApiDate(series.from).getTime();
+    const end = parseApiDate(series.to).getTime();
+    const num = (v: unknown) => (typeof v === 'number' ? v : null);
+    const rows = series.rows.map((r) => ({ t: parseApiDate(String(r.time)).getTime(), r }));
+    const buckets: Bucket[] = fillBuckets(rows, start, end, granularity).map(({ t, row }) => {
+      const count = num(row?.r.count) ?? 0;
+      const err = num(row?.r.sum_error) ?? 0;
+      return {
+        t, label: bucketLabel(t, end - start), ok: count - err, err, total: count,
+        p50: num(row?.r.p50_duration_ms), p95: num(row?.r.p95_duration_ms), errRate: count ? err / count : 0,
+      };
+    });
+    const tot = totals.rows[0] ?? {};
+    return { buckets, p50: num(tot.p50_duration_ms), p95: num(tot.p95_duration_ms), errRate: num(tot.avg_error), count: num(tot.count) ?? 0 };
+  }, [serverStats]);
 
   const model = useMemo(() => {
     const durations = sortedDurations(windowTraces);
@@ -57,9 +103,12 @@ function Overview() {
   if (error && windowTraces.length === 0) return <ErrorState message={error} onRetry={refresh} />;
 
   const q = quality;
-  const total = windowTraces.length;
-  const errRate = total ? model.errors / total : 0;
-  const hasData = total > 0;
+  const total = server ? server.count : windowTraces.length;
+  const errRate = server?.errRate ?? (windowTraces.length ? model.errors / windowTraces.length : 0);
+  const buckets = server?.buckets ?? model.buckets;
+  const p50v = server?.p50 ?? model.p50;
+  const p95v = server?.p95 ?? model.p95;
+  const hasData = total > 0 || windowTraces.length > 0;
   const modelsPie = mergeModelRows(q?.models ?? []).slice(0, 6);
   const langs = q?.languages ?? [];
 
@@ -76,10 +125,10 @@ function Overview() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Resumen</h1>
+          <h1 className="text-lg font-semibold tracking-tight">{t("Resumen")}</h1>
           <p className="text-xs text-faint">
-            {env ? `Entorno ${env}` : 'Todos los entornos'}
-            {sampleTruncated && ` · muestra de las últimas ${fmtInt(SAMPLE_LIMIT)} trazas de ${fmtInt(totalTraces)}`}
+            {env ? t('Entorno {env}', { env }) : t('Todos los entornos')}
+            {sampleTruncated && ` · ${t('histograma, etapas y listas con una muestra de las últimas {n} trazas de {total}', { n: fmtInt(SAMPLE_LIMIT), total: fmtInt(totalTraces) })}`}
           </p>
         </div>
       </div>
@@ -88,54 +137,54 @@ function Overview() {
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         {loading && !hasData ? Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-[118px]" />) : (
           <>
-            <Kpi label="Turnos" value={fmtInt(q?.total_turns ?? total)} hint={`${fmtInt(summary?.total_spans)} spans`}
-              series={model.buckets.map((b) => b.total)} color="#6c8cff" />
-            <Kpi label="Tasa de error" value={fmtPct(q?.error_rate ?? errRate)}
-              hint={`${fmtInt(q?.error_count ?? model.errors)} fallidos`}
+            <Kpi label={t("Turnos")} value={fmtInt(q?.total_turns ?? total)} hint={`${fmtInt(summary?.total_spans)} spans`}
+              series={buckets.map((b) => b.total)} color="#6c8cff" />
+            <Kpi label={t("Tasa de error")} value={fmtPct(q?.error_rate ?? errRate)}
+              hint={t('{n} fallidos', { n: fmtInt(q?.error_count ?? model.errors) })}
               tone={(q?.error_rate ?? errRate) > 0.05 ? 'bad' : (q?.error_rate ?? errRate) > 0 ? 'warn' : 'good'}
-              series={model.buckets.map((b) => b.errRate)} color="#ef5b5b" />
-            <Kpi label="Latencia p50" value={fmtMs(model.p50)} hint={`p95 ${fmtMs(model.p95)}`}
-              series={model.buckets.map((b) => b.p50 ?? 0)} color="#3fb68b" />
-            <Kpi label="Latencia p95" value={fmtMs(model.p95)} hint="peor 5 % de turnos"
-              series={model.buckets.map((b) => b.p95 ?? 0)} color="#e5a33b" />
-            <Kpi label="Primer token (media)" value={fmtMs(q?.avg_ttft_ms)} hint={`turno medio ${fmtMs(q?.avg_duration_ms)}`} />
-            <Kpi label="Vía alterna" value={fmtPct(q?.fallback_rate)} hint={`${fmtInt(q?.fallback_count)} turnos`}
+              series={buckets.map((b) => b.errRate)} color="#ef5b5b" />
+            <Kpi label={t("Latencia p50")} value={fmtMs(p50v)} hint={`p95 ${fmtMs(p95v)}`}
+              series={buckets.map((b) => b.p50 ?? 0)} color="#3fb68b" />
+            <Kpi label={t("Latencia p95")} value={fmtMs(p95v)} hint={t("peor 5 % de turnos")}
+              series={buckets.map((b) => b.p95 ?? 0)} color="#e5a33b" />
+            <Kpi label={t("Primer token (media)")} value={fmtMs(q?.avg_ttft_ms)} hint={t('turno medio {v}', { v: fmtMs(q?.avg_duration_ms) })} />
+            <Kpi label={t("Vía alterna")} value={fmtPct(q?.fallback_rate)} hint={t('{n} turnos', { n: fmtInt(q?.fallback_count) })}
               tone={(q?.fallback_rate ?? 0) > 0.25 ? 'warn' : 'neutral'} />
-            <Kpi label="Costo" value={fmtUsd(summary?.total_cost_usd ?? 0)}
-              hint={(summary?.total_cost_usd ?? 0) === 0 ? 'modelos gratuitos o locales' : `${fmtInt(summary?.total_spans)} spans`} />
+            <Kpi label={t("Costo")} value={fmtUsd(summary?.total_cost_usd ?? 0)}
+              hint={(summary?.total_cost_usd ?? 0) === 0 ? t('modelos gratuitos o locales') : `${fmtInt(summary?.total_spans)} spans`} />
           </>
         )}
       </dl>
 
       {/* Main chart + quality */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Card title="Actividad y latencia"
-          subtitle="Turnos por intervalo (barras, rojo = error) y latencia p95 (línea)"
+        <Card title={t("Actividad y latencia")}
+          subtitle={t("Turnos por intervalo (barras, rojo = error) y latencia p95 (línea)")}
           bodyClass="p-2 pt-3">
           {hasData ? (
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={model.buckets} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+              <ComposedChart data={buckets} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#232a38" vertical={false} />
                 <XAxis dataKey="label" {...AXIS} interval="preserveStartEnd" minTickGap={36} />
                 <YAxis yAxisId="n" {...AXIS} width={34} allowDecimals={false} />
                 <YAxis yAxisId="ms" orientation="right" {...AXIS} width={46} tickFormatter={fmtAxisMs} />
                 <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }}
-                  content={<ChartTooltip valueFormatter={(v, n) => (n.startsWith('Latencia') ? fmtMs(Number(v)) : String(v))} />} />
-                <Bar isAnimationActive={false} yAxisId="n" dataKey="ok" name="Correctos" stackId="a" fill="#6c8cff" fillOpacity={0.85} radius={[0, 0, 0, 0]} />
-                <Bar isAnimationActive={false} yAxisId="n" dataKey="err" name="Errores" stackId="a" fill="#ef5b5b" radius={[3, 3, 0, 0]} />
-                <Line isAnimationActive={false} yAxisId="ms" dataKey="p95" name="Latencia p95" stroke="#e5a33b" strokeWidth={2} dot={false} connectNulls />
+                  content={<ChartTooltip valueFormatter={(v, n) => (n === t('Latencia p95') ? fmtMs(Number(v)) : String(v))} />} />
+                <Bar isAnimationActive={false} yAxisId="n" dataKey="ok" name={t("Correctos")} stackId="a" fill="#6c8cff" fillOpacity={0.85} radius={[0, 0, 0, 0]} />
+                <Bar isAnimationActive={false} yAxisId="n" dataKey="err" name={t("Errores")} stackId="a" fill="#ef5b5b" radius={[3, 3, 0, 0]} />
+                <Line isAnimationActive={false} yAxisId="ms" dataKey="p95" name={t("Latencia p95")} stroke="#e5a33b" strokeWidth={2} dot={false} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : <EmptyState title="Sin turnos en este rango" hint="Prueba un rango más amplio." />}
+          ) : <EmptyState title={t("Sin turnos en este rango")} hint={t("Prueba un rango más amplio.")} />}
         </Card>
 
-        <Card title="Calidad de turnos" subtitle={q ? `${fmtInt(q.total_turns)} turnos · ${hours >= 24 ? `${Math.round(hours / 24)} d` : `${hours} h`}` : undefined}>
+        <Card title={t("Calidad de turnos")} subtitle={q ? `${t('{n} turnos', { n: fmtInt(q.total_turns) })} · ${hours >= 24 ? `${Math.round(hours / 24)} d` : `${hours} h`}` : undefined}>
           {q ? (
             <ul className="space-y-3.5">
               {qualityRows.map((r) => (
-                <li key={r.label}>
+                <li key={t(r.label)}>
                   <div className="mb-1 flex items-baseline justify-between text-xs">
-                    <span className="text-dim">{r.label}</span>
+                    <span className="text-dim">{t(r.label)}</span>
                     <span className="text-ink font-medium">{fmtPct(r.rate)} <span className="text-faint font-normal">· {fmtInt(r.n)}</span></span>
                   </div>
                   <Meter rate={r.rate} tone={r.tone} />
@@ -148,25 +197,25 @@ function Overview() {
 
       {/* Distribution row */}
       <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-        <Card title="Distribución de latencia" subtitle={hasData ? `p50 ${fmtMs(model.p50)} · p95 ${fmtMs(model.p95)} · máx ${fmtMs(model.durations[model.durations.length - 1])}` : undefined} bodyClass="p-2 pt-3">
+        <Card title={t("Distribución de latencia")} subtitle={hasData ? `p50 ${fmtMs(p50v)} · p95 ${fmtMs(p95v)} · ${t('máx')} ${fmtMs(model.durations[model.durations.length - 1])}` : undefined} bodyClass="p-2 pt-3">
           {hasData ? (
             <ResponsiveContainer width="100%" height={230}>
               <BarChart data={model.hist} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="#232a38" vertical={false} />
                 <XAxis dataKey="range" {...AXIS} />
                 <YAxis {...AXIS} width={34} allowDecimals={false} />
-                <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} content={<ChartTooltip valueFormatter={(v) => `${v} turnos`} />} />
-                <Bar isAnimationActive={false} dataKey="count" name="Turnos" radius={[3, 3, 0, 0]}>
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} content={<ChartTooltip valueFormatter={(v) => t('{n} turnos', { n: v })} />} />
+                <Bar isAnimationActive={false} dataKey="count" name={t("Turnos")} radius={[3, 3, 0, 0]}>
                   {model.hist.map((h) => (
                     <Cell key={h.range} fill={h.from >= 20000 ? '#ef5b5b' : h.from >= 10000 ? '#e5a33b' : '#3fb68b'} fillOpacity={0.85} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : <EmptyState title="Sin datos" />}
+          ) : <EmptyState title={t("Sin datos")} />}
         </Card>
 
-        <Card title="Tiempo por etapa" subtitle="Media y p95 por etapa del turno" bodyClass="p-2 pt-3">
+        <Card title={t("Tiempo por etapa")} subtitle={t("Media y p95 por etapa del turno")} bodyClass="p-2 pt-3">
           {model.stageRows.length > 0 ? (
             <ResponsiveContainer width="100%" height={230}>
               <BarChart data={model.stageRows} layout="vertical" margin={{ top: 0, right: 16, left: 4, bottom: 0 }} barGap={2}>
@@ -174,14 +223,14 @@ function Overview() {
                 <XAxis type="number" {...AXIS} tickFormatter={fmtAxisMs} />
                 <YAxis type="category" dataKey="stage" {...AXIS} width={118} />
                 <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} content={<ChartTooltip valueFormatter={(v) => fmtMs(Number(v))} />} />
-                <Bar isAnimationActive={false} dataKey="avg" name="Media" fill="#6c8cff" radius={[0, 3, 3, 0]} barSize={8} />
-                <Bar isAnimationActive={false} dataKey="p95" name="p95" fill="#e5a33b" fillOpacity={0.7} radius={[0, 3, 3, 0]} barSize={8} />
+                <Bar isAnimationActive={false} dataKey="avg" name={t("Media")} fill="#6c8cff" radius={[0, 3, 3, 0]} barSize={8} />
+                <Bar isAnimationActive={false} dataKey="p95" name={t("p95")} fill="#e5a33b" fillOpacity={0.7} radius={[0, 3, 3, 0]} barSize={8} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <EmptyState title="Sin tiempos por etapa" />}
+          ) : <EmptyState title={t("Sin tiempos por etapa")} />}
         </Card>
 
-        <Card title="Modelos" subtitle="Quién respondió cada turno" className="lg:col-span-2 2xl:col-span-1">
+        <Card title={t("Modelos")} subtitle={t("Quién respondió cada turno")} className="lg:col-span-2 2xl:col-span-1">
           {modelsPie.length > 0 ? (
             <div className="flex items-center gap-4">
               <div className="size-[150px] shrink-0">
@@ -190,7 +239,7 @@ function Overview() {
                     <Pie isAnimationActive={false} data={modelsPie} dataKey="count" nameKey="key" innerRadius={46} outerRadius={70} paddingAngle={2} stroke="none">
                       {modelsPie.map((m, i) => <Cell key={m.key} fill={PALETTE[i % PALETTE.length]} />)}
                     </Pie>
-                    <Tooltip content={<ChartTooltip valueFormatter={(v) => `${v} turnos`} />} />
+                    <Tooltip content={<ChartTooltip valueFormatter={(v) => t('{n} turnos', { n: v })} />} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -204,10 +253,11 @@ function Overview() {
                 ))}
               </ul>
             </div>
-          ) : <EmptyState title="Sin datos de modelos" />}
+          ) : <EmptyState title={t("Sin datos de modelos")} />}
           {langs.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-line pt-3 text-xs text-faint">
-              Idiomas:
+              
+              {t("Idiomas:")}
               {langs.map((l) => (
                 <span key={l.key} className="rounded-md bg-raised px-1.5 py-0.5 text-dim">{l.key} · {fmtPct(l.rate, 0)}</span>
               ))}
@@ -218,8 +268,8 @@ function Overview() {
 
       {/* Lists */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Card title="Turnos recientes" subtitle="Se actualiza en vivo"
-          actions={<Link to="/traces" className="text-xs text-accent hover:underline">Ver todas</Link>} bodyClass="p-0 pt-2">
+        <Card title={t("Turnos recientes")} subtitle={t("Se actualiza en vivo")}
+          actions={<Link to="/traces" className="text-xs text-accent hover:underline">{t("Ver todas")}</Link>} bodyClass="p-0 pt-2">
           {hasData ? (
             <ul className="divide-y divide-line">
               {windowTraces.slice(0, 10).map((t) => {
@@ -238,10 +288,10 @@ function Overview() {
                 );
               })}
             </ul>
-          ) : <EmptyState title="Sin turnos recientes" />}
+          ) : <EmptyState title={t("Sin turnos recientes")} />}
         </Card>
 
-        <Card title="Turnos más lentos" subtitle="Mayor latencia en el rango" bodyClass="p-0 pt-2">
+        <Card title={t("Turnos más lentos")} subtitle={t("Mayor latencia en el rango")} bodyClass="p-0 pt-2">
           {model.slowest.length > 0 ? (
             <ul className="divide-y divide-line">
               {model.slowest.map(({ t, d }) => {
@@ -259,7 +309,7 @@ function Overview() {
                 );
               })}
             </ul>
-          ) : <EmptyState title="Sin datos" />}
+          ) : <EmptyState title={t("Sin datos")} />}
         </Card>
       </div>
 

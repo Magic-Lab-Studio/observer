@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -278,6 +280,71 @@ async def list_evaluations(
         "limit": limit,
         "offset": offset,
     }
+
+
+def summarize_scores(rows: list[tuple[Any, Any]]) -> dict[str, Any]:
+    """Average score and pass rate overall, per model, per provider and per grade.
+
+    ``rows`` are ``(score, result)`` of rule-based turn evaluations; ``result`` carries the
+    model, provider, grade and pass flag written by ``app.evaluators.manitos_turn``.
+    """
+
+    def block(values: list[tuple[float, bool]]) -> dict[str, Any]:
+        count = len(values)
+        return {
+            "count": count,
+            "avg_score": sum(v[0] for v in values) / count if count else None,
+            "pass_rate": sum(1 for v in values if v[1]) / count if count else None,
+        }
+
+    overall: list[tuple[float, bool]] = []
+    models: dict[str, list[tuple[float, bool]]] = defaultdict(list)
+    providers: dict[str, list[tuple[float, bool]]] = defaultdict(list)
+    grades: Counter[str] = Counter()
+    for score, result in rows:
+        if score is None:
+            continue
+        data = result if isinstance(result, dict) else {}
+        item = (float(score), bool(data.get("passed")))
+        overall.append(item)
+        models[str(data.get("model") or "?")].append(item)
+        if data.get("provider"):
+            providers[str(data["provider"])].append(item)
+        if data.get("grade"):
+            grades[str(data["grade"])] += 1
+
+    def listing(groups: dict[str, list[tuple[float, bool]]]) -> list[dict[str, Any]]:
+        out = [{"key": key, **block(vals)} for key, vals in groups.items()]
+        return sorted(out, key=lambda x: (-x["count"], x["key"]))
+
+    return {
+        **block(overall),
+        "models": listing(models),
+        "providers": listing(providers),
+        "grades": [{"grade": g, "count": grades.get(g, 0)} for g in ("A", "B", "C", "D", "F")],
+    }
+
+
+@router.get("/by-model")
+async def evaluations_by_model(
+    hours: int = Query(168, ge=1, le=720),
+    project_id: str = Query("manitos", min_length=1, max_length=128),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Quality of the automatic rule-based turn evaluations, grouped by model and provider."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    query = (
+        select(Evaluation.score, Evaluation.result)
+        .join(Trace, Trace.id == Evaluation.trace_id)
+        .where(
+            Evaluation.evaluator_type == "rule_based",
+            Trace.project_id == project_id,
+            Trace.created_at >= cutoff,
+        )
+        .limit(20000)
+    )
+    rows = [(score, result) for score, result in (await session.execute(query)).all()]
+    return {"hours": hours, "project_id": project_id, **summarize_scores(rows)}
 
 
 @router.get("/{evaluation_id}", response_model=EvaluationResponse)

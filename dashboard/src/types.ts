@@ -138,6 +138,24 @@ export interface ProvidersResponse {
   paths: { path: string; count: number }[];
 }
 
+export interface ScoreGroup { key: string; count: number; avg_score: number | null; pass_rate: number | null }
+export interface EvaluationsByModel {
+  hours: number; project_id: string; count: number; avg_score: number | null; pass_rate: number | null;
+  models: ScoreGroup[]; providers: ScoreGroup[]; grades: { grade: string; count: number }[];
+}
+export interface TurnCriterion { name: string; weight: number; score: number; detail: string }
+
+export interface QueryField { id: string; label: string }
+export interface QuerySchema {
+  views: Record<string, { label: string; measures: QueryField[]; dimensions: QueryField[]; filter_only: QueryField[] }>;
+  aggregations: string[];
+  granularities: string[];
+}
+export interface QueryResult {
+  view: string; from: string; to: string; granularity: string | null; samples: number; truncated: boolean;
+  rows: Record<string, string | number | null>[];
+}
+
 export interface AlertMetric { id: string; label: string; unit: 'ratio' | 'ms' | 'count'; kind: string }
 export interface AlertRule {
   id: string; name: string; metric: string; comparator: '>' | '>=' | '<' | '<='; threshold: number;

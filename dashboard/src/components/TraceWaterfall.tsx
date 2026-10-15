@@ -4,6 +4,7 @@ import type { Span } from '../types';
 import { parseApiDate } from '../dates';
 import { fmtMs } from '../helpers/format';
 import { Card, EmptyState } from './ui';
+import { t } from '../i18n';
 
 interface TraceWaterfallProps {
   traceId: string;
@@ -45,13 +46,13 @@ function TraceWaterfall({ traceId, spans: spansProp, selectedId, onSelect }: Tra
   }, [spans]);
 
   if (spans.length === 0) {
-    return <Card title="Cascada"><EmptyState title="Esta traza no tiene spans" /></Card>;
+    return <Card title={t("Cascada")}><EmptyState title={t("Esta traza no tiene spans")} /></Card>;
   }
 
   const ticks = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <Card title="Cascada" subtitle={`${spans.length} spans · ${fmtMs(rows.total)} en total`} bodyClass="p-0 pt-2">
+    <Card title={t("Cascada")} subtitle={t('{n} spans · {v} en total', { n: spans.length, v: fmtMs(rows.total) })} bodyClass="p-0 pt-2">
       <div className="overflow-x-auto">
         <div className="min-w-[640px]">
           <div className="relative ml-[240px] mr-[84px] h-6 border-b border-line">
@@ -92,7 +93,7 @@ function TraceWaterfall({ traceId, spans: spansProp, selectedId, onSelect }: Tra
         {Object.entries(TYPE_COLOR).map(([k, c]) => (
           <span key={k} className="inline-flex items-center gap-1.5"><span className="size-2 rounded-sm" style={{ background: c }} />{k}</span>
         ))}
-        <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-sm bg-bad" />error</span>
+        <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-sm bg-bad" />{t("error")}</span>
       </div>
     </Card>
   );

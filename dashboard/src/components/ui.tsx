@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { t } from '../i18n';
 
 export const PALETTE = ['#6c8cff', '#3fb68b', '#e5a33b', '#d6657e', '#9b7bea', '#4fb7d6', '#8a94a8'];
 
@@ -13,6 +14,7 @@ export function Icon({ name, className = 'size-4' }: { name: string; className?:
     chevron: 'M9 6l6 6-6 6',
     warn: 'M12 3l10 18H2zM12 10v5M12 18v.01',
     menu: 'M4 6h16M4 12h16M4 18h16',
+    explore: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
     bell: 'M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8zM10 20a2 2 0 004 0',
     providers: 'M5 12h4M15 12h4M9 12a3 3 0 106 0 3 3 0 00-6 0zM12 5V3M12 21v-2',
   };
@@ -120,7 +122,7 @@ export function StatusPill({ status }: { status: string }) {
     : status === 'error'
       ? 'bg-bad/10 text-bad border-bad/25'
       : 'bg-raised text-dim border-line-strong';
-  const text = status === 'ok' ? 'OK' : status === 'error' ? 'Error' : status;
+  const text = status === 'ok' ? 'OK' : status === 'error' ? t('Error') : status;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>
       <StatusDot status={status} />{text}
@@ -156,12 +158,13 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
     <div role="alert" className="rounded-xl border border-bad/30 bg-bad/5 p-4 flex items-start gap-3">
       <Icon name="warn" className="size-5 text-bad shrink-0 mt-0.5" />
       <div className="min-w-0">
-        <p className="text-sm text-bad font-medium">No se pudo cargar: {message}</p>
-        <p className="text-xs text-faint mt-1">Verifica que el backend del Observer esté corriendo.</p>
+        <p className="text-sm text-bad font-medium">{t("No se pudo cargar: {m}", { m: message })}</p>
+        <p className="text-xs text-faint mt-1">{t("Verifica que el backend del Observer esté corriendo.")}</p>
         {onRetry && (
           <button type="button" onClick={onRetry}
             className="mt-2 rounded-md border border-line-strong px-2.5 py-1 text-xs text-ink hover:bg-raised">
-            Reintentar
+            
+            {t("Reintentar")}
           </button>
         )}
       </div>
