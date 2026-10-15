@@ -85,8 +85,8 @@ function Overview() {
       </div>
 
       {/* KPI strip */}
-      <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {loading && !hasData ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-[118px]" />) : (
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        {loading && !hasData ? Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-[118px]" />) : (
           <>
             <Kpi label="Turnos" value={fmtInt(q?.total_turns ?? total)} hint={`${fmtInt(summary?.total_spans)} spans`}
               series={model.buckets.map((b) => b.total)} color="#6c8cff" />
@@ -101,6 +101,8 @@ function Overview() {
             <Kpi label="Primer token (media)" value={fmtMs(q?.avg_ttft_ms)} hint={`turno medio ${fmtMs(q?.avg_duration_ms)}`} />
             <Kpi label="Vía alterna" value={fmtPct(q?.fallback_rate)} hint={`${fmtInt(q?.fallback_count)} turnos`}
               tone={(q?.fallback_rate ?? 0) > 0.25 ? 'warn' : 'neutral'} />
+            <Kpi label="Costo" value={fmtUsd(summary?.total_cost_usd ?? 0)}
+              hint={(summary?.total_cost_usd ?? 0) === 0 ? 'modelos gratuitos o locales' : `${fmtInt(summary?.total_spans)} spans`} />
           </>
         )}
       </dl>
@@ -261,9 +263,6 @@ function Overview() {
         </Card>
       </div>
 
-      {summary && summary.total_cost_usd > 0 && (
-        <p className="text-xs text-faint">Costo total del rango: {fmtUsd(summary.total_cost_usd)}</p>
-      )}
     </div>
   );
 }
