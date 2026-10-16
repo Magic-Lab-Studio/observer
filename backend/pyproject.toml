@@ -31,6 +31,7 @@ Issues = "https://github.com/Magic-Lab-Studio/observer/issues"
 [project.scripts]
 observer-integration-passive-gate = "app.ops.manitos_passive_gate:main"
 observer-manitos-passive-gate = "app.ops.manitos_passive_gate:main"
+observer-regression = "app.ops.regression_gate:main"
 
 [project.optional-dependencies]
 sqlite = [
