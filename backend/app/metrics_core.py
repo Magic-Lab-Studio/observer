@@ -36,6 +36,11 @@ METRICS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "kind": "provider",
     },
+    "ingest_silence_minutes": {
+        "label": "Minutos sin recibir trazas",
+        "unit": "count",
+        "kind": "ingest",
+    },
     "provider_quota_out": {
         "label": "Proveedores sin cuota",
         "unit": "count",

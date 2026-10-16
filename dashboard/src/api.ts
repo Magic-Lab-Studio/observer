@@ -26,6 +26,7 @@ import type {
   RunComparison,
   CaptureMode,
   PrivacyOverview,
+  IngestHealth,
 } from './types';
 
 const BASE_URL = '/api';
@@ -174,6 +175,11 @@ export const api = {
   },
   async enforceCaptureMode(project: string): Promise<{ spans_scanned: number; spans_changed: number }> {
     return request(`/v1/privacy/projects/${encodeURIComponent(project)}/enforce`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+  },
+
+  // Is telemetry arriving?
+  async getIngestHealth(): Promise<IngestHealth> {
+    return request('/v1/ingest/health');
   },
 
   // Alerts

@@ -12,6 +12,7 @@ import type { Bucket } from '../helpers/stats';
 import { bucketLabel } from '../helpers/stats';
 import { parseApiDate } from '../dates';
 import { Card, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, PALETTE, Skeleton, StatusDot } from '../components/ui';
+import IngestHealth from '../components/IngestHealth';
 import { mergeModelRows } from '../helpers/chain';
 import { bucketTraces, histogram, percentile, sortedDurations } from '../helpers/stats';
 import { fmtAxisMs, fmtInt, fmtMs, fmtPct, fmtUsd, shortId, stageLabel, stageTimings, timeAgo, traceDurationMs } from '../helpers/format';
@@ -313,6 +314,7 @@ function Overview() {
         </Card>
       </div>
 
+      <IngestHealth />
     </div>
   );
 }

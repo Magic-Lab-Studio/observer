@@ -304,6 +304,12 @@ export const EN: Record<string, string> = {
   'Modo de {p}': 'Mode of {p}',
   Predeterminado: 'Default',
   'Aplicar a lo guardado': 'Apply to stored data',
+  'Recepción de telemetría': 'Telemetry intake',
+  'Cuándo llegó la última traza de cada proyecto': 'When the last trace of each project arrived',
+  'Aún no llega telemetría': 'No telemetry yet',
+  'hace {x}': '{x} ago',
+  '{a} en 5 min · {b} en 1 h · {c} en 24 h': '{a} in 5 min · {b} in 1 h · {c} in 24 h',
+  'Minutos sin recibir trazas': 'Minutes without traces',
   'Salud por modelo': 'Health by model',
   'Salud operativa media de las evaluaciones automáticas por reglas · {n} turnos · la corrección de las respuestas aún no se mide':
     'Average operational health of the automatic rule-based evaluations · {n} turns · answer correctness is not measured yet',
