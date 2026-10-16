@@ -59,10 +59,12 @@ by a person before saving.
   copied from a trace; phrases are typed by a person. Runs are checked by re-scoring traces Manitos
   already sends (Observer does not execute the agent).
 - Done when: one action on the trace page creates an item and it can be listed and exported.
-- **Dependency found:** Manitos traces have no tool-call spans (`span_type = tool`) and do not
-  export reply text, so tool and text expectations cannot be checked against real traces yet. Two
-  changes are needed on the Manitos side before step 3 can verify them: emit one tool span per
-  call (name, status), and decide whether a redacted reply may be exported for text checks.
+- **Dependency found, tool half resolved:** Manitos traces had no tool-call spans
+  (`span_type = tool`). Manitos PR #36 (merged 2026-10-16) now exports one per executed call (name,
+  outcome, duration; no arguments or results), so tool expectations are verifiable on traces
+  recorded since its `manitos-server` restart. Still open: Manitos exports no reply text, so text
+  phrases stay `unknown`; whether a redacted reply may be exported is a privacy decision for the
+  user (it would break the metadata-only rule).
 
 ## Step 3: compare runs by version
 
@@ -134,3 +136,5 @@ investigate without screenshots. Read-only first.
 - 2026-10-16: step 4 done. `observer-regression` CLI with exit codes 0/1/2, report
   `observer.regression.v1`. Next: step 5 (OTLP). Tool and text expectations still need Manitos to
   export tool spans and reply text before the gate can verify them on real traces.
+- 2026-10-16: Manitos PR #36 merged: tool spans exported. Tool expectations are now verifiable on
+  new traces; text phrases remain `unknown`. Observer services migrated and restarted.

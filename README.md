@@ -289,8 +289,9 @@ must or must not be used, health conditions (no error, no truncation, no degrada
 maximum duration), phrases the reply must or must not contain (typed by the person), and an
 optional human verdict (correct / incorrect). Cases keep their source trace id but outlive it when
 retention purges the trace. `GET /v1/datasets/{id}/export` returns the `observer.dataset.v1` JSON
-that later steps (run comparison, a CI regression command) read. Note: Manitos does not export
-tool-call spans yet, so `observed.tools` is empty until it does.
+that later steps (run comparison, a CI regression command) read. Note: Manitos exports one metadata-only
+tool span per executed call (name, outcome, duration; never arguments or results) since its PR #36,
+so `observed.tools` is filled for turns recorded after that version; earlier traces have none.
 
 ### Runs and version comparison
 
