@@ -28,7 +28,7 @@ and write down what was learned or changed. Keep entries short.
 | 4 | Regression command for CI | done | this PR |
 | 5 | Standard OTLP ingestion | done | #56 |
 | 6 | Read-only MCP server | done | #57 |
-| 7 | Configurable capture privacy | later | |
+| 7 | Configurable capture privacy | done | this PR |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | later | |
 
 ## Step 1: health vs quality
@@ -111,10 +111,21 @@ investigate without screenshots. Read-only first.
   `OBSERVER_MCP_CONTENT=1`. Tools, setup and privacy: `docs/mcp.md`. A test fails if the reader can
   use any method other than `GET` or the metrics query.
 
-## Later
+## Step 7: capture privacy per project
 
-- **Capture privacy modes per project** (metadata only, redacted, full), filtered before export.
-  For Manitos the exporter already filters at the source, so the work is mostly there.
+- **Built:** `metadata` / `redacted` / `full` per project (`project_settings`, migration
+  `20261018_settings`), applied on every ingestion path (`app/capture.py`): the SDK routes, the
+  Manitos ingest and OTLP. A project without a mode keeps each path's default, so nothing changes
+  silently; `OBSERVATORY_CAPTURE_DEFAULT` overrides the defaults. `/v1/privacy/projects` reports,
+  from the latest 2000 spans per project, how many hold an input, an output, content-like
+  attributes or sensitive patterns, and `…/enforce` (explicit `confirm`) rewrites stored data.
+  Privacy page in the dashboard. Details: `docs/privacy.md`.
+- **Limits:** redaction is pattern-based (emails, phones, Luhn-valid cards, SSN-shaped numbers,
+  tokens/keys, secret-looking keys), not NER. SDK traces posted without a project id follow the
+  path default or the env override (no project to configure). Source-side filtering for
+  third-party exporters is the exporter's job; this is the server-side guarantee.
+
+## Later
 - **Ingestion reliability:** optional persistent queue, exponential backoff, counters for
   pending and dropped records.
 
@@ -154,3 +165,7 @@ investigate without screenshots. Read-only first.
 - 2026-10-16: step 6 done. `observer-mcp`: 11 read-only tools, no content by default. Verified over
   real stdio with an MCP client against a synthetic Observer (an OTLP-ingested trace with its tool
   span was listed and read). Steps 1-6 complete; what remains is under "Later".
+- 2026-10-16: step 7 done. Capture modes per project on every ingestion path, a stored-data
+  report and enforcement, Privacy page. Verified on a synthetic instance: a project storing emails
+  in inputs showed 3 sensitive spans, switching to `metadata` and applying removed them. The
+  `manitos` project stored 0 inputs/outputs (the Manitos exporter is metadata-only at the source).

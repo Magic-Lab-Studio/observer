@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.capture import apply_capture, capture_mode
 from app.db import get_session
 from app.models.ingestion import IngestionReceipt
 from app.models.trace import Span, Trace
@@ -235,20 +236,23 @@ def _datetime_equal(left: datetime | None, right: datetime | None) -> bool:
     return abs(left.timestamp() - right.timestamp()) < 0.000001
 
 
-def _span_values(span: ManitOSSpan) -> dict[str, Any]:
+def _span_values(span: ManitOSSpan, mode: str = "full") -> dict[str, Any]:
+    inp, out, attributes, meta = apply_capture(
+        mode, inp=span.input, out=span.output, attributes=span.attributes, meta=span.metadata
+    )
     return {
         "name": span.name,
         "span_type": span.span_type,
         "start_time": _as_datetime(span.start_time),
         "end_time": _as_datetime(span.end_time),
         "status": span.status,
-        "inp": span.input,
-        "out": span.output,
+        "inp": inp,
+        "out": out,
         "tokens_input": span.tokens_input,
         "tokens_output": span.tokens_output,
         "cost_usd": span.cost_usd,
-        "meta": span.metadata,
-        "attributes": span.attributes,
+        "meta": meta,
+        "attributes": attributes,
     }
 
 
@@ -316,9 +320,12 @@ async def ingest_manitos_trace(
 
 
 async def apply_envelope(
-    session: AsyncSession, payload: ManitOSIngestRequest
+    session: AsyncSession, payload: ManitOSIngestRequest, default_capture: str = "full"
 ) -> ManitOSIngestResponse:
-    """The ingestion itself (also used by the OTLP receiver, which builds envelopes)."""
+    """The ingestion itself (also used by the OTLP receiver, which builds envelopes).
+
+    ``default_capture`` is the path's capture mode when the project has none of its own."""
+    mode = await capture_mode(session, payload.project_id, default_capture)
 
     digest = _payload_hash(payload)
     receipt = await _existing_receipt(
@@ -369,7 +376,7 @@ async def apply_envelope(
         "start_time": _as_datetime(payload.trace.start_time),
         "end_time": _as_datetime(payload.trace.end_time),
         "status": payload.trace.status,
-        "meta": payload.trace.metadata,
+        "meta": apply_capture(mode, meta=payload.trace.metadata)[3],
     }
     if trace is None:
         trace = Trace(id=payload.trace.id, **trace_values)
@@ -411,7 +418,7 @@ async def apply_envelope(
     materialized: dict[str, Span] = {}
     values_by_id: dict[str, dict[str, Any]] = {}
     for incoming in payload.spans:
-        values = _span_values(incoming)
+        values = _span_values(incoming, mode)
         values_by_id[incoming.id] = values
         existing = existing_by_id.get(incoming.id)
         if existing is None:

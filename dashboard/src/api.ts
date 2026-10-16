@@ -24,6 +24,8 @@ import type {
   DatasetSummary,
   DatasetRunInfo,
   RunComparison,
+  CaptureMode,
+  PrivacyOverview,
 } from './types';
 
 const BASE_URL = '/api';
@@ -158,6 +160,20 @@ export const api = {
   },
   async deleteCase(id: string): Promise<void> {
     await request(`/v1/datasets/items/${id}`, { method: 'DELETE' });
+  },
+
+  // Privacy (capture mode per project)
+  async getPrivacy(): Promise<PrivacyOverview> {
+    return request('/v1/privacy/projects');
+  },
+  async setCaptureMode(project: string, mode: CaptureMode): Promise<void> {
+    await request(`/v1/privacy/projects/${encodeURIComponent(project)}`, { method: 'PUT', body: JSON.stringify({ capture_mode: mode }) });
+  },
+  async clearCaptureMode(project: string): Promise<void> {
+    await request(`/v1/privacy/projects/${encodeURIComponent(project)}`, { method: 'DELETE' });
+  },
+  async enforceCaptureMode(project: string): Promise<{ spans_scanned: number; spans_changed: number }> {
+    return request(`/v1/privacy/projects/${encodeURIComponent(project)}/enforce`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
   },
 
   // Alerts

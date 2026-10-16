@@ -196,3 +196,14 @@ export interface RunComparison {
   summary: Record<CaseChange, number>;
   cases: { item_id: string; change: CaseChange; base: { status: string; health_score: number | null } | null; candidate: { status: string; health_score: number | null } | null; health_delta: number | null; duration_delta_ms: number | null }[];
 }
+
+export type CaptureMode = 'metadata' | 'redacted' | 'full';
+export interface PrivacyReport {
+  sampled_spans: number; with_input: number; with_output: number;
+  with_content_like_attributes: number; with_sensitive_patterns: number;
+}
+export interface PrivacyProject {
+  project_id: string; capture_mode: CaptureMode | null; source: 'setting' | 'default';
+  default_mode: CaptureMode; report: PrivacyReport;
+}
+export interface PrivacyOverview { modes: CaptureMode[]; note: string; projects: PrivacyProject[] }

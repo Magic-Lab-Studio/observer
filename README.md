@@ -225,6 +225,10 @@ Base URL: `http://localhost:8000`
 | `POST`   | `/v1/alerts/events/{id}/ack`      | Mark an alert as seen             |
 | `POST`   | `/v1/alerts/evaluate`             | Evaluate all rules now            |
 | `POST`   | `/v1/otlp/v1/traces`              | Standard OTLP/HTTP trace receiver |
+| `GET`    | `/v1/privacy/projects`            | Capture mode per project + what is stored |
+| `PUT`    | `/v1/privacy/projects/{id}`       | Set a project's capture mode      |
+| `DELETE` | `/v1/privacy/projects/{id}`       | Back to the path defaults         |
+| `POST`   | `/v1/privacy/projects/{id}/enforce` | Rewrite stored data to the mode (`confirm`) |
 | `GET`    | `/v1/datasets`                    | List test-case datasets           |
 | `POST`   | `/v1/datasets`                    | Create a dataset                  |
 | `GET`    | `/v1/datasets/{id}`               | A dataset with its cases          |
@@ -280,6 +284,18 @@ Scores of the previous rubric are replaced when the turn is re-scored. A backgro
 `OBSERVATORY_AUTO_EVAL_DAYS`, default 7) scores recent turns that have no evaluation yet and also
 backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
 Evaluations page shows health by model, both axes, the grade and the per-criterion breakdown.
+
+### Capture privacy per project
+
+Each project has a capture mode, set on the **Privacy** page or with `PUT /v1/privacy/projects/{id}`:
+`metadata` (no inputs/outputs; content-like attributes dropped), `redacted` (everything kept, but
+emails, phone numbers, card and ID numbers, tokens and keys are masked) or `full`. It applies on
+every ingestion path (SDK, Manitos, OTLP). Without a project mode each path keeps its default (SDK
+and Manitos store what they send, OTLP stores metadata only); `OBSERVATORY_CAPTURE_DEFAULT`
+overrides those defaults. The page also reports, from the latest spans, how many hold an input, an
+output or sensitive patterns, so a mode can be checked instead of trusted, and **Apply to stored
+data** rewrites what is already stored (irreversible, asks for confirmation). Redaction is
+pattern-based: it does not detect names or addresses. Details: [docs/privacy.md](docs/privacy.md).
 
 ### Standard OpenTelemetry (OTLP) ingestion
 

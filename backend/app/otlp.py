@@ -23,32 +23,12 @@ import zlib
 from dataclasses import dataclass
 from typing import Any
 
+from app.capture import MODES, filter_attributes
+
 MAX_BODY_BYTES = 16 * 1024 * 1024
 _NAMESPACE = uuid.UUID("0b3f6d1e-6a54-4c63-9a52-7d2f5d9c1a77")
-_MAX_ATTR_BYTES = 200
 _MAX_ATTRS = 64
 _SPANS_PER_ENVELOPE = 500
-
-# Standard attributes kept in metadata mode even though their name looks content-like.
-_ALLOWED = (
-    "gen_ai.usage.",
-    "gen_ai.operation.name",
-    "gen_ai.system",
-    "gen_ai.provider.name",
-    "gen_ai.request.model",
-    "gen_ai.response.model",
-    "gen_ai.response.finish_reasons",
-    "gen_ai.tool.name",
-    "gen_ai.agent.name",
-    "gen_ai.request.temperature",
-    "gen_ai.request.max_tokens",
-)
-_DENY = re.compile(
-    r"prompt|completion|content|message|input|output|query|statement|body|text|payload|"
-    r"password|passwd|token|secret|credential|authorization|cookie|api[._-]?key|email|"
-    r"phone|address|url|path|file|argument|param",
-    re.IGNORECASE,
-)
 
 _GEN_AI_OPERATION_TYPE = {
     "chat": "llm",
@@ -80,11 +60,9 @@ class OtlpError(ValueError):
 
 
 def capture_mode() -> str:
-    return (
-        "full"
-        if os.getenv("OBSERVATORY_OTLP_CAPTURE", "metadata").strip().lower() == "full"
-        else "metadata"
-    )
+    """OTLP's default capture mode (a project's own setting overrides it at ingestion)."""
+    value = os.getenv("OBSERVATORY_OTLP_CAPTURE", "metadata").strip().lower()
+    return value if value in MODES else "metadata"
 
 
 def decompress(body: bytes, encoding: str | None) -> bytes:
@@ -158,18 +136,19 @@ def _attrs(items: list[dict[str, Any]] | None) -> dict[str, Any]:
 
 
 def _safe_attributes(raw: dict[str, Any], mode: str) -> dict[str, Any]:
+    """Bound the attributes; ``metadata`` also drops content-like keys (shared with capture.py).
+
+    The receiver translates with ``full`` and lets ingestion apply the project's capture mode."""
     out: dict[str, Any] = {}
     for key, value in raw.items():
         if len(out) >= _MAX_ATTRS:
             break
-        if mode != "full" and not key.startswith(_ALLOWED) and _DENY.search(key):
-            continue
         if isinstance(value, str):
-            value = value[:_MAX_ATTR_BYTES] if mode != "full" else value[:4000]
+            value = value[:4000]
         elif isinstance(value, list):
-            value = [v[:_MAX_ATTR_BYTES] if isinstance(v, str) else v for v in value[:16]]
+            value = [v[:4000] if isinstance(v, str) else v for v in value[:16]]
         out[key[:128]] = value
-    return out
+    return filter_attributes(out, mode) or {}
 
 
 def _span_type(attrs: dict[str, Any]) -> str:

@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.capture import apply_capture, capture_mode
 from app.db import get_session
 from app.models.trace import Span, Trace
 from app.ratelimit import limiter
@@ -198,11 +199,19 @@ async def create_trace(
     session.add(trace)
 
     # Add spans
+    mode = await capture_mode(session, trace.project_id, "full")
     for span_data in trace_data.spans:
         span_end = (
             datetime.fromtimestamp(span_data.end_time, tz=timezone.utc)
             if span_data.end_time
             else None
+        )
+        captured = apply_capture(
+            mode,
+            inp=span_data.input,
+            out=span_data.output,
+            attributes=span_data.attributes,
+            meta=span_data.metadata,
         )
         span = Span(
             id=span_data.id or str(uuid.uuid4()),
@@ -213,13 +222,13 @@ async def create_trace(
             start_time=datetime.fromtimestamp(span_data.start_time, tz=timezone.utc),
             end_time=span_end,
             status=span_data.status,
-            inp=span_data.input,
-            out=span_data.output,
+            inp=captured[0],
+            out=captured[1],
             tokens_input=span_data.tokens_input,
             tokens_output=span_data.tokens_output,
             cost_usd=span_data.cost_usd,
-            meta=span_data.metadata,
-            attributes=span_data.attributes,
+            meta=captured[3],
+            attributes=captured[2],
         )
         session.add(span)
 
@@ -284,7 +293,15 @@ async def create_traces_batch(
             session.add(trace)
 
         # Add spans
+        mode = await capture_mode(session, trace.project_id, "full")
         for span_data in spans:
+            captured = apply_capture(
+                mode,
+                inp=span_data.input,
+                out=span_data.output,
+                attributes=span_data.attributes,
+                meta=span_data.metadata,
+            )
             span = Span(
                 id=span_data.id or str(uuid.uuid4()),
                 trace_id=trace_id,
@@ -298,13 +315,13 @@ async def create_traces_batch(
                     else None
                 ),
                 status=span_data.status,
-                inp=span_data.input,
-                out=span_data.output,
+                inp=captured[0],
+                out=captured[1],
                 tokens_input=span_data.tokens_input,
                 tokens_output=span_data.tokens_output,
                 cost_usd=span_data.cost_usd,
-                meta=span_data.metadata,
-                attributes=span_data.attributes,
+                meta=captured[3],
+                attributes=captured[2],
             )
             session.add(span)
 
@@ -723,12 +740,20 @@ async def import_traces(
         session.add(trace)
         await session.flush()
 
+        mode = await capture_mode(session, trace.project_id, "full")
         for span_data in trace_data.spans:
             span_start = datetime.fromtimestamp(span_data.start_time, tz=timezone.utc)
             span_end = (
                 datetime.fromtimestamp(span_data.end_time, tz=timezone.utc)
                 if span_data.end_time
                 else None
+            )
+            captured = apply_capture(
+                mode,
+                inp=span_data.input,
+                out=span_data.output,
+                attributes=span_data.attributes,
+                meta=span_data.metadata,
             )
             span = Span(
                 id=str(uuid.uuid4()),
@@ -738,13 +763,13 @@ async def import_traces(
                 start_time=span_start,
                 end_time=span_end,
                 status=span_data.status,
-                inp=span_data.input,
-                out=span_data.output,
+                inp=captured[0],
+                out=captured[1],
                 tokens_input=span_data.tokens_input,
                 tokens_output=span_data.tokens_output,
                 cost_usd=span_data.cost_usd,
-                meta=span_data.metadata,
-                attributes=span_data.attributes,
+                meta=captured[3],
+                attributes=captured[2],
             )
             session.add(span)
 

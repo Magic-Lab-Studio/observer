@@ -28,6 +28,9 @@ from app.otlp import (
     response_body,
     translate,
 )
+from app.otlp import (
+    capture_mode as otlp_capture_mode,
+)
 from app.ratelimit import limiter
 
 router = APIRouter()
@@ -86,7 +89,9 @@ async def receive_traces(
     try:
         body = decompress(await request.body(), request.headers.get("content-encoding"))
         data = request_from_protobuf(body) if protobuf else request_from_json(body)
-        translated = translate(data, project_id=request.headers.get("x-observer-project"))
+        translated = translate(
+            data, project_id=request.headers.get("x-observer-project"), mode="full"
+        )
     except OtlpError as exc:
         return _plain(exc.status, str(exc))
 
@@ -98,7 +103,7 @@ async def receive_traces(
             await _link_and_widen(session, envelope)
             payload = ManitOSIngestRequest.model_validate(envelope)
             async with session.begin_nested():  # a rejected trace leaves no receipt behind
-                await apply_envelope(session, payload)
+                await apply_envelope(session, payload, default_capture=otlp_capture_mode())
         except ValidationError as exc:
             rejected += count
             errors.append(f"trace rejected: {exc.errors()[0]['msg']}"[:200])
