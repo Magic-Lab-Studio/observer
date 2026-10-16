@@ -307,6 +307,7 @@ export const EN: Record<string, string> = {
   'Recepción de telemetría': 'Telemetry intake',
   'Cuándo llegó la última traza de cada proyecto': 'When the last trace of each project arrived',
   'Aún no llega telemetría': 'No telemetry yet',
+  'Sin trazas desde hace más de 7 días: {names}': 'No traces for over 7 days: {names}',
   'hace {x}': '{x} ago',
   '{a} en 5 min · {b} en 1 h · {c} en 24 h': '{a} in 5 min · {b} in 1 h · {c} in 24 h',
   'Minutos sin recibir trazas': 'Minutes without traces',

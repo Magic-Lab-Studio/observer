@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
     container_name: llm-observatory-postgres
     environment:
       POSTGRES_USER: postgres

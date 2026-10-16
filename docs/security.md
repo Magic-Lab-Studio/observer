@@ -15,6 +15,17 @@ in front of it.
   when it is empty. Anyone who can reach an unauthenticated backend can read, change and delete
   data.
 
+## Checked (2026-10-16)
+
+* The podman stack was brought up for real (`podman-compose`, rootless podman 5.7): the backend
+  migrated PostgreSQL to head, answered `/health`, the dashboard proxied the API, only
+  `127.0.0.1` ports were listening and PostgreSQL had none. Without `POSTGRES_PASSWORD` it refuses
+  to start. This found that the Containerfiles and compose files used short image names, which
+  podman cannot resolve without a configured registry; they are now `docker.io/library/...`.
+* `pip-audit` (backend) and `npm audit --omit=dev` (dashboard) reported no known vulnerabilities on
+  that date. Repeat them; this is a snapshot.
+* The SDK spool (`spool_dir`) stores spans unencrypted with mode 0600; keep it on a private disk.
+
 ## Before exposing it on a network
 
 1. Set `OBSERVATORY_API_KEY` (clients send `Authorization: Bearer <key>`).

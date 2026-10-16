@@ -194,3 +194,6 @@ spool and a circuit breaker.
   PostgreSQL with no default password, key lending limited to local requests, size limits on the
   generic ingestion routes, rate-limit identity by validated key or IP, MCP attribute allow-list,
   internal hand-off notes removed. See `docs/security.md`.
+- 2026-10-16: decision on reply text: Manitos keeps exporting metadata only, so phrase checks stay
+  `unknown` (the operator chose privacy over text evaluation). The ingestion card sets projects
+  silent for over a week apart. Compose files verified on podman and image names fully qualified.

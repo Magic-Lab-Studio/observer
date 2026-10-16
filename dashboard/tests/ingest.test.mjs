@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { silenceText, silenceTone } from '../src/helpers/ingest.ts';
+import { silenceText, silenceTone, splitDormant } from '../src/helpers/ingest.ts';
 
 test('silenceText speaks in the right unit', () => {
   assert.equal(silenceText(null), '–');
@@ -19,4 +19,14 @@ test('recent traffic is ok, fresh silence warns, long silence after activity is 
 test('an already idle project is neutral, not an alarm', () => {
   assert.equal(silenceTone(500, 0), 'neutral');
   assert.equal(silenceTone(null, 0), 'neutral');
+});
+
+test('projects silent for over a week are set apart, never-sent ones stay listed', () => {
+  const { active, dormant } = splitDormant([
+    { id: 'a', silence_minutes: 5 },
+    { id: 'b', silence_minutes: 125808 },
+    { id: 'c', silence_minutes: null },
+  ]);
+  assert.deepEqual(active.map((p) => p.id), ['a', 'c']);
+  assert.deepEqual(dormant.map((p) => p.id), ['b']);
 });

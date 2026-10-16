@@ -20,3 +20,12 @@ export function silenceTone(minutes: number | null, tracesLastHour: number): Ing
   if (tracesLastHour === 0 && minutes > 60) return 'neutral';
   return minutes > 60 ? 'bad' : 'warn';
 }
+
+/** A project silent for longer than this is tucked away instead of listed (an old test project). */
+export const DORMANT_AFTER_MINUTES = 7 * 1440;
+
+/** Splits projects into the ones worth listing and the dormant ones (never sent, or silent for 7+ days). */
+export function splitDormant<T extends { silence_minutes: number | null }>(projects: T[]): { active: T[]; dormant: T[] } {
+  const dormant = projects.filter((p) => p.silence_minutes != null && p.silence_minutes > DORMANT_AFTER_MINUTES);
+  return { active: projects.filter((p) => !dormant.includes(p)), dormant };
+}
