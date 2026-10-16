@@ -49,9 +49,8 @@ def test_provider_comes_from_the_answering_label():
 
 
 def test_grade_boundaries():
-    assert [grade_for(x) for x in (1.0, 0.9, 0.89, 0.7, 0.5, 0.2, 0.0)] == list("AABCCDF")[
-        :7
-    ] or True
+    scores = (1.0, 0.9, 0.89, 0.7, 0.69, 0.5, 0.49, 0.2, 0.19, 0.0)
+    assert [grade_for(x) for x in scores] == list("AABBCCDDFF")
     assert grade_for(0.9) == "A" and grade_for(0.69) == "C" and grade_for(0.19) == "F"
 
 
@@ -170,3 +169,16 @@ async def test_sweep_reaches_turns_older_than_the_newest_page(db_session):
     assert done == 205
     total = (await db_session.execute(select(func.count()).select_from(Evaluation))).scalar()
     assert total == 205
+
+
+@pytest.mark.anyio
+async def test_unscorable_recent_turns_do_not_starve_older_eligible_ones(db_session):
+    older = [await _turn(db_session, ago_min=600 + i) for i in range(3)]
+    for i in range(6):  # newer than every eligible turn, but still without their lifecycle span
+        await _turn(db_session, ago_min=1 + i, lifecycle=False)
+    await db_session.commit()
+
+    # A batch of 3 used to be filled by the 6 newest turns, which are skipped, scoring nothing.
+    assert await evaluate_new_turns(db_session, batch=3) == 3
+    for trace in older:
+        assert await db_session.get(Evaluation, evaluation_id(trace.id)) is not None

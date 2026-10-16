@@ -240,7 +240,12 @@ def attempt_records(turns: list[TurnSignals]) -> list[dict[str, Any]]:
 
 
 async def evaluation_records(
-    session: AsyncSession, *, project_id: str, since: datetime, limit: int
+    session: AsyncSession,
+    *,
+    project_id: str,
+    since: datetime,
+    limit: int,
+    until: datetime | None = None,
 ) -> list[dict[str, Any]]:
     query = (
         select(Evaluation.score, Evaluation.result, Trace.created_at, Trace.environment)
@@ -253,6 +258,8 @@ async def evaluation_records(
         .order_by(Trace.created_at.desc())
         .limit(limit)
     )
+    if until is not None:
+        query = query.where(Trace.created_at <= until)
     out = []
     for score, result, created, env in (await session.execute(query)).all():
         data = result if isinstance(result, dict) else {}
@@ -334,12 +341,14 @@ async def run_query(session: AsyncSession, req: QueryRequest) -> dict[str, Any]:
     granularity = resolve_granularity(req, start, end)
     if req.view == "evaluations":
         records = await evaluation_records(
-            session, project_id=req.project_id, since=start, limit=ROW_LIMIT
+            session, project_id=req.project_id, since=start, limit=ROW_LIMIT, until=end
         )
+        loaded = len(records)
     else:
         turns = await load_turn_signals(
-            session, project_id=req.project_id, since=start, limit=ROW_LIMIT
+            session, project_id=req.project_id, since=start, limit=ROW_LIMIT, until=end
         )
+        loaded = len(turns)
         records = turn_records(turns) if req.view == "turns" else attempt_records(turns)
     records = [r for r in records if r["time"] is not None and start <= r["time"] <= end]
     rows = run_aggregation(records, req, granularity)
@@ -358,7 +367,7 @@ async def run_query(session: AsyncSession, req: QueryRequest) -> dict[str, Any]:
         "to": end.isoformat(),
         "granularity": granularity,
         "samples": len(records),
-        "truncated": len(records) >= ROW_LIMIT,
+        "truncated": loaded >= ROW_LIMIT,
         "rows": rows[: req.row_limit],
     }
 

@@ -266,3 +266,26 @@ async def test_evaluations_view_and_schema(client, db_session):
 def test_validate_and_metric_key_are_pure():
     req = QueryRequest.model_validate(_q(metrics=[{"measure": "ttft_ms", "aggregation": "p95"}]))
     assert validate(req).label == "Turnos" and metric_key(req.metrics[0]) == "p95_ttft_ms"
+
+
+@pytest.mark.anyio
+async def test_end_date_is_applied_before_the_row_cap(client, db_session, monkeypatch):
+    import app.metrics_query as mq
+
+    monkeypatch.setattr(mq, "ROW_LIMIT", 2)
+    # The only turn inside the requested range:
+    await _turn(db_session, ago_min=300, duration_ms=1000)
+    for i in range(4):  # newer than the range end: they used to fill the cap
+        await _turn(db_session, ago_min=10 + i, duration_ms=1000)
+    await db_session.commit()
+    now = datetime.now(timezone.utc)
+    body = _q(
+        from_time=(now - timedelta(hours=6)).isoformat(),
+        to_time=(now - timedelta(hours=1)).isoformat(),
+    )
+    res = (await client.post("/v1/analytics/query", json=body)).json()
+    assert res["samples"] == 1 and res["rows"][0]["count"] == 1
+    assert res["truncated"] is False
+    # Inside the range there are more rows than the cap: now it says so.
+    body["to_time"] = now.isoformat()
+    assert (await client.post("/v1/analytics/query", json=body)).json()["truncated"] is True
