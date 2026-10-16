@@ -312,6 +312,14 @@ async def ingest_manitos_trace(
     """Upsert a complete integration trace with retry-safe semantics."""
 
     del request  # Required by SlowAPI's decorator contract.
+    return await apply_envelope(session, payload)
+
+
+async def apply_envelope(
+    session: AsyncSession, payload: ManitOSIngestRequest
+) -> ManitOSIngestResponse:
+    """The ingestion itself (also used by the OTLP receiver, which builds envelopes)."""
+
     digest = _payload_hash(payload)
     receipt = await _existing_receipt(
         session,

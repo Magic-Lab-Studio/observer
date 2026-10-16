@@ -26,8 +26,8 @@ and write down what was learned or changed. Keep entries short.
 | 2 | Datasets from traces | done | this PR |
 | 3 | Compare runs by version | done | this PR |
 | 4 | Regression command for CI | done | this PR |
-| 5 | Standard OTLP ingestion | planned | |
-| 6 | Read-only MCP server | done | this PR |
+| 5 | Standard OTLP ingestion | done | #56 |
+| 6 | Read-only MCP server | done | #57 |
 | 7 | Configurable capture privacy | later | |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | later | |
 
@@ -94,7 +94,11 @@ threshold or a per-case expectation regresses.
 
 Today `OTLPExporter` posts Observer's own JSON to `/v1/traces/batch`; there is no OTLP receiver.
 
-- Add an OTLP/HTTP receiver and a documented attribute mapping.
+- **Built:** `POST /v1/otlp/v1/traces` (`app/api/otlp.py`, translation in `app/otlp.py`), protobuf
+  and JSON, gzip, partial success. It translates OTLP spans into the existing
+  `manitos.telemetry.v1` envelope and reuses its ingestion (idempotency, upsert), so nothing else
+  changes. Mapping, privacy modes and limits: `docs/otlp.md`. Metadata-only by default
+  (`OBSERVATORY_OTLP_CAPTURE`); gRPC is not supported. New dependency: `opentelemetry-proto`.
 - Done when: an app instrumented with a stock OpenTelemetry exporter shows up without the SDK.
 
 ## Step 6: read-only MCP server
@@ -143,6 +147,10 @@ investigate without screenshots. Read-only first.
   export tool spans and reply text before the gate can verify them on real traces.
 - 2026-10-16: Manitos PR #36 merged: tool spans exported. Tool expectations are now verifiable on
   new traces; text phrases remain `unknown`. Observer services migrated and restarted.
+- 2026-10-16: step 5 done. OTLP/HTTP receiver, verified with a stock `opentelemetry-sdk` +
+  `opentelemetry-exporter-otlp-proto-http` app (protobuf default): trace, spans, token counts and a
+  tool span arrive, prompt attributes are dropped. Learned: protobuf's JSON mapping writes ids as
+  base64, OTLP/JSON as hex, so ids are normalised to hex before translation.
 - 2026-10-16: step 6 done. `observer-mcp`: 11 read-only tools, no content by default. Verified over
   real stdio with an MCP client against a synthetic Observer (an OTLP-ingested trace with its tool
   span was listed and read). Steps 1-6 complete; what remains is under "Later".
