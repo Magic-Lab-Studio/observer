@@ -27,7 +27,7 @@ and write down what was learned or changed. Keep entries short.
 | 3 | Compare runs by version | done | this PR |
 | 4 | Regression command for CI | done | this PR |
 | 5 | Standard OTLP ingestion | planned | |
-| 6 | Read-only MCP server | planned | |
+| 6 | Read-only MCP server | done | this PR |
 | 7 | Configurable capture privacy | later | |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | later | |
 
@@ -102,6 +102,11 @@ Today `OTLPExporter` posts Observer's own JSON to `/v1/traces/batch`; there is n
 Tools to list failed traces, compare runs and fetch evidence, so Claude or Codex can
 investigate without screenshots. Read-only first.
 
+- **Built:** `observer-mcp` (`app/ops/mcp_server.py`, stdio, optional extra `mcp`): 11 read-only
+  tools over the HTTP API. Content (`input`/`output`) is never returned unless
+  `OBSERVER_MCP_CONTENT=1`. Tools, setup and privacy: `docs/mcp.md`. A test fails if the reader can
+  use any method other than `GET` or the metrics query.
+
 ## Later
 
 - **Capture privacy modes per project** (metadata only, redacted, full), filtered before export.
@@ -138,3 +143,6 @@ investigate without screenshots. Read-only first.
   export tool spans and reply text before the gate can verify them on real traces.
 - 2026-10-16: Manitos PR #36 merged: tool spans exported. Tool expectations are now verifiable on
   new traces; text phrases remain `unknown`. Observer services migrated and restarted.
+- 2026-10-16: step 6 done. `observer-mcp`: 11 read-only tools, no content by default. Verified over
+  real stdio with an MCP client against a synthetic Observer (an OTLP-ingested trace with its tool
+  span was listed and read). Steps 1-6 complete; what remains is under "Later".

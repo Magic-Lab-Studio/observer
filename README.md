@@ -280,6 +280,13 @@ Scores of the previous rubric are replaced when the turn is re-scored. A backgro
 backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
 Evaluations page shows health by model, both axes, the grade and the per-criterion breakdown.
 
+### Read-only MCP server
+
+`observer-mcp` lets Claude Code, Codex or any MCP client investigate Observer without screenshots:
+failed traces with reasons, one trace's spans, tools and provider chain, alerts, datasets, version
+comparisons and metric queries. Read-only, and trace input/output are never returned unless
+`OBSERVER_MCP_CONTENT=1`. Setup and tools: [docs/mcp.md](docs/mcp.md).
+
 ### Test cases (datasets)
 
 On a trace page, **Save as case** stores a failure as a reusable test case in a dataset. A case is
