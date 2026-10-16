@@ -14,13 +14,13 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.evaluators.manitos_turn import RUBRIC, score_turn
 from app.metrics_core import load_signals_for
 from app.models.evaluation import Evaluation
-from app.models.trace import Trace
+from app.models.trace import Span, Trace
 from app.websocket import manager
 
 logger = logging.getLogger("observatory.auto_eval")
@@ -73,7 +73,15 @@ async def evaluate_new_turns(
             for tid in (
                 await session.execute(
                     select(Trace.id)
-                    .where(Trace.project_id == project_id, Trace.created_at >= since)
+                    .where(
+                        Trace.project_id == project_id,
+                        Trace.created_at >= since,
+                        # Only turns that can be scored: ones still waiting for their lifecycle
+                        # span must not fill the batch and starve the older, eligible ones.
+                        exists().where(
+                            Span.trace_id == Trace.id, Span.name == "manitos.turn.lifecycle"
+                        ),
+                    )
                     .order_by(Trace.created_at.desc())
                     .limit(page)
                     .offset(offset)

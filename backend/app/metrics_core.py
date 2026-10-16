@@ -132,8 +132,13 @@ async def load_turn_signals(
     since: datetime,
     environment: str | None = None,
     limit: int = ROW_LIMIT,
+    until: datetime | None = None,
 ) -> list[TurnSignals]:
-    """Signals of every turn created at or after ``since`` (newest first, capped at ``limit``)."""
+    """Signals of every turn created in ``[since, until]`` (newest first, capped at ``limit``).
+
+    Both bounds are applied in SQL before the cap, so a historical range is never starved by
+    newer rows.
+    """
     query = (
         select(
             Trace.id,
@@ -148,6 +153,8 @@ async def load_turn_signals(
         .order_by(Trace.created_at.desc())
         .limit(limit)
     )
+    if until is not None:
+        query = query.where(Trace.created_at <= until)
     if environment:
         query = query.where(Trace.environment == environment)
     rows = (await session.execute(query)).all()
