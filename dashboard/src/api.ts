@@ -22,6 +22,8 @@ import type {
   DatasetCase,
   DatasetDetail,
   DatasetSummary,
+  DatasetRunInfo,
+  RunComparison,
 } from './types';
 
 const BASE_URL = '/api';
@@ -144,6 +146,15 @@ export const api = {
   },
   async addCase(datasetId: string, body: { trace_id?: string; tags: string[]; expect: CaseExpect; label: string | null; notes: string | null }): Promise<DatasetCase> {
     return request(`/v1/datasets/${datasetId}/items`, { method: 'POST', body: JSON.stringify(body) });
+  },
+  async listRuns(datasetId: string): Promise<DatasetRunInfo[]> {
+    return request(`/v1/datasets/${datasetId}/runs`);
+  },
+  async compareRuns(datasetId: string, base: string, candidate: string): Promise<RunComparison> {
+    return request(`/v1/datasets/${datasetId}/compare?base=${base}&candidate=${candidate}`);
+  },
+  async deleteRun(id: string): Promise<void> {
+    await request(`/v1/datasets/runs/${id}`, { method: 'DELETE' });
   },
   async deleteCase(id: string): Promise<void> {
     await request(`/v1/datasets/items/${id}`, { method: 'DELETE' });
