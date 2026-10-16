@@ -4,6 +4,7 @@ import { api } from '../api';
 import type { Trace, Span } from '../types';
 import TraceWaterfall from '../components/TraceWaterfall';
 import SpanDetail from '../components/SpanDetail';
+import SaveAsCase from '../components/SaveAsCase';
 import { Card, Chip, EmptyState, ErrorState, Icon, Kpi, Skeleton, StatusPill } from '../components/ui';
 import { fmtInt, fmtMs, fmtUsd, stageLabel, stageTimings, traceDurationMs } from '../helpers/format';
 import { parseApiDate } from '../dates';
@@ -37,6 +38,7 @@ function TraceDetail() {
   const [trace, setTrace] = useState<Trace | null>(null);
   const [spans, setSpans] = useState<Span[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Span | null>(null);
 
@@ -86,9 +88,13 @@ function TraceDetail() {
           <h1 className="text-lg font-semibold tracking-tight">{trace.name}</h1>
           <StatusPill status={trace.status} />
           {trace.environment && <Chip>{trace.environment}</Chip>}
+          <button type="button" onClick={() => setSaving((v) => !v)}
+            className="ml-auto rounded-lg border border-line bg-panel px-3 py-1.5 text-xs text-ink hover:bg-raised">{t('Guardar como caso')}</button>
         </div>
         <p className="mt-1 font-mono text-[11px] text-faint">{trace.id} · {parseApiDate(trace.created_at).toLocaleString(localeTag())}</p>
       </div>
+
+      {saving && <SaveAsCase traceId={trace.id} onClose={() => setSaving(false)} />}
 
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi label={t("Duración")} value={fmtMs(dur)} />

@@ -13,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api import alerts as alerts_api
 from app.api import analytics, evaluations, manitos_ingest, providers, traces
+from app.api import datasets as datasets_api
 from app.auth import require_api_key
 from app.db.postgres import engine
 from app.ratelimit import limiter
@@ -103,6 +104,12 @@ app.include_router(
     alerts_api.router,
     prefix="/v1/alerts",
     tags=["alerts"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    datasets_api.router,
+    prefix="/v1/datasets",
+    tags=["datasets"],
     dependencies=[_app_auth],
 )
 app.include_router(

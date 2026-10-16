@@ -18,6 +18,10 @@ import type {
   EvaluationsByModel,
   QueryResult,
   QuerySchema,
+  CaseExpect,
+  DatasetCase,
+  DatasetDetail,
+  DatasetSummary,
 } from './types';
 
 const BASE_URL = '/api';
@@ -120,6 +124,29 @@ export const api = {
   },
   async queryMetrics(body: unknown): Promise<QueryResult> {
     return request('/v1/analytics/query', { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  // Datasets (test cases saved from traces; metadata only)
+  async listDatasets(): Promise<DatasetSummary[]> {
+    return request('/v1/datasets');
+  },
+  async createDataset(name: string): Promise<DatasetSummary> {
+    return request('/v1/datasets', { method: 'POST', body: JSON.stringify({ name }) });
+  },
+  async getDataset(id: string): Promise<DatasetDetail> {
+    return request(`/v1/datasets/${id}`);
+  },
+  async deleteDataset(id: string): Promise<void> {
+    await request(`/v1/datasets/${id}`, { method: 'DELETE' });
+  },
+  async exportDataset(id: string): Promise<unknown> {
+    return request(`/v1/datasets/${id}/export`);
+  },
+  async addCase(datasetId: string, body: { trace_id?: string; tags: string[]; expect: CaseExpect; label: string | null; notes: string | null }): Promise<DatasetCase> {
+    return request(`/v1/datasets/${datasetId}/items`, { method: 'POST', body: JSON.stringify(body) });
+  },
+  async deleteCase(id: string): Promise<void> {
+    await request(`/v1/datasets/items/${id}`, { method: 'DELETE' });
   },
 
   // Alerts

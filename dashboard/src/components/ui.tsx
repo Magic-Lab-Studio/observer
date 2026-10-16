@@ -15,6 +15,7 @@ export function Icon({ name, className = 'size-4' }: { name: string; className?:
     warn: 'M12 3l10 18H2zM12 10v5M12 18v.01',
     menu: 'M4 6h16M4 12h16M4 18h16',
     explore: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+    cases: 'M9 3h6l1 2h3v16H5V5h3zM9 12l2 2 4-4',
     bell: 'M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8zM10 20a2 2 0 004 0',
     providers: 'M5 12h4M15 12h4M9 12a3 3 0 106 0 3 3 0 00-6 0zM12 5V3M12 21v-2',
   };
