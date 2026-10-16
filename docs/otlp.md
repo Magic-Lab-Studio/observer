@@ -41,7 +41,9 @@ Events and links are ignored.
 
 ## Privacy: metadata only by default
 
-Observer is metadata-only. `OBSERVATORY_OTLP_CAPTURE` chooses what is stored:
+Observer is metadata-only. A project's capture mode (Privacy page, see `docs/privacy.md`) decides
+what is stored for it; without one, `OBSERVATORY_OTLP_CAPTURE` (`metadata` by default, also
+`redacted` or `full`) is used. What each mode does to span attributes:
 
 * `metadata` (default): span attributes whose key looks like content are dropped before storage
   (anything containing `prompt`, `completion`, `content`, `message`, `input`, `output`, `query`,

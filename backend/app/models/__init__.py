@@ -14,6 +14,7 @@ from app.models.datasets import Dataset, DatasetItem  # noqa: E402
 from app.models.evaluation import Evaluation  # noqa: E402
 from app.models.ingestion import IngestionReceipt  # noqa: E402
 from app.models.runs import DatasetRun, RunResult  # noqa: E402
+from app.models.settings import ProjectSetting  # noqa: E402
 from app.models.trace import Span, Trace  # noqa: E402
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "DatasetItem",
     "DatasetRun",
     "RunResult",
+    "ProjectSetting",
 ]

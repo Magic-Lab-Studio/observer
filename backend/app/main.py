@@ -16,6 +16,7 @@ from app.api import analytics, evaluations, manitos_ingest, providers, traces
 from app.api import dataset_runs as dataset_runs_api
 from app.api import datasets as datasets_api
 from app.api import otlp as otlp_api
+from app.api import privacy as privacy_api
 from app.auth import require_api_key
 from app.db.postgres import engine
 from app.ratelimit import limiter
@@ -112,6 +113,12 @@ app.include_router(
     dataset_runs_api.router,
     prefix="/v1/datasets",
     tags=["datasets"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    privacy_api.router,
+    prefix="/v1/privacy",
+    tags=["privacy"],
     dependencies=[_app_auth],
 )
 app.include_router(

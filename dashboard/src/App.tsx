@@ -18,6 +18,7 @@ const Providers = lazy(() => import('./pages/Providers'));
 const Alerts = lazy(() => import('./pages/Alerts'));
 const Explore = lazy(() => import('./pages/Explore'));
 const Datasets = lazy(() => import('./pages/Datasets'));
+const Privacy = lazy(() => import('./pages/Privacy'));
 
 const NAV = [
   { to: '/', label: 'Resumen', icon: 'overview', end: true },
@@ -27,6 +28,7 @@ const NAV = [
   { to: '/alerts', label: 'Alertas', icon: 'bell', end: false },
   { to: '/evaluations', label: 'Evaluaciones', icon: 'evals', end: false },
   { to: '/datasets', label: 'Casos', icon: 'cases', end: false },
+  { to: '/privacy', label: 'Privacidad', icon: 'shield', end: false },
 ];
 
 const RANGES = [
@@ -163,6 +165,7 @@ function Shell() {
                 <Route path="/explore" element={<Explore />} />
                 <Route path="/evaluations" element={<Evaluations />} />
                 <Route path="/datasets" element={<Datasets />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route path="*" element={
                   <div className="py-24 text-center">
                     <h1 className="text-3xl font-semibold">404</h1>
