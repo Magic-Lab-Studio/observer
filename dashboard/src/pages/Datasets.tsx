@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import type { DatasetDetail, DatasetSummary } from '../types';
 import { Card, Chip, EmptyState, ErrorState, Skeleton } from '../components/ui';
+import RunsPanel from '../components/RunsPanel';
 import { timeAgo } from '../helpers/format';
 import { t } from '../i18n';
 
@@ -87,6 +88,7 @@ function Datasets() {
                 )}
               </Card>
             )}
+            {open && <div className="mt-4"><RunsPanel datasetId={open.id} cases={open.items} /></div>}
           </div>
         </div>
       )}

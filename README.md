@@ -232,6 +232,11 @@ Base URL: `http://localhost:8000`
 | `PATCH`  | `/v1/datasets/items/{id}`         | Edit a case                       |
 | `DELETE` | `/v1/datasets/items/{id}`         | Delete a case                     |
 | `DELETE` | `/v1/datasets/{id}`               | Delete a dataset and its cases    |
+| `POST`   | `/v1/datasets/{id}/runs`          | Record a run: version + a trace per case |
+| `GET`    | `/v1/datasets/{id}/runs`          | Runs of a dataset with summaries  |
+| `GET`    | `/v1/datasets/{id}/compare`       | Case-by-case diff (`?base=&candidate=`) |
+| `GET`    | `/v1/datasets/runs/{id}`          | One run with every case result    |
+| `DELETE` | `/v1/datasets/runs/{id}`          | Delete a run                      |
 | `GET`    | `/v1/evaluations/by-model`        | Turn health by model and provider |
 | `POST`   | `/v1/analytics/query`             | Flexible metrics query            |
 | `GET`    | `/v1/analytics/query/schema`      | Views, measures and dimensions    |
@@ -286,6 +291,17 @@ optional human verdict (correct / incorrect). Cases keep their source trace id b
 retention purges the trace. `GET /v1/datasets/{id}/export` returns the `observer.dataset.v1` JSON
 that later steps (run comparison, a CI regression command) read. Note: Manitos does not export
 tool-call spans yet, so `observed.tools` is empty until it does.
+
+### Runs and version comparison
+
+Observer does not execute the agent. Whoever ran the cases (a developer, CI) reports a **run**:
+`POST /v1/datasets/{id}/runs` with the version (`commit`, `model`, a small `config` map; the rubric
+version is added by Observer) and the trace each case produced. Observer checks every case against
+its trace: health conditions are verified; tool expectations are verified only when the trace has
+tool spans, and text phrases only when reply text is available. Anything it cannot decide is
+**unknown**, never a silent pass, and a run's pass rate counts decided cases only. The Cases page
+lists the runs of a dataset and compares two of them case by case (regressed, improved, same, no
+data, missing), with the difference in health score, duration and configuration.
 
 ### Alerts
 

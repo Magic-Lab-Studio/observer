@@ -186,3 +186,13 @@ export interface DatasetCase {
   observed: Record<string, unknown>; created_at: string | null;
 }
 export interface DatasetDetail { id: string; name: string; project_id: string; description: string | null; items: DatasetCase[] }
+
+export interface RunVersion { commit?: string | null; model?: string | null; config?: Record<string, string | number | boolean>; rubric?: string }
+export interface RunSummary { pass: number; fail: number; unknown: number; cases: number; pass_rate: number | null; avg_health: number | null }
+export interface DatasetRunInfo { id: string; dataset_id: string; name: string | null; version: RunVersion; created_at: string | null; summary: RunSummary }
+export type CaseChange = 'regressed' | 'improved' | 'same' | 'unknown' | 'missing';
+export interface RunComparison {
+  base: DatasetRunInfo; candidate: DatasetRunInfo;
+  summary: Record<CaseChange, number>;
+  cases: { item_id: string; change: CaseChange; base: { status: string; health_score: number | null } | null; candidate: { status: string; health_score: number | null } | null; health_delta: number | null; duration_delta_ms: number | null }[];
+}

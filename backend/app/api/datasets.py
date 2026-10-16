@@ -15,8 +15,10 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.evaluators.manitos_turn import score_turn
 from app.metrics_core import load_signals_for
 from app.models.datasets import Dataset, DatasetItem
+from app.models.runs import DatasetRun, RunResult
 from app.models.trace import Span, Trace
 
 router = APIRouter()
@@ -147,6 +149,7 @@ async def _observed(session: AsyncSession, trace_id: str) -> tuple[dict[str, Any
         "tool_error": signals.tool_error,
         "fallback": signals.fallback,
         "tools": sorted(set(tool_spans)),
+        "health_score": score_turn(signals)["health"]["score"],
     }
     return observed, signals.intent or None
 
@@ -204,6 +207,9 @@ async def delete_dataset(
 ) -> dict[str, str]:
     dataset = await _dataset(session, dataset_id)
     # Children first: SQLite enforces ON DELETE CASCADE only with foreign keys switched on.
+    run_ids = select(DatasetRun.id).where(DatasetRun.dataset_id == dataset_id)
+    await session.execute(delete(RunResult).where(RunResult.run_id.in_(run_ids)))
+    await session.execute(delete(DatasetRun).where(DatasetRun.dataset_id == dataset_id))
     await session.execute(delete(DatasetItem).where(DatasetItem.dataset_id == dataset_id))
     await session.delete(dataset)
     return {"status": "deleted"}

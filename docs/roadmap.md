@@ -24,7 +24,7 @@ and write down what was learned or changed. Keep entries short.
 |---|------|-------|----|
 | 1 | Separate operational health from quality | done | this PR |
 | 2 | Datasets from traces | done | this PR |
-| 3 | Compare runs by version | planned | |
+| 3 | Compare runs by version | done | this PR |
 | 4 | Regression command for CI | planned | |
 | 5 | Standard OTLP ingestion | planned | |
 | 6 | Read-only MCP server | planned | |
@@ -69,6 +69,11 @@ by a person before saving.
 Attach commit, model, configuration and rubric version to each run, then compare runs over the
 same cases with per-case differences.
 
+- **Built:** a run = a version (`commit`, `model`, `config`, plus the rubric version) and one trace
+  per case, reported through the API by whoever ran the cases. Observer checks each case against its
+  trace (`app/case_check.py`) and stores `pass` / `fail` / `unknown`. Comparing two runs of the same
+  dataset gives regressed / improved / same / unknown / missing per case, with health and duration
+  deltas and the configuration that differs.
 - Done when: it is clear whether a change improved or worsened the agent, and where.
 
 ## Step 4: regression command for CI
@@ -117,3 +122,7 @@ investigate without screenshots. Read-only first.
 - 2026-10-16: step 2 done. Tables `datasets`/`dataset_items` (migration `20261016_datasets`),
   `/v1/datasets`, "Save as case" on the trace page, a Cases page, JSON export. Learned: real
   Manitos traces carry no tool spans, so the tool expectations are stored but not yet checkable.
+- 2026-10-16: step 3 done. Tables `dataset_runs`/`run_results` (migration `20261017_runs`), run API,
+  `case_check`, comparison on the Cases page. Only health expectations can be verified on real
+  traces today; tool and text checks come back `unknown` until Manitos exports tool spans and
+  reply text. Step 4 (CI command) will fail on `fail` and report `unknown` separately.
