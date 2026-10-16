@@ -32,10 +32,14 @@ Issues = "https://github.com/Magic-Lab-Studio/observer/issues"
 observer-integration-passive-gate = "app.ops.manitos_passive_gate:main"
 observer-manitos-passive-gate = "app.ops.manitos_passive_gate:main"
 observer-regression = "app.ops.regression_gate:main"
+observer-mcp = "app.ops.mcp_server:main"
 
 [project.optional-dependencies]
 sqlite = [
     "aiosqlite>=0.20.0",
+]
+mcp = [
+    "mcp>=1.2,<2",
 ]
 dev = [
     "pytest>=8.0",
@@ -43,6 +47,7 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
     "aiosqlite>=0.20.0",
+    "mcp>=1.2,<2",
 ]
 
 [tool.hatch.build.targets.wheel]
