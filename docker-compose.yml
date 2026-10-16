@@ -4,10 +4,11 @@ services:
     container_name: llm-observatory-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # No default password: `export POSTGRES_PASSWORD=...` (or put it in a .env file) before `up`.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD before starting the stack}
       POSTGRES_DB: observatory
-    ports:
-      - "5432:5432"
+    # PostgreSQL is not published: only the backend, on the compose network, reaches it. To inspect
+    # it from the host, publish it on loopback only: "127.0.0.1:5432:5432".
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,9 +24,13 @@ services:
       dockerfile: Containerfile
     container_name: llm-observatory-backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/observatory
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/observatory
+      # Empty means no authentication: fine on loopback, never on a shared network.
+      OBSERVATORY_API_KEY: ${OBSERVATORY_API_KEY:-}
     ports:
-      - "8000:8000"
+      # Loopback by default. Set OBSERVER_BIND=0.0.0.0 only together with OBSERVATORY_API_KEY and
+      # a firewall or TLS-terminating proxy in front.
+      - "${OBSERVER_BIND:-127.0.0.1}:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,7 +42,7 @@ services:
       dockerfile: Containerfile
     container_name: llm-observatory-dashboard
     ports:
-      - "5173:5173"
+      - "${OBSERVER_BIND:-127.0.0.1}:5173:5173"
     depends_on:
       - backend
     restart: unless-stopped

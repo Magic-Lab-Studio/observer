@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -18,8 +19,9 @@ from app.api import datasets as datasets_api
 from app.api import ingest_health as ingest_health_api
 from app.api import otlp as otlp_api
 from app.api import privacy as privacy_api
-from app.auth import require_api_key
+from app.auth import API_KEY, require_api_key
 from app.db.postgres import engine
+from app.limits import BodyLimitMiddleware
 from app.ratelimit import limiter
 from app.websocket import manager
 
@@ -35,6 +37,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.auto_eval import auto_eval_loop
     from app.retention import retention_loop
 
+    if not API_KEY:
+        logging.getLogger("observatory").warning(
+            "OBSERVATORY_API_KEY is not set: the API is open to anyone who can reach it. "
+            "Keep it on loopback, or set a key before exposing it on a network."
+        )
     retention = asyncio.create_task(
         retention_loop(engine)
     )  # returns at once unless OBSERVATORY_RETENTION_DAYS > 0
@@ -75,6 +82,8 @@ def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONRespons
 
 
 app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)  # type: ignore[arg-type]
+
+app.add_middleware(BodyLimitMiddleware)
 
 # CORS middleware - configurable via CORS_ORIGINS env var (comma-separated)
 _cors_origins = os.getenv(
