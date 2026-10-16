@@ -303,6 +303,30 @@ tool spans, and text phrases only when reply text is available. Anything it cann
 lists the runs of a dataset and compares two of them case by case (regressed, improved, same, no
 data, missing), with the difference in health score, duration and configuration.
 
+### Regression gate for CI
+
+`observer-regression` decides from stored runs whether a version may ship. After the pipeline has
+run the dataset's cases, point it at the traces they produced:
+
+```bash
+observer-regression --dataset regresiones \
+  --results results.json --name "$GITHUB_SHA" --commit "$GITHUB_SHA" --model gemma3-4b \
+  --baseline previous --max-regressions 0 --report regression.json
+```
+
+`results.json` is a list of `{"case_trace": "<trace the case was saved from>", "trace_id":
+"<trace this run produced>"}` (or `item_id` instead of `case_trace`). Without `--results` it gates
+an already recorded run (`--candidate latest` by default). Exit codes: `0` passes, `1` regression or
+threshold failure (reasons on stderr, JSON on stdout, optional `observer.regression.v1` report),
+`2` it could not decide (Observer unreachable, unknown dataset or run, bad arguments).
+
+Rules: with a baseline, more than `--max-regressions` cases going pass → fail blocks (default 0);
+without one, any failed case blocks (`--max-failures` changes it). `--min-pass-rate` and
+`--max-health-drop` add thresholds. Cases it cannot verify are **unknown** and reported apart;
+`--fail-on-unknown` blocks on them, and a run where nothing could be verified **fails** unless
+`--allow-unverified` is given, so the gate never goes green on no evidence. `OBSERVER_URL` and
+`OBSERVATORY_API_KEY` supply the address and key.
+
 ### Alerts
 
 Rules watch a metric over a sliding window (error rate, p50/p95 latency, share of turns on the

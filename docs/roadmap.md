@@ -25,7 +25,7 @@ and write down what was learned or changed. Keep entries short.
 | 1 | Separate operational health from quality | done | this PR |
 | 2 | Datasets from traces | done | this PR |
 | 3 | Compare runs by version | done | this PR |
-| 4 | Regression command for CI | planned | |
+| 4 | Regression command for CI | done | this PR |
 | 5 | Standard OTLP ingestion | planned | |
 | 6 | Read-only MCP server | planned | |
 | 7 | Configurable capture privacy | later | |
@@ -81,6 +81,11 @@ same cases with per-case differences.
 A CLI command that runs a dataset (or re-scores stored runs) and exits non-zero when a
 threshold or a per-case expectation regresses.
 
+- **Built:** `observer-regression` (`app/ops/regression_gate.py`). It can record a run from a
+  results file and gate it, or gate a stored run. Exit 0 pass / 1 regression / 2 undecidable.
+  Blocks on regressions against a baseline, failed cases without one, optional pass-rate and
+  health-drop thresholds; `unknown` is reported apart, and a run with nothing verified fails
+  unless `--allow-unverified` (lesson of the 2026-07 soak: a gate must not pass on no evidence).
 - Done when: a CI job can block a version using it.
 
 ## Step 5: standard OTLP ingestion
@@ -126,3 +131,6 @@ investigate without screenshots. Read-only first.
   `case_check`, comparison on the Cases page. Only health expectations can be verified on real
   traces today; tool and text checks come back `unknown` until Manitos exports tool spans and
   reply text. Step 4 (CI command) will fail on `fail` and report `unknown` separately.
+- 2026-10-16: step 4 done. `observer-regression` CLI with exit codes 0/1/2, report
+  `observer.regression.v1`. Next: step 5 (OTLP). Tool and text expectations still need Manitos to
+  export tool spans and reply text before the gate can verify them on real traces.
