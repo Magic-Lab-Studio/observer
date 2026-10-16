@@ -224,6 +224,7 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/alerts/events`               | Alert events (`?state=open`)      |
 | `POST`   | `/v1/alerts/events/{id}/ack`      | Mark an alert as seen             |
 | `POST`   | `/v1/alerts/evaluate`             | Evaluate all rules now            |
+| `POST`   | `/v1/otlp/v1/traces`              | Standard OTLP/HTTP trace receiver |
 | `GET`    | `/v1/datasets`                    | List test-case datasets           |
 | `POST`   | `/v1/datasets`                    | Create a dataset                  |
 | `GET`    | `/v1/datasets/{id}`               | A dataset with its cases          |
@@ -279,6 +280,13 @@ Scores of the previous rubric are replaced when the turn is re-scored. A backgro
 `OBSERVATORY_AUTO_EVAL_DAYS`, default 7) scores recent turns that have no evaluation yet and also
 backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
 Evaluations page shows health by model, both axes, the grade and the per-criterion breakdown.
+
+### Standard OpenTelemetry (OTLP) ingestion
+
+Point any stock OpenTelemetry exporter at `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:8100/v1/otlp`
+(protobuf or JSON, optionally gzipped) and its traces appear without the Observer SDK. GenAI
+conventions map to Observer span types, tokens and tools. Content-like attributes are dropped by
+default (`OBSERVATORY_OTLP_CAPTURE=metadata`). Mapping, privacy and limits: [docs/otlp.md](docs/otlp.md).
 
 ### Read-only MCP server
 

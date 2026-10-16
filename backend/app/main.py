@@ -15,6 +15,7 @@ from app.api import alerts as alerts_api
 from app.api import analytics, evaluations, manitos_ingest, providers, traces
 from app.api import dataset_runs as dataset_runs_api
 from app.api import datasets as datasets_api
+from app.api import otlp as otlp_api
 from app.auth import require_api_key
 from app.db.postgres import engine
 from app.ratelimit import limiter
@@ -111,6 +112,12 @@ app.include_router(
     dataset_runs_api.router,
     prefix="/v1/datasets",
     tags=["datasets"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    otlp_api.router,
+    prefix="/v1/otlp",
+    tags=["otlp"],
     dependencies=[_app_auth],
 )
 app.include_router(
