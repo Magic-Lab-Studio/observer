@@ -22,7 +22,7 @@ and write down what was learned or changed. Keep entries short.
 
 | # | Step | State | PR |
 |---|------|-------|----|
-| 1 | Separate operational health from quality | planned | |
+| 1 | Separate operational health from quality | done | this PR |
 | 2 | Datasets from traces (needs a decision, see below) | planned | |
 | 3 | Compare runs by version | planned | |
 | 4 | Regression command for CI | planned | |
@@ -38,7 +38,8 @@ Problem: `evaluators/manitos_turn.py` scores a `quality` criterion (weight 0.20)
 fast wrong answer can still get an "A".
 
 - Rename the criterion to `degradation`; bump the rubric to `manitos_turn@2`. Evaluation ids
-  include the rubric, so old scores stay and new ones are added (no migration).
+  include the rubric, so new rows are created (no migration); the sweep deletes the replaced
+  `manitos_turn@1` row of the same turn, so each turn keeps one score.
 - Result carries two axes: `health` (latency, errors, degradation, truncation, fallback) and
   `correctness` (`null` = unknown until a real signal exists).
 - The overall grade is capped while correctness is unknown, so health alone cannot reach "A".
@@ -102,3 +103,7 @@ investigate without screenshots. Read-only first.
 ## Iteration log
 
 - 2026-10-15: plan written. No steps started.
+- 2026-10-16: step 1 done. Rubric `manitos_turn@2`: `health` and `correctness` axes (correctness
+  unknown), overall capped at 0.89; criteria renamed `reliability`/`degradation`; old v1 scores
+  replaced by the sweep. Learned: the rubric already had a criterion called `health`, so the axis
+  needed the criterion renamed to avoid two meanings.

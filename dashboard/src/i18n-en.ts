@@ -223,10 +223,17 @@ export const EN: Record<string, string> = {
   'Detalle de evaluación': 'Evaluation detail',
   'Selecciona una fila': 'Select a row',
 
-  'Calidad por modelo': 'Quality by model',
-  'Puntaje medio de las evaluaciones automáticas por reglas · {n} turnos':
-    'Average score of the automatic rule-based evaluations · {n} turns',
-  'Puntaje medio': 'Average score',
+  'Salud por modelo': 'Health by model',
+  'Salud operativa media de las evaluaciones automáticas por reglas · {n} turnos · la corrección de las respuestas aún no se mide':
+    'Average operational health of the automatic rule-based evaluations · {n} turns · answer correctness is not measured yet',
+  'Salud media': 'Average health',
+  'Salud operativa': 'Operational health',
+  'Salud operativa; la corrección aún no se mide': 'Operational health; correctness is not measured yet',
+  Corrección: 'Correctness',
+  medida: 'measured',
+  desconocida: 'unknown',
+  Fiabilidad: 'Reliability',
+  Degradación: 'Degradation',
   aprobadas: 'passed',
   '{n} evaluaciones · {p} % aprobadas': '{n} evaluations · {p} % passed',
   Nota: 'Grade',

@@ -7,7 +7,12 @@ from sqlalchemy import func, select
 
 from app.api.evaluations import summarize_scores
 from app.auto_eval import evaluate_new_turns, evaluation_id
-from app.evaluators.manitos_turn import PASS_THRESHOLD, grade_for, score_turn
+from app.evaluators.manitos_turn import (
+    PASS_THRESHOLD,
+    UNKNOWN_CORRECTNESS_CAP,
+    grade_for,
+    score_turn,
+)
 from app.metrics_core import TurnSignals
 from app.models import Evaluation, Span, Trace
 
@@ -29,15 +34,26 @@ def _signals(**kw) -> TurnSignals:
     ],
 )
 def test_score_turn_table(kw, grade, passed):
+    """``grade`` is the operational-health grade; the overall one is capped (see below)."""
     scored = score_turn(_signals(**kw))
-    assert scored["grade"] == grade and scored["passed"] is passed
+    assert scored["health"]["grade"] == grade and scored["passed"] is passed
     assert 0.0 <= scored["score"] <= 1.0
     assert (scored["score"] >= PASS_THRESHOLD) or not passed
 
 
+def test_fast_healthy_turn_cannot_be_excellent_while_correctness_is_unknown():
+    scored = score_turn(_signals(duration_ms=800.0, ttft_ms=300.0))
+    assert scored["health"] == {"score": 1.0, "grade": "A"}
+    assert scored["correctness"] == {"status": "unknown", "score": None}
+    assert scored["score"] == UNKNOWN_CORRECTNESS_CAP and scored["grade"] == "B"
+    assert scored["rubric"] == "manitos_turn@2" and scored["passed"] is True
+    names = {c["name"] for c in scored["criteria"]}
+    assert {"reliability", "degradation"} <= names and not {"health", "quality"} & names
+
+
 def test_missing_latency_is_left_out_and_weights_renormalize():
     healthy = score_turn(_signals())
-    assert healthy["score"] == 1.0
+    assert healthy["health"]["score"] == 1.0
     names = {c["name"] for c in healthy["criteria"]}
     assert "latency" not in names and "ttft" not in names
 
@@ -104,7 +120,7 @@ async def test_sweep_scores_each_turn_once_and_waits_for_the_lifecycle_span(db_s
     total = (await db_session.execute(select(func.count()).select_from(Evaluation))).scalar()
     assert total == 2
     stored = await db_session.get(Evaluation, evaluation_id(a.id))
-    assert stored.evaluator_type == "rule_based" and stored.criteria["rubric"] == "manitos_turn@1"
+    assert stored.evaluator_type == "rule_based" and stored.criteria["rubric"] == "manitos_turn@2"
     assert stored.result["provider"] == "groq" and stored.result["passed"] is True
 
     db_session.add(
@@ -130,6 +146,7 @@ def test_summarize_scores_groups_models_providers_and_grades():
     ]
     out = summarize_scores(rows)
     assert out["count"] == 3 and out["pass_rate"] == pytest.approx(2 / 3)
+    assert out["correctness_known"] == 0 and out["avg_health"] is None  # old rows: no health axis
     groq = next(m for m in out["models"] if m["key"] == "groq · q")
     assert groq["count"] == 2 and groq["avg_score"] == pytest.approx(0.75)
     assert {p["key"] for p in out["providers"]} == {"groq", "llamacpp"}
@@ -182,3 +199,31 @@ async def test_unscorable_recent_turns_do_not_starve_older_eligible_ones(db_sess
     assert await evaluate_new_turns(db_session, batch=3) == 3
     for trace in older:
         assert await db_session.get(Evaluation, evaluation_id(trace.id)) is not None
+
+
+@pytest.mark.anyio
+async def test_sweep_replaces_scores_of_the_previous_rubric(db_session):
+    turn = await _turn(db_session)
+    old = Evaluation(
+        id=evaluation_id(turn.id, "manitos_turn@1"),
+        trace_id=turn.id,
+        evaluator_type="rule_based",
+        score=1.0,
+        criteria={"rubric": "manitos_turn@1"},
+        result={"grade": "A", "passed": True},
+    )
+    db_session.add(old)
+    await db_session.commit()
+
+    assert await evaluate_new_turns(db_session) == 1
+    rows = (await db_session.execute(select(Evaluation.id))).scalars().all()
+    assert rows == [evaluation_id(turn.id)]  # one score per turn, the new one
+    assert await evaluate_new_turns(db_session) == 0
+
+
+def test_summarize_scores_reports_health_apart_from_the_capped_overall():
+    scored = score_turn(_signals(duration_ms=900.0))
+    out = summarize_scores([(scored["score"], scored)])
+    assert out["avg_score"] == pytest.approx(UNKNOWN_CORRECTNESS_CAP)
+    assert out["avg_health"] == pytest.approx(1.0) and out["correctness_known"] == 0
+    assert out["models"][0]["avg_health"] == pytest.approx(1.0)

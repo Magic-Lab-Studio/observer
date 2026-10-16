@@ -30,10 +30,12 @@ function criteriaText(e: Evaluation): string {
   return e.criteria ? Object.keys(e.criteria).join(', ') : '–';
 }
 
-function turnCriteria(e: Evaluation): { grade?: string; passed?: boolean; items: TurnCriterion[] } | null {
-  const r = e.result as { criteria?: unknown; grade?: string; passed?: boolean } | null;
+interface TurnAxes { grade?: string; passed?: boolean; health?: { score: number; grade: string }; correctnessKnown: boolean; items: TurnCriterion[] }
+
+function turnCriteria(e: Evaluation): TurnAxes | null {
+  const r = e.result as { criteria?: unknown; grade?: string; passed?: boolean; health?: { score: number; grade: string }; correctness?: { status?: string } } | null;
   if (!r || !Array.isArray(r.criteria) || r.criteria.length === 0 || typeof (r.criteria[0] as TurnCriterion)?.weight !== 'number') return null;
-  return { grade: r.grade, passed: r.passed, items: r.criteria as TurnCriterion[] };
+  return { grade: r.grade, passed: r.passed, health: r.health, correctnessKnown: !!r.correctness && r.correctness.status !== 'unknown', items: r.criteria as TurnCriterion[] };
 }
 
 function Evaluations() {
@@ -112,20 +114,20 @@ function Evaluations() {
       </dl>
 
       {byModel && byModel.count > 0 && (
-        <Card title={t('Calidad por modelo')}
-          subtitle={t('Puntaje medio de las evaluaciones automáticas por reglas · {n} turnos', { n: fmtInt(byModel.count) })}
+        <Card title={t('Salud por modelo')}
+          subtitle={t('Salud operativa media de las evaluaciones automáticas por reglas · {n} turnos · la corrección de las respuestas aún no se mide', { n: fmtInt(byModel.count) })}
           bodyClass="p-2 pt-3">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <ResponsiveContainer width="100%" height={Math.max(150, byModel.models.slice(0, 8).length * 34 + 30)}>
-              <BarChart data={byModel.models.slice(0, 8).map((m) => ({ key: m.key, score: m.avg_score ?? 0 }))}
+              <BarChart data={byModel.models.slice(0, 8).map((m) => ({ key: m.key, score: m.avg_health ?? 0 }))}
                 layout="vertical" margin={{ top: 0, right: 16, left: 4, bottom: 0 }}>
                 <CartesianGrid stroke="#232a38" horizontal={false} />
                 <XAxis type="number" domain={[0, 1]} stroke="transparent" tickLine={false} />
                 <YAxis type="category" dataKey="key" stroke="transparent" tickLine={false} width={190} />
                 <Tooltip cursor={{ fill: 'rgba(255,255,255,.04)' }} content={<ChartTooltip valueFormatter={(v) => Number(v).toFixed(2)} />} />
-                <Bar isAnimationActive={false} dataKey="score" name={t('Puntaje medio')} radius={[0, 3, 3, 0]} barSize={14}>
+                <Bar isAnimationActive={false} dataKey="score" name={t('Salud media')} radius={[0, 3, 3, 0]} barSize={14}>
                   {byModel.models.slice(0, 8).map((m) => (
-                    <Cell key={m.key} fill={(m.avg_score ?? 0) >= 0.8 ? '#3fb68b' : (m.avg_score ?? 0) >= 0.6 ? '#e5a33b' : '#ef5b5b'} fillOpacity={0.85} />
+                    <Cell key={m.key} fill={(m.avg_health ?? 0) >= 0.8 ? '#3fb68b' : (m.avg_health ?? 0) >= 0.6 ? '#e5a33b' : '#ef5b5b'} fillOpacity={0.85} />
                   ))}
                 </Bar>
               </BarChart>
@@ -215,6 +217,8 @@ function Evaluations() {
                   <div className="mb-4">
                     <div className="mb-2 flex items-center gap-2 text-xs">
                       <Chip tone="accent">{t('Nota')} {turnCriteria(selected)?.grade}</Chip>
+                      {turnCriteria(selected)?.health && <Chip tone="accent">{t('Salud operativa')} {turnCriteria(selected)?.health?.grade} · {turnCriteria(selected)?.health?.score.toFixed(2)}</Chip>}
+                      <Chip tone="warn">{t('Corrección')}: {turnCriteria(selected)?.correctnessKnown ? t('medida') : t('desconocida')}</Chip>
                       <Chip tone={turnCriteria(selected)?.passed ? 'accent' : 'warn'}>{turnCriteria(selected)?.passed ? t('Aprobada') : t('No aprobada')}</Chip>
                     </div>
                     <ul className="space-y-2.5">

@@ -5,6 +5,8 @@ import { t } from '../i18n.ts';
 export type MetricUnit = 'ratio' | 'ms' | 'count';
 /** Labels (Spanish keys) of the rule-based turn criteria scored by the backend. */
 export const CRITERION_LABEL: Record<string, string> = {
+  reliability: 'Fiabilidad',
+  degradation: 'Degradación',
   health: 'Salud',
   complete: 'Completitud',
   quality: 'Calidad',

@@ -83,7 +83,11 @@ VIEWS: dict[str, ViewSpec] = {
     ),
     "evaluations": ViewSpec(
         label="Evaluaciones de turnos",
-        measures={"score": "Puntaje", "passed": "Aprobada (0/1)"},
+        measures={
+            "score": "Puntaje",
+            "health_score": "Salud operativa",
+            "passed": "Aprobada (0/1)",
+        },
         dimensions={
             "provider": "Proveedor",
             "model": "Modelo",
@@ -271,6 +275,9 @@ async def evaluation_records(
                 "model": str(data.get("model") or ""),
                 "grade": str(data.get("grade") or ""),
                 "score": float(score) if score is not None else None,
+                "health_score": data.get("health", {}).get("score")
+                if isinstance(data.get("health"), dict)
+                else None,
                 "passed": 1.0 if data.get("passed") else 0.0,
             }
         )
