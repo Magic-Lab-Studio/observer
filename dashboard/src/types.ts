@@ -207,3 +207,8 @@ export interface PrivacyProject {
   default_mode: CaptureMode; report: PrivacyReport;
 }
 export interface PrivacyOverview { modes: CaptureMode[]; note: string; projects: PrivacyProject[] }
+export interface IngestProject {
+  project_id: string; last_trace_at: string | null; silence_minutes: number | null;
+  traces_5m: number; traces_1h: number; traces_24h: number;
+}
+export interface IngestHealth { checked_at: string; projects: IngestProject[] }

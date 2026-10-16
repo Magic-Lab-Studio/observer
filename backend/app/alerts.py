@@ -191,7 +191,14 @@ async def evaluate_rules(session: AsyncSession, *, now: datetime | None = None) 
         if spec is None or rule.comparator not in COMPARATORS:
             continue
         details: dict[str, Any] = {}
-        if spec["kind"] == "quota":
+        if spec["kind"] == "ingest":
+            from app.api.ingest_health import silence_minutes
+
+            value = await silence_minutes(session, rule.project_id, rule.environment, now)
+            if value is None:
+                continue  # the project never sent anything: nothing to be silent about
+            samples, details = 1, {"project_id": rule.project_id}
+        elif spec["kind"] == "quota":
             value, samples, details = _quota_value(rule.scope or "")
             if value is None:
                 continue  # no trustworthy snapshot: neither fire nor resolve
@@ -207,7 +214,10 @@ async def evaluate_rules(session: AsyncSession, *, now: datetime | None = None) 
                 )
             value, samples = compute_metric(rule.metric, cache[key], scope=rule.scope or "")
         result.evaluated += 1
-        enough = value is not None and samples >= int(rule.min_samples)
+        # Snapshot-style metrics (quota, ingest silence) have one reading, not a sample count.
+        enough = value is not None and (
+            spec["kind"] in {"quota", "ingest"} or samples >= int(rule.min_samples)
+        )
         open_event = (
             (
                 await session.execute(

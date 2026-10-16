@@ -242,6 +242,7 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/datasets/{id}/compare`       | Case-by-case diff (`?base=&candidate=`) |
 | `GET`    | `/v1/datasets/runs/{id}`          | One run with every case result    |
 | `DELETE` | `/v1/datasets/runs/{id}`          | Delete a run                      |
+| `GET`    | `/v1/ingest/health`               | Last trace and counts per project |
 | `GET`    | `/v1/evaluations/by-model`        | Turn health by model and provider |
 | `POST`   | `/v1/analytics/query`             | Flexible metrics query            |
 | `GET`    | `/v1/analytics/query/schema`      | Views, measures and dimensions    |
@@ -310,6 +311,18 @@ default (`OBSERVATORY_OTLP_CAPTURE=metadata`). Mapping, privacy and limits: [doc
 failed traces with reasons, one trace's spans, tools and provider chain, alerts, datasets, version
 comparisons and metric queries. Read-only, and trace input/output are never returned unless
 `OBSERVER_MCP_CONTENT=1`. Setup and tools: [docs/mcp.md](docs/mcp.md).
+
+### Ingestion reliability
+
+The Python SDK exporter retries only what can succeed later (network errors, 408/425/429/5xx) with
+exponential backoff and jitter, honours `Retry-After`, and counts permanent 4xx answers as
+rejected instead of retrying them. Pass `spool_dir` to keep batches that still fail on disk (mode
+0600, unencrypted, bounded by `spool_max_bytes`) and resend them oldest first after the backend
+returns or the process restarts; `exporter.stats()` reports `exported, retried, rejected, dropped,
+spooled, recovered, spool_evicted, pending`. `/v1/traces/batch` is idempotent (a retried batch does
+not fail on spans already stored) and rate-limited by `RATE_LIMIT_BATCH` (default `120/minute`).
+`GET /v1/ingest/health` and the Overview card show when each project last sent a trace; the alert
+metric **Minutes without traces** (`ingest_silence_minutes`) notifies when one goes quiet.
 
 ### Test cases (datasets)
 

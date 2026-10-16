@@ -189,7 +189,7 @@ function Alerts() {
                   onChange={(e) => setDraft({ ...draft, threshold: e.target.value })} />
               </div>
             </label>
-            {draftMetric?.kind !== 'quota' && (
+            {draftMetric?.kind !== 'quota' && draftMetric?.kind !== 'ingest' && (
               <>
                 <label className="text-xs text-dim">{t("Ventana (min)")}
                   <input inputMode="numeric" className={`${inputCls} mt-1 w-full`} value={draft.window_minutes} onChange={(e) => setDraft({ ...draft, window_minutes: e.target.value })} />

@@ -28,8 +28,8 @@ and write down what was learned or changed. Keep entries short.
 | 4 | Regression command for CI | done | this PR |
 | 5 | Standard OTLP ingestion | done | #56 |
 | 6 | Read-only MCP server | done | #57 |
-| 7 | Configurable capture privacy | done | this PR |
-| 8 | Ingestion reliability (persistent queue, backoff, metrics) | later | |
+| 7 | Configurable capture privacy | done | #58 |
+| 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | this PR |
 
 ## Step 1: health vs quality
 
@@ -125,9 +125,28 @@ investigate without screenshots. Read-only first.
   path default or the env override (no project to configure). Source-side filtering for
   third-party exporters is the exporter's job; this is the server-side guarantee.
 
-## Later
-- **Ingestion reliability:** optional persistent queue, exponential backoff, counters for
-  pending and dropped records.
+## Step 8: ingestion reliability
+
+Findings: the Python SDK exporter retried instantly with no backoff, retried permanent 4xx errors,
+dropped silently and kept no counters; `/v1/traces/batch` was capped at 10/minute while the SDK
+flushes every 5 s, and answered 500 when a retried batch re-sent span ids already stored; nothing
+said that a project had stopped sending. The Manitos exporter already had retries, an encrypted
+spool and a circuit breaker.
+
+- **Built (SDK):** `OTLPExporter` retries only what can succeed later (network errors, 408/425/429/
+  5xx) with exponential backoff, jitter and `Retry-After`; permanent 4xx are `rejected`, not
+  retried; optional persistent spool (`spool_dir`, 0600, bounded, oldest evicted, drained oldest
+  first, survives restarts); `stats()` with `exported, retried, rejected, dropped, spooled,
+  recovered, spool_evicted, pending`.
+- **Built (backend):** `/v1/traces/batch` is idempotent and its limit is `RATE_LIMIT_BATCH`
+  (default 120/minute); `GET /v1/ingest/health` (last trace and 5 m / 1 h / 24 h counts per
+  project); alert metric `ingest_silence_minutes`; quota and ingest alerts no longer depend on
+  `min_samples` (a quota rule created in the UI with the default 10 could never fire).
+- **Built (dashboard):** a "Telemetry intake" card on Overview; the alert form hides window and
+  sample fields for the silence metric.
+- Not done: encrypting the SDK spool, and sender-reported drop counters inside the Observer (the
+  SDK exposes `stats()` locally).
+
 
 ## Reference comparison (documentation only)
 
@@ -169,3 +188,6 @@ investigate without screenshots. Read-only first.
   report and enforcement, Privacy page. Verified on a synthetic instance: a project storing emails
   in inputs showed 3 sensitive spans, switching to `metadata` and applying removed them. The
   `manitos` project stored 0 inputs/outputs (the Manitos exporter is metadata-only at the source).
+- 2026-10-16: step 8 done. Idempotent batch + configurable limit, SDK backoff/spool/stats, ingest
+  health endpoint, silence alert, Overview card. Verified on a synthetic instance: a project quiet
+  for 95 minutes opened the silence alert even though the rule's min_samples was 10.

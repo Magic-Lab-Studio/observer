@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -18,6 +19,9 @@ from app.ratelimit import limiter
 from app.websocket import manager
 
 router = APIRouter()
+
+# The SDK flushes every few seconds, so the old fixed 10/minute rejected healthy senders.
+_BATCH_LIMIT = os.getenv("RATE_LIMIT_BATCH", "120/minute")
 
 
 def _safe_uuid(value: str | None) -> str | None:
@@ -249,7 +253,7 @@ async def create_trace(
 
 
 @router.post("/batch", response_model=list[TraceResponse])
-@limiter.limit("10/minute")
+@limiter.limit(_BATCH_LIMIT)
 async def create_traces_batch(
     request: Request,
     batch_data: BatchSpansCreate,
@@ -269,6 +273,13 @@ async def create_traces_batch(
         spans_by_trace[trace_id].append(span_data)
 
     created_traces: list[Trace] = []
+
+    # A retried batch (the first answer was lost) must not fail on spans already stored.
+    wanted = [s.id for spans in spans_by_trace.values() for s in spans if s.id]
+    stored_ids: set[str] = set()
+    if wanted:
+        rows = await session.execute(select(Span.id).where(Span.id.in_(wanted)))
+        stored_ids = {str(i) for i in rows.scalars()}
 
     for trace_id, spans in spans_by_trace.items():
         # Check if trace already exists
@@ -295,6 +306,8 @@ async def create_traces_batch(
         # Add spans
         mode = await capture_mode(session, trace.project_id, "full")
         for span_data in spans:
+            if span_data.id and span_data.id in stored_ids:
+                continue
             captured = apply_capture(
                 mode,
                 inp=span_data.input,
