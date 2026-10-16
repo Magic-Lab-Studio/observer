@@ -56,7 +56,7 @@ function Providers() {
 
   const scoreOf = (id: string) => {
     const g = scores?.providers.find((p) => p.key === id);
-    return g?.avg_score != null ? g.avg_score.toFixed(2) : '–';
+    return g?.avg_health != null ? g.avg_health.toFixed(2) : '–';
   };
   const stats = new Map<string, ProviderStats>(data.providers.map((p) => [p.id, p]));
   const snap = data.snapshot;
@@ -165,7 +165,7 @@ function Providers() {
                 <th className="px-3 py-2.5 text-right font-medium">{t("Error")}</th>
                 <th className="px-3 py-2.5 text-right font-medium">{t("p50 / p95")}</th>
                 <th className="px-3 py-2.5 font-medium w-[14%]">{t("Respondió")}</th>
-                <th className="px-3 py-2.5 text-right font-medium">{t("Puntaje")}</th>
+                <th className="px-3 py-2.5 text-right font-medium" title={t("Salud operativa; la corrección aún no se mide")}>{t("Salud")}</th>
                 <th className="px-4 py-2.5 text-right font-medium">{t("Última vez")}</th>
               </tr>
             </thead>

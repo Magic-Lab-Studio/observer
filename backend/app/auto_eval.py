@@ -14,10 +14,10 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import exists, select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.evaluators.manitos_turn import RUBRIC, score_turn
+from app.evaluators.manitos_turn import LEGACY_RUBRICS, RUBRIC, score_turn
 from app.metrics_core import load_signals_for
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
@@ -48,8 +48,8 @@ def _float_env(name: str, default: float, minimum: float) -> float:
         return default
 
 
-def evaluation_id(trace_id: str) -> str:
-    return str(uuid.uuid5(_NAMESPACE, f"{trace_id}:{RUBRIC}"))
+def evaluation_id(trace_id: str, rubric: str = RUBRIC) -> str:
+    return str(uuid.uuid5(_NAMESPACE, f"{trace_id}:{rubric}"))
 
 
 async def evaluate_new_turns(
@@ -119,6 +119,10 @@ async def evaluate_new_turns(
         )
         session.add(evaluation)
         created.append(evaluation)
+    if created:
+        # A rubric bump replaces earlier scores of the same turns (they are recomputable).
+        legacy = [evaluation_id(e.trace_id, r) for e in created for r in LEGACY_RUBRICS]
+        await session.execute(delete(Evaluation).where(Evaluation.id.in_(legacy)))
     await session.commit()
     for evaluation in created[:_BROADCAST_CAP]:
         try:

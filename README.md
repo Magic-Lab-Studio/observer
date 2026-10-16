@@ -37,8 +37,9 @@ the default follows the browser language).
 
 ![Alerts: open alerts, rules and history](docs/assets/ui-alerts.png)
 
-- **Evaluations** — every turn is scored without a model (health, completeness, quality, fallback,
-  latency, time to first token), with quality by model and the per-criterion breakdown of each turn.
+- **Evaluations** — every turn gets an operational-health score without a model (reliability,
+  completeness, degradation, fallback, latency, time to first token); answer correctness is shown as
+  unknown until measured. Health by model and a per-criterion breakdown of each turn.
 
 ![Evaluations: quality by model, score distribution and the breakdown of one turn](docs/assets/ui-evaluations.png)
 
@@ -223,7 +224,7 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/alerts/events`               | Alert events (`?state=open`)      |
 | `POST`   | `/v1/alerts/events/{id}/ack`      | Mark an alert as seen             |
 | `POST`   | `/v1/alerts/evaluate`             | Evaluate all rules now            |
-| `GET`    | `/v1/evaluations/by-model`        | Turn quality by model and provider|
+| `GET`    | `/v1/evaluations/by-model`        | Turn health by model and provider |
 | `POST`   | `/v1/analytics/query`             | Flexible metrics query            |
 | `GET`    | `/v1/analytics/query/schema`      | Views, measures and dimensions    |
 
@@ -255,13 +256,16 @@ KPIs from the same endpoint, so 7 d and 30 d ranges use every turn.
 
 ### Automatic turn evaluations
 
-Every Manitos turn is scored without a model by a deterministic rubric (`manitos_turn@1`): health
-(error / tool error), completeness (truncated), quality (degraded), fallback, latency and time to
-first token, with fixed weights; a turn passes at 0.6 unless it failed outright. A background sweep
+Every Manitos turn is scored without a model by a deterministic rubric (`manitos_turn@2`) of
+**operational health**: reliability (error / tool error), completeness (truncated), degradation,
+fallback, latency and time to first token, with fixed weights; a turn passes at 0.6 unless it failed
+outright. These signals say how the turn ran, not whether the answer was right, so **correctness is
+reported as unknown** and the overall score is capped at 0.89 (grade B) until a real signal exists.
+Scores of the previous rubric are replaced when the turn is re-scored. A background sweep
 (`OBSERVATORY_AUTO_EVAL_INTERVAL_SEC`, default 60; `OBSERVATORY_AUTO_EVAL=0` turns it off;
 `OBSERVATORY_AUTO_EVAL_DAYS`, default 7) scores recent turns that have no evaluation yet and also
 backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
-Evaluations page shows the score by model, the grade and the per-criterion breakdown of each turn.
+Evaluations page shows health by model, both axes, the grade and the per-criterion breakdown.
 
 ### Alerts
 

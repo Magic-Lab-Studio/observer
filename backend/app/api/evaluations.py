@@ -289,23 +289,34 @@ def summarize_scores(rows: list[tuple[Any, Any]]) -> dict[str, Any]:
     model, provider, grade and pass flag written by ``app.evaluators.manitos_turn``.
     """
 
-    def block(values: list[tuple[float, bool]]) -> dict[str, Any]:
+    def block(values: list[tuple[float, bool, float | None, bool]]) -> dict[str, Any]:
         count = len(values)
+        health = [v[2] for v in values if v[2] is not None]
         return {
             "count": count,
             "avg_score": sum(v[0] for v in values) / count if count else None,
+            "avg_health": sum(health) / len(health) if health else None,
             "pass_rate": sum(1 for v in values if v[1]) / count if count else None,
+            "correctness_known": sum(1 for v in values if v[3]),
         }
 
-    overall: list[tuple[float, bool]] = []
-    models: dict[str, list[tuple[float, bool]]] = defaultdict(list)
-    providers: dict[str, list[tuple[float, bool]]] = defaultdict(list)
+    overall: list[tuple[float, bool, float | None, bool]] = []
+    models: dict[str, list[tuple[float, bool, float | None, bool]]] = defaultdict(list)
+    providers: dict[str, list[tuple[float, bool, float | None, bool]]] = defaultdict(list)
     grades: Counter[str] = Counter()
     for score, result in rows:
         if score is None:
             continue
         data = result if isinstance(result, dict) else {}
-        item = (float(score), bool(data.get("passed")))
+        health = data.get("health") if isinstance(data.get("health"), dict) else {}
+        health_score = health.get("score")
+        correctness = data.get("correctness") if isinstance(data.get("correctness"), dict) else {}
+        item = (
+            float(score),
+            bool(data.get("passed")),
+            float(health_score) if isinstance(health_score, (int, float)) else None,
+            correctness.get("status", "unknown") != "unknown",
+        )
         overall.append(item)
         models[str(data.get("model") or "?")].append(item)
         if data.get("provider"):
@@ -313,7 +324,9 @@ def summarize_scores(rows: list[tuple[Any, Any]]) -> dict[str, Any]:
         if data.get("grade"):
             grades[str(data["grade"])] += 1
 
-    def listing(groups: dict[str, list[tuple[float, bool]]]) -> list[dict[str, Any]]:
+    def listing(
+        groups: dict[str, list[tuple[float, bool, float | None, bool]]],
+    ) -> list[dict[str, Any]]:
         out = [{"key": key, **block(vals)} for key, vals in groups.items()]
         return sorted(out, key=lambda x: (-x["count"], x["key"]))
 

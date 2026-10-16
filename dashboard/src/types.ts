@@ -138,9 +138,13 @@ export interface ProvidersResponse {
   paths: { path: string; count: number }[];
 }
 
-export interface ScoreGroup { key: string; count: number; avg_score: number | null; pass_rate: number | null }
+export interface ScoreGroup {
+  key: string; count: number; avg_score: number | null; avg_health: number | null;
+  pass_rate: number | null; correctness_known: number;
+}
 export interface EvaluationsByModel {
-  hours: number; project_id: string; count: number; avg_score: number | null; pass_rate: number | null;
+  hours: number; project_id: string; count: number; avg_score: number | null; avg_health: number | null;
+  pass_rate: number | null; correctness_known: number;
   models: ScoreGroup[]; providers: ScoreGroup[]; grades: { grade: string; count: number }[];
 }
 export interface TurnCriterion { name: string; weight: number; score: number; detail: string }
