@@ -7,13 +7,19 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.capture import apply_capture, capture_mode
 from app.db import get_session
+from app.limits import (
+    MAX_SPANS_PER_BATCH,
+    MAX_SPANS_PER_TRACE,
+    MAX_TRACES_PER_IMPORT,
+    bounded_json,
+)
 from app.models.trace import Span, Trace
 from app.ratelimit import limiter
 from app.websocket import manager
@@ -38,14 +44,14 @@ def _safe_uuid(value: str | None) -> str | None:
 class SpanCreate(BaseModel):
     """Schema for creating a span."""
 
-    id: str | None = None
-    trace_id: str | None = None
-    parent_id: str | None = None
-    name: str
-    span_type: str = "generic"
+    id: str | None = Field(None, max_length=64)
+    trace_id: str | None = Field(None, max_length=64)
+    parent_id: str | None = Field(None, max_length=64)
+    name: str = Field(max_length=255)
+    span_type: str = Field("generic", max_length=50)
     start_time: float
     end_time: float | None = None
-    status: str = "unset"
+    status: str = Field("unset", max_length=20)
     input: dict | None = None
     output: dict | None = None
     tokens_input: int | None = None
@@ -54,17 +60,27 @@ class SpanCreate(BaseModel):
     metadata: dict | None = None
     attributes: dict | None = None
 
+    @field_validator("input", "output", "metadata", "attributes")
+    @classmethod
+    def _bounded(cls, value: dict | None) -> dict | None:
+        return bounded_json(value)
+
 
 class TraceCreate(BaseModel):
     """Schema for creating a trace."""
 
-    name: str
+    name: str = Field(max_length=255)
     session_id: str | None = None
     start_time: float
     end_time: float | None = None
-    status: str = "unset"
+    status: str = Field("unset", max_length=20)
     metadata: dict | None = None
-    spans: list[SpanCreate] = []
+    spans: list[SpanCreate] = Field(default_factory=list, max_length=MAX_SPANS_PER_TRACE)
+
+    @field_validator("metadata")
+    @classmethod
+    def _bounded_metadata(cls, value: dict | None) -> dict | None:
+        return bounded_json(value)
 
     @field_validator("session_id")
     @classmethod
@@ -80,7 +96,7 @@ class TraceCreate(BaseModel):
 class BatchSpansCreate(BaseModel):
     """Schema for batch-creating spans (auto-creates traces)."""
 
-    spans: list[SpanCreate] = []
+    spans: list[SpanCreate] = Field(default_factory=list, max_length=MAX_SPANS_PER_BATCH)
 
 
 class TraceResponse(BaseModel):
@@ -665,11 +681,11 @@ async def bulk_delete_traces(
 class ImportSpanData(BaseModel):
     """Span data for import."""
 
-    name: str
-    span_type: str = "generic"
+    name: str = Field(max_length=255)
+    span_type: str = Field("generic", max_length=50)
     start_time: float
     end_time: float | None = None
-    status: str = "ok"
+    status: str = Field("ok", max_length=20)
     input: dict | None = None
     output: dict | None = None
     tokens_input: int | None = None
@@ -678,11 +694,16 @@ class ImportSpanData(BaseModel):
     metadata: dict | None = None
     attributes: dict | None = None
 
+    @field_validator("input", "output", "metadata", "attributes")
+    @classmethod
+    def _bounded(cls, value: dict | None) -> dict | None:
+        return bounded_json(value)
+
 
 class ImportTraceData(BaseModel):
     """Trace data for import."""
 
-    name: str
+    name: str = Field(max_length=255)
     session_id: str | None = None
     turn_id: str | None = None
     project_id: str | None = None
@@ -694,13 +715,18 @@ class ImportTraceData(BaseModel):
     end_time: float | None = None
     status: str = "ok"
     metadata: dict | None = None
-    spans: list[ImportSpanData] = []
+    spans: list[ImportSpanData] = Field(default_factory=list, max_length=MAX_SPANS_PER_TRACE)
+
+    @field_validator("metadata")
+    @classmethod
+    def _bounded_metadata(cls, value: dict | None) -> dict | None:
+        return bounded_json(value)
 
 
 class ImportRequest(BaseModel):
     """Request body for trace import."""
 
-    traces: list[ImportTraceData]
+    traces: list[ImportTraceData] = Field(max_length=MAX_TRACES_PER_IMPORT)
 
 
 class ImportResponse(BaseModel):

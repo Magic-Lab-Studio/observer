@@ -149,6 +149,6 @@ Two sources feed the dashboard's **Proveedores** page (`GET /v1/providers/`):
   `skipped_exhausted`, `error:<Type>`; `@ms` is that call's own time) and `answered_by`. Per-provider attempts, success
   rate, p50/p95, answered share, fallback depth and common routes are aggregated from stored spans.
 - **Snapshot.** The integration may `POST /v1/providers/snapshot` (metadata only, never keys): provider order, on/off,
-  models, data-terms note and quota cooldowns. Manitos pushes it at boot and every 60 s
-  (`manitos/llm/provider_snapshot.py`, only when `MANITOS_OBSERVER_ENABLED=1` and the URL is local). The backend keeps the
+  models, data-terms note and quota cooldowns. The integration pushes it at start-up and periodically
+  (and only to a local Observer). The backend keeps the
   latest in `providers_snapshot.json` (`OBSERVATORY_PROVIDERS_SNAPSHOT` overrides the path) and flags it stale after 3 min.

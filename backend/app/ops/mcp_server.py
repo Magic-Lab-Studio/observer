@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
@@ -78,6 +79,93 @@ class ObserverReader:
 
 # ── shaping: compact, content-free views ──────────────────────────────────────
 
+# Attributes an assistant may see. An allow-list, not a deny-list: trace attributes and metadata are
+# whatever the sender put there (keys, paths, private text, even instructions aimed at the
+# assistant), so anything not named here is withheld unless OBSERVER_MCP_CONTENT=1.
+SAFE_ATTRIBUTES = frozenset(
+    {
+        "backend",
+        "model",
+        "language",
+        "intent",
+        "status",
+        "mode",
+        "source",
+        "reason",
+        "engine",
+        "local_fallback",
+        "finish_reason",
+        "answered_by",
+        "attempts_text",
+        "attempt_count",
+        "cloud_out_text",
+        "llm_truncated",
+        "llm_degraded",
+        "tool_error",
+        "duration_ms",
+        "ttft_ms",
+        "latency_ms",
+        "confidence",
+        "visible_len",
+        "stage_prefix",
+        "end_cause",
+        "http_status",
+        "gen_ai.operation.name",
+        "gen_ai.system",
+        "gen_ai.provider.name",
+        "gen_ai.tool.name",
+        "gen_ai.agent.name",
+        "gen_ai.request.model",
+        "gen_ai.response.model",
+    }
+)
+_SAFE_PREFIXES = ("gen_ai.usage.",)
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
+_MAX_TEXT = 200
+
+
+def safe_text(value: Any, limit: int = _MAX_TEXT) -> str:
+    """Short single-line text: control characters and line breaks become spaces."""
+    return _CONTROL.sub(" ", str(value))[:limit].strip()
+
+
+def _safe_scalar(value: Any) -> Any:
+    if isinstance(value, bool) or value is None or isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        return safe_text(value)
+    return _DROP
+
+
+_DROP = object()
+
+
+def safe_attributes(attrs: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Only allow-listed keys, scalar values, bounded single-line strings."""
+    out: dict[str, Any] = {}
+    for key, value in (attrs or {}).items():
+        if key not in SAFE_ATTRIBUTES and not str(key).startswith(_SAFE_PREFIXES):
+            continue
+        if isinstance(value, dict) and key == "stage_timings_ms":
+            continue
+        scalar = _safe_scalar(value)
+        if scalar is not _DROP:
+            out[str(key)[:80]] = scalar
+    return out
+
+
+def safe_metadata(meta: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Trace metadata: the allow-listed scalars plus per-stage timings (numbers only)."""
+    out = safe_attributes(meta)
+    stages = (meta or {}).get("stage_timings_ms")
+    if isinstance(stages, dict):
+        out["stage_timings_ms"] = {
+            safe_text(k, 60): v
+            for k, v in list(stages.items())[:40]
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+        }
+    return out
+
 
 def _ms(start: str | None, end: str | None) -> float | None:
     if not start or not end:
@@ -92,9 +180,9 @@ def _ms(start: str | None, end: str | None) -> float | None:
 def trace_row(trace: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": trace.get("id"),
-        "name": trace.get("name"),
+        "name": safe_text(trace.get("name") or "", 120),
         "status": trace.get("status"),
-        "project_id": trace.get("project_id"),
+        "project_id": safe_text(trace.get("project_id") or "", 128) or None,
         "environment": trace.get("environment"),
         "created_at": trace.get("created_at"),
         "duration_ms": _ms(trace.get("start_time"), trace.get("end_time")),
@@ -105,17 +193,41 @@ def span_view(span: Mapping[str, Any], *, content: bool) -> dict[str, Any]:
     out = {
         "id": span.get("id"),
         "parent_id": span.get("parent_id"),
-        "name": span.get("name"),
-        "type": span.get("span_type"),
+        "name": safe_text(span.get("name") or "", 120),
+        "type": safe_text(span.get("span_type") or "", 50),
         "status": span.get("status"),
         "duration_ms": _ms(span.get("start_time"), span.get("end_time")),
-        "attributes": span.get("attributes") or {},
+        "attributes": (
+            span.get("attributes") or {} if content else safe_attributes(span.get("attributes"))
+        ),
         "tokens_input": span.get("tokens_input"),
         "tokens_output": span.get("tokens_output"),
         "cost_usd": span.get("cost_usd"),
     }
     if content:
         out["input"], out["output"] = span.get("input"), span.get("output")
+    return out
+
+
+def dataset_view(data: Mapping[str, Any], *, content: bool) -> dict[str, Any]:
+    """A dataset without what a person typed into it (notes, the phrases a reply must contain):
+    those are shown as counts unless content is enabled."""
+    out = dict(data)
+    items = []
+    for item in data.get("items", []):
+        item = dict(item)
+        item["tags"] = [safe_text(t, 60) for t in item.get("tags") or []]
+        if not content:
+            item.pop("notes", None)
+            text = (item.get("expect") or {}).get("text") or {}
+            item["expect"] = {
+                **(item.get("expect") or {}),
+                "text": {k: len(v or []) for k, v in text.items()},
+            }
+        items.append(item)
+    out["items"] = items
+    if not content:
+        out["description"] = None
     return out
 
 
@@ -154,7 +266,9 @@ def trace_detail(
     detail.update(
         {
             "session_id": trace.get("session_id"),
-            "metadata": trace.get("metadata") or {},
+            "metadata": (trace.get("metadata") or {})
+            if content
+            else safe_metadata(trace.get("metadata")),
             "provider_chain": (chain or {}).get("attributes", {}).get("attempts_text"),
             "answered_by": (chain or {}).get("attributes", {}).get("answered_by"),
             "tools": tools,
@@ -253,12 +367,24 @@ def build_server(reader: ObserverReader) -> FastMCP:
     @tool
     async def list_datasets() -> dict[str, Any]:
         """Test-case datasets with their case counts."""
-        return {"datasets": await reader.get("/v1/datasets")}
+        listed = await reader.get("/v1/datasets")
+        keep_text = content_enabled()
+        return {
+            "datasets": [
+                {
+                    **d,
+                    "name": safe_text(d.get("name") or "", 120),
+                    "description": d.get("description") if keep_text else None,
+                }
+                for d in listed
+            ]
+        }
 
     @tool
     async def get_dataset(dataset_id: str) -> dict[str, Any]:
         """A dataset with its cases: what was observed and what each case expects."""
-        return await reader.get(f"/v1/datasets/{dataset_id}")
+        data = await reader.get(f"/v1/datasets/{dataset_id}")
+        return dataset_view(data, content=content_enabled())
 
     @tool
     async def list_runs(dataset_id: str) -> dict[str, Any]:

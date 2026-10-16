@@ -35,10 +35,15 @@ to see whether a fix helped.
 
 ## Privacy and safety
 
-* **No content by default.** Trace and span `input`/`output` are never returned. An assistant gets
-  names, types, status, durations, attributes, scores and the provider chain, which is enough to
-  diagnose most failures. Set `OBSERVER_MCP_CONTENT=1` on the server only if you accept that the
-  assistant sees stored prompts and replies.
+* **No content by default.** Trace and span `input`/`output` are never returned. Attributes and
+  trace metadata are **allow-listed**: only named structural keys (model, language, intent, status,
+  provider chain, latency, `gen_ai.usage.*`, tool and agent names…) pass, with scalar values cut to
+  200 characters on one line; everything else is withheld because senders can put anything there
+  (keys, paths, private text, even instructions aimed at the assistant). Dataset notes, descriptions
+  and the phrases a reply must contain are shown only as counts. Span and trace names are free text:
+  they are shortened and stripped of control characters, nothing more. Set `OBSERVER_MCP_CONTENT=1`
+  on the server only if you accept that the assistant sees stored prompts, replies and every
+  attribute.
 * **Read-only by construction.** The server can issue `GET` requests and the metrics query
   (`POST /v1/analytics/query`, which computes and writes nothing); the paths are fixed in code and a
   test fails if any other method or a write path appears.

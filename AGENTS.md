@@ -2,9 +2,6 @@
 
 Context for coding agents (including Google Jules) working in this repository.
 
-Current resumption point: [Codex handoff 2026-10-08](docs/handoff-codex-2026-10-08.md).
-It records the dashboard change, verification evidence and outstanding integration work.
-
 ## Identity
 
 - Repository: `Magic-Lab-Studio/observer`.

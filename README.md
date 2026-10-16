@@ -305,12 +305,18 @@ Point any stock OpenTelemetry exporter at `OTEL_EXPORTER_OTLP_ENDPOINT=http://12
 conventions map to Observer span types, tokens and tools. Content-like attributes are dropped by
 default (`OBSERVATORY_OTLP_CAPTURE=metadata`). Mapping, privacy and limits: [docs/otlp.md](docs/otlp.md).
 
+### Security
+
+Compose binds to loopback, does not publish PostgreSQL and requires `POSTGRES_PASSWORD`; the API is open
+unless `OBSERVATORY_API_KEY` is set. Untrusted input has size limits and the rate limiter ignores
+unvalidated tokens. Read [docs/security.md](docs/security.md) before exposing Observer on a network.
+
 ### Read-only MCP server
 
 `observer-mcp` lets Claude Code, Codex or any MCP client investigate Observer without screenshots:
 failed traces with reasons, one trace's spans, tools and provider chain, alerts, datasets, version
-comparisons and metric queries. Read-only, and trace input/output are never returned unless
-`OBSERVER_MCP_CONTENT=1`. Setup and tools: [docs/mcp.md](docs/mcp.md).
+comparisons and metric queries. Read-only; trace input/output and any attribute outside an
+allow-list are never returned unless `OBSERVER_MCP_CONTENT=1`. Setup and tools: [docs/mcp.md](docs/mcp.md).
 
 ### Ingestion reliability
 

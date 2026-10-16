@@ -65,9 +65,8 @@ healthy interpreter unchanged; `--replace` explicitly rebuilds dependencies.
 An existing environment is renamed to a timestamped backup, never deleted. On
 an installation failure, the previous environment is restored and the partial
 installation is retained for inspection. Review backups before removing them.
-Stop `observer-backend` with `systemctl --user stop observer-backend` before
-replacing its active environment, then use `systemctl --user restart
-observer-backend` after successful validation.
+Stop whatever service runs the backend before replacing its active environment,
+and restart it after successful validation.
 
 ## 2. Send the first trace
 

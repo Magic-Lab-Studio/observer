@@ -59,12 +59,11 @@ by a person before saving.
   copied from a trace; phrases are typed by a person. Runs are checked by re-scoring traces Manitos
   already sends (Observer does not execute the agent).
 - Done when: one action on the trace page creates an item and it can be listed and exported.
-- **Dependency found, tool half resolved:** Manitos traces had no tool-call spans
-  (`span_type = tool`). Manitos PR #36 (merged 2026-10-16) now exports one per executed call (name,
-  outcome, duration; no arguments or results), so tool expectations are verifiable on traces
-  recorded since its `manitos-server` restart. Still open: Manitos exports no reply text, so text
-  phrases stay `unknown`; whether a redacted reply may be exported is a privacy decision for the
-  user (it would break the metadata-only rule).
+- **Dependency found, tool half resolved:** the Manitos integration did not export tool-call spans
+  (`span_type = tool`). It now exports one per executed call (name, outcome, duration; no arguments
+  or results), so tool expectations are verifiable on traces recorded since that version. Still
+  open: it exports no reply text, so text phrases stay `unknown`; exporting a redacted reply would
+  break the metadata-only rule and is a privacy decision for the operator.
 
 ## Step 3: compare runs by version
 
@@ -175,8 +174,8 @@ spool and a circuit breaker.
 - 2026-10-16: step 4 done. `observer-regression` CLI with exit codes 0/1/2, report
   `observer.regression.v1`. Next: step 5 (OTLP). Tool and text expectations still need Manitos to
   export tool spans and reply text before the gate can verify them on real traces.
-- 2026-10-16: Manitos PR #36 merged: tool spans exported. Tool expectations are now verifiable on
-  new traces; text phrases remain `unknown`. Observer services migrated and restarted.
+- 2026-10-16: the Manitos integration now exports tool spans. Tool expectations are verifiable on
+  new traces; text phrases remain `unknown`.
 - 2026-10-16: step 5 done. OTLP/HTTP receiver, verified with a stock `opentelemetry-sdk` +
   `opentelemetry-exporter-otlp-proto-http` app (protobuf default): trace, spans, token counts and a
   tool span arrive, prompt attributes are dropped. Learned: protobuf's JSON mapping writes ids as
@@ -191,3 +190,7 @@ spool and a circuit breaker.
 - 2026-10-16: step 8 done. Idempotent batch + configurable limit, SDK backoff/spool/stats, ingest
   health endpoint, silence alert, Overview card. Verified on a synthetic instance: a project quiet
   for 95 minutes opened the silence alert even though the rule's min_samples was 10.
+- 2026-10-16: security hardening from an external audit: loopback-only compose, unpublished
+  PostgreSQL with no default password, key lending limited to local requests, size limits on the
+  generic ingestion routes, rate-limit identity by validated key or IP, MCP attribute allow-list,
+  internal hand-off notes removed. See `docs/security.md`.
