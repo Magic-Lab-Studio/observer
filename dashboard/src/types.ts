@@ -173,3 +173,16 @@ export interface AlertEvent {
   value: number | null; threshold: number; window_minutes: number; fired_at: string | null;
   resolved_at: string | null; acked_at: string | null; details: Record<string, unknown> | null;
 }
+
+export interface CaseExpect {
+  tools: { required: string[]; forbidden: string[] };
+  health: { no_error: boolean; no_truncation: boolean; no_degradation: boolean; no_fallback: boolean; max_duration_ms: number | null };
+  text: { must_contain: string[]; must_not_contain: string[] };
+}
+export interface DatasetSummary { id: string; name: string; project_id: string; description: string | null; items: number; created_at: string | null }
+export interface DatasetCase {
+  id: string; dataset_id: string; source_trace_id: string | null; intent: string | null; tags: string[];
+  expect: CaseExpect; checks: string[]; label: 'correct' | 'incorrect' | null; notes: string | null;
+  observed: Record<string, unknown>; created_at: string | null;
+}
+export interface DatasetDetail { id: string; name: string; project_id: string; description: string | null; items: DatasetCase[] }

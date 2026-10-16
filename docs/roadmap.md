@@ -23,7 +23,7 @@ and write down what was learned or changed. Keep entries short.
 | # | Step | State | PR |
 |---|------|-------|----|
 | 1 | Separate operational health from quality | done | this PR |
-| 2 | Datasets from traces (needs a decision, see below) | planned | |
+| 2 | Datasets from traces | done | this PR |
 | 3 | Compare runs by version | planned | |
 | 4 | Regression command for CI | planned | |
 | 5 | Standard OTLP ingestion | planned | |
@@ -53,9 +53,16 @@ Save a failing trace as a reusable test case: input, expected outcome, tags, con
 by a person before saving.
 
 - New tables (`datasets`, `dataset_items`) with a migration and a complete downgrade.
-- **Open decision:** what counts as an "expected outcome" (exact text, required tool calls,
-  forbidden tool calls, a rubric, or a human label). Decide before writing code.
+- **Decided (2026-10-16):** an expected outcome is any mix of: tools that must / must not be
+  called, health conditions (no error, truncation, degradation, fallback; max duration), phrases
+  the reply must / must not contain, and a human verdict. Cases are **metadata only**: nothing is
+  copied from a trace; phrases are typed by a person. Runs are checked by re-scoring traces Manitos
+  already sends (Observer does not execute the agent).
 - Done when: one action on the trace page creates an item and it can be listed and exported.
+- **Dependency found:** Manitos traces have no tool-call spans (`span_type = tool`) and do not
+  export reply text, so tool and text expectations cannot be checked against real traces yet. Two
+  changes are needed on the Manitos side before step 3 can verify them: emit one tool span per
+  call (name, status), and decide whether a redacted reply may be exported for text checks.
 
 ## Step 3: compare runs by version
 
@@ -107,3 +114,6 @@ investigate without screenshots. Read-only first.
   unknown), overall capped at 0.89; criteria renamed `reliability`/`degradation`; old v1 scores
   replaced by the sweep. Learned: the rubric already had a criterion called `health`, so the axis
   needed the criterion renamed to avoid two meanings.
+- 2026-10-16: step 2 done. Tables `datasets`/`dataset_items` (migration `20261016_datasets`),
+  `/v1/datasets`, "Save as case" on the trace page, a Cases page, JSON export. Learned: real
+  Manitos traces carry no tool spans, so the tool expectations are stored but not yet checkable.

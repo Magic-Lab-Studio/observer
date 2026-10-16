@@ -224,6 +224,14 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/alerts/events`               | Alert events (`?state=open`)      |
 | `POST`   | `/v1/alerts/events/{id}/ack`      | Mark an alert as seen             |
 | `POST`   | `/v1/alerts/evaluate`             | Evaluate all rules now            |
+| `GET`    | `/v1/datasets`                    | List test-case datasets           |
+| `POST`   | `/v1/datasets`                    | Create a dataset                  |
+| `GET`    | `/v1/datasets/{id}`               | A dataset with its cases          |
+| `GET`    | `/v1/datasets/{id}/export`        | Portable `observer.dataset.v1`    |
+| `POST`   | `/v1/datasets/{id}/items`         | Save a case (optionally from a trace) |
+| `PATCH`  | `/v1/datasets/items/{id}`         | Edit a case                       |
+| `DELETE` | `/v1/datasets/items/{id}`         | Delete a case                     |
+| `DELETE` | `/v1/datasets/{id}`               | Delete a dataset and its cases    |
 | `GET`    | `/v1/evaluations/by-model`        | Turn health by model and provider |
 | `POST`   | `/v1/analytics/query`             | Flexible metrics query            |
 | `GET`    | `/v1/analytics/query/schema`      | Views, measures and dimensions    |
@@ -266,6 +274,18 @@ Scores of the previous rubric are replaced when the turn is re-scored. A backgro
 `OBSERVATORY_AUTO_EVAL_DAYS`, default 7) scores recent turns that have no evaluation yet and also
 backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
 Evaluations page shows health by model, both axes, the grade and the per-criterion breakdown.
+
+### Test cases (datasets)
+
+On a trace page, **Save as case** stores a failure as a reusable test case in a dataset. A case is
+**metadata only**: nothing from the trace's input or output is copied. It records what was observed
+(intent, tool names, model, health signals) and what a person expects of the next run: tools that
+must or must not be used, health conditions (no error, no truncation, no degradation, no fallback,
+maximum duration), phrases the reply must or must not contain (typed by the person), and an
+optional human verdict (correct / incorrect). Cases keep their source trace id but outlive it when
+retention purges the trace. `GET /v1/datasets/{id}/export` returns the `observer.dataset.v1` JSON
+that later steps (run comparison, a CI regression command) read. Note: Manitos does not export
+tool-call spans yet, so `observed.tools` is empty until it does.
 
 ### Alerts
 
