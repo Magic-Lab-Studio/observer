@@ -218,11 +218,12 @@ async def get_trace_timeline(
     buckets: dict[str, dict] = {}
     for trace in traces:
         # Truncate to interval
-        ts = trace.created_at.replace(
-            minute=(trace.created_at.minute // interval_minutes) * interval_minutes,
-            second=0,
-            microsecond=0,
-        )
+        created = trace.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        step = interval_minutes * 60
+        # intervals over 60 min collapsed to hourly buckets (audit 2026-10-17)
+        ts = datetime.fromtimestamp(int(created.timestamp()) // step * step, tz=timezone.utc)
         key = ts.isoformat()
         if key not in buckets:
             buckets[key] = {"timestamp": key, "count": 0, "cost_usd": 0}
