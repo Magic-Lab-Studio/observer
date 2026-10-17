@@ -8,6 +8,27 @@ from llm_observatory.pricing import calculate_cost
 from llm_observatory.tracer import Span, SpanStatus, get_tracer
 
 
+def _unwrap(func):
+    return getattr(func, "_llm_observatory_original", None) or func
+
+
+def _as_method(patched, original):
+    """A plain function the class can bind: assigning a BOUND method as a class attribute lost
+    the instance, so every
+    instrumented call failed with "missing 1 required positional argument: 'self'"
+    (audit 2026-10-17). Idempotent:
+    a class already patched by this SDK is returned to its original before being patched again."""
+    if getattr(original, "_llm_observatory_original", None) is not None:
+        original = original._llm_observatory_original
+
+    def wrapper(inst, *args, **kwargs):
+        return patched(inst, *args, **kwargs)
+
+    wrapper._llm_observatory_original = original
+    wrapper._llm_observatory_patched = True
+    return wrapper
+
+
 class OpenAIInstrumentor:
     """Instruments OpenAI API calls to capture traces."""
 
@@ -21,17 +42,19 @@ class OpenAIInstrumentor:
             import openai
 
             # Patch sync completions
-            self._original_sync_create = (
+            self._original_sync_create = _unwrap(
                 openai.resources.chat.completions.Completions.create
             )
-            openai.resources.chat.completions.Completions.create = self._patched_sync_create
+            openai.resources.chat.completions.Completions.create = _as_method(
+                self._patched_sync_create, self._original_sync_create
+            )
 
             # Patch async completions
-            self._original_async_create = (
+            self._original_async_create = _unwrap(
                 openai.resources.chat.completions.AsyncCompletions.create
             )
-            openai.resources.chat.completions.AsyncCompletions.create = (
-                self._patched_async_create
+            openai.resources.chat.completions.AsyncCompletions.create = _as_method(
+                self._patched_async_create, self._original_async_create
             )
         except ImportError:
             pass
@@ -86,7 +109,7 @@ class OpenAIInstrumentor:
         finally:
             span.end()
 
-    def _patched_sync_create(self, *args: Any, **kwargs: Any) -> Any:
+    def _patched_sync_create(self, inst: Any, *args: Any, **kwargs: Any) -> Any:
         """Patched sync create method."""
         model = kwargs.get("model", "unknown")
         messages = kwargs.get("messages", [])
@@ -94,7 +117,7 @@ class OpenAIInstrumentor:
         span, _ = self._build_span(model, messages)
 
         try:
-            result = self._original_sync_create(*args, **kwargs)
+            result = self._original_sync_create(inst, *args, **kwargs)
             self._finish_span(span, result, model)
             return result
         except Exception as e:
@@ -103,7 +126,7 @@ class OpenAIInstrumentor:
             span.end()
             raise
 
-    async def _patched_async_create(self, *args: Any, **kwargs: Any) -> Any:
+    async def _patched_async_create(self, inst: Any, *args: Any, **kwargs: Any) -> Any:
         """Patched async create method."""
         model = kwargs.get("model", "unknown")
         messages = kwargs.get("messages", [])
@@ -111,7 +134,7 @@ class OpenAIInstrumentor:
         span, _ = self._build_span(model, messages)
 
         try:
-            result = await self._original_async_create(*args, **kwargs)
+            result = await self._original_async_create(inst, *args, **kwargs)
             self._finish_span(span, result, model)
             return result
         except Exception as e:

@@ -128,7 +128,9 @@ def apply_capture(
 ) -> tuple[Any, Any, dict[str, Any] | None, Any]:
     """``(input, output, attributes, metadata)`` as they may be stored under ``mode``."""
     if mode == "metadata":
-        return None, None, filter_attributes(attributes, mode), meta
+        # the free-form metadata dict (64 KiB in the Manitos envelope) was stored whole in
+        # metadata mode (audit 2026-10-17)
+        return None, None, filter_attributes(attributes, mode), redact_json(meta)
     if mode == "redacted":
         return (
             redact_json(inp),

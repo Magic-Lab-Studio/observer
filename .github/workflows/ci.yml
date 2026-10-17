@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, manitOS-observer]
+    branches: [main]
   pull_request:
-    branches: [main, manitOS-observer]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

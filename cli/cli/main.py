@@ -256,7 +256,7 @@ def spans(trace_id: str, db: str, output_format: str) -> None:
 
 
 @cli.command()
-@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--host", default="127.0.0.1", help="Host to bind to (loopback by default; see docs/security.md)")
 @click.option("--port", default=8000, help="Port to bind to")
 @click.option("--reload", is_flag=True, help="Enable auto-reload")
 @click.option("--db", default="sqlite+aiosqlite:///./observatory.db", help="Database URL")

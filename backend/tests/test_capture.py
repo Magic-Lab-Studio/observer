@@ -67,7 +67,8 @@ def test_modes_decide_what_is_kept():
     }
     inp, out, attrs, meta = apply_capture("metadata", **kw)
     assert inp is None and out is None and attrs == {"model": "m", "gen_ai.usage.input_tokens": 5}
-    assert meta == kw["meta"]
+    # metadata mode no longer stores free-form metadata verbatim (audit 2026-10-17)
+    assert meta == {"note": "[REDACTED:email]"}
     inp, out, attrs, meta = apply_capture("redacted", **kw)
     assert inp == {"q": "mail [REDACTED:email]"} and out == {"a": "hi"} and "gen_ai.prompt" in attrs
     assert meta == {"note": "[REDACTED:email]"}

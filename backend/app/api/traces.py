@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,6 +20,7 @@ from app.limits import (
     MAX_TRACES_PER_IMPORT,
     bounded_json,
 )
+from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
 from app.ratelimit import limiter
 from app.websocket import manager
@@ -600,6 +601,8 @@ async def delete_trace(
     if not trace:
         raise HTTPException(status_code=404, detail="Trace not found")
 
+    # SQLite ran without foreign keys (audit 2026-10-17)
+    await session.execute(delete(Evaluation).where(Evaluation.trace_id == valid_id))
     await session.delete(trace)
     await session.flush()
     return {"detail": "Trace deleted"}
@@ -667,6 +670,9 @@ async def bulk_delete_traces(
     traces = list(result.scalars().all())
 
     deleted = 0
+    if traces:
+        trace_ids = [t.id for t in traces]
+        await session.execute(delete(Evaluation).where(Evaluation.trace_id.in_(trace_ids)))
     for trace in traces:
         await session.delete(trace)
         deleted += 1
