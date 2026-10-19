@@ -4,9 +4,9 @@ A deterministic heuristic, no model involved: calls are grouped by parent span, 
 normalized arguments (JSON with sorted keys). A group of at least ``min_repeats`` calls
 (``OBSERVATORY_LOOP_MIN_REPEATS``, default 5) is reported as a warning. ``same_output`` says
 every call returned the same output (no visible progress), the stronger signal; legitimate
-polling or iteration over a list also repeats, so this never fails a trace by itself. In
-``metadata`` capture mode inputs are not stored and calls group by name only
-(``arguments_known: false``).
+polling or iteration over a list also repeats, so this never fails a trace by itself. Calls
+without recorded inputs (the ``trace`` decorator records none; ``metadata`` capture mode drops
+them) group by name only (``arguments_known: false``).
 """
 
 from __future__ import annotations
