@@ -5,7 +5,7 @@ Findings, root causes and tests per finding: [observer-findings-matrix.md](obser
 ## A. Engineering summary
 
 * **Start:** `6e176d3` on `audit-2026-10-17` (evaluated commit `f1d25a5` + 4 audit commits; C1
-  was already fixed there). Branch `fix/observer-stabilization-2026-10`, in its own worktree.
+  was already fixed there). Branch `fix/observer-stabilization-2026-10`.
 * **End:** the last commit of this branch (12 commits on top of the start, plus this document).
   Not pushed, not merged, nothing published.
 * **Milestones in the order run:** 0 baseline → 1 SDK (C1, C2) → 2 ingestion integrity (A1–A5,
