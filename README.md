@@ -118,23 +118,48 @@ and production checklist, see [First-time setup](docs/first-time-setup.md).
 Copy [`.env.example`](.env.example) when you need to customize the backend. The
 checked-in values are development examples, not production credentials.
 
+### Prerequisites
+
+| Component | Requirement |
+|---|---|
+| Containers (recommended path) | Docker with Compose v2, or Podman with `podman-compose` |
+| Backend, Python SDK, CLI | Python 3.10 or newer (CI runs 3.13; the pinned local profile uses 3.12) |
+| Dashboard, TypeScript SDK | Node.js 22.12 or newer (`engines` in `package.json`; Node 20 is not supported) |
+| Database | SQLite (bundled, single node) or PostgreSQL 16 |
+
 ### Docker Compose (recommended)
+
+Compose has no default database password and refuses to start without one. Set it first (keep
+it in a `.env` file next to `docker-compose.yml` so restarts reuse it and the data stays
+readable):
 
 ```bash
 git clone https://github.com/Magic-Lab-Studio/observer.git
 cd observer
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
 docker compose up -d
 ```
 
-| Service    | URL                      |
-|------------|--------------------------|
-| Backend    | http://localhost:8000     |
-| Dashboard  | http://localhost:5173     |
-| PostgreSQL | localhost:5432           |
+| Service    | Address                   |
+|------------|---------------------------|
+| Backend    | http://127.0.0.1:8000     |
+| Dashboard  | http://127.0.0.1:5173     |
+| PostgreSQL | not published: only the backend reaches it on the compose network (see the comment in `docker-compose.yml` to publish it on loopback) |
+
+Both published ports bind to loopback. `docker compose down` keeps the data (the
+`postgres_data` volume); `docker compose down -v` deletes it.
+
+To check an installation end to end, run the six agent scenarios against it (Python SDK and
+`anthropic` installed; no API key and no network, the model calls are mocked):
+
+```bash
+python scripts/agent_scenarios.py --endpoint http://127.0.0.1:8000 --slow-seconds 2
+```
 
 ### Podman Compose
 
 ```bash
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
 podman-compose up -d
 ```
 
@@ -406,7 +431,18 @@ curl -X POST http://localhost:8000/v1/traces/batch \
       "cost_usd": 0.000875
     }]
   }'
+curl http://localhost:8000/v1/traces/demo-001
 ```
+
+Field rules (`backend/app/ingest_validation.py`): timestamps are Unix epoch seconds or ISO 8601
+with a time zone, between 1970 and 2100; `end_time` cannot precede `start_time`; `status` is
+`unset`, `ok` or `error` (`unset` is never counted as an error); token counts and cost are not
+negative; IDs are strings of up to 128 characters (UUIDs are stored as given, other IDs are
+mapped to a stable UUID, so `demo-001` stays addressable). A span stored before it finished is
+completed by its finished version; a finished span is never overwritten; retries are
+idempotent. The `X-Observer-Spans` response header counts accepted, updated, duplicate and
+conflicting spans. A trace's status, duration and name come from its root span (the span without
+a parent) once all of its spans have arrived; invalid input is a 422 with the reason.
 
 ## Python SDK
 

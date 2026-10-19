@@ -90,7 +90,7 @@ class LLMJudgeEvaluator(BaseEvaluator):
         api_key: str | None = None,
         rubric_dir: Path | None = None,
     ) -> None:
-        self.model = model or os.getenv("OBSERVATORY_JUDGE_MODEL", "gpt-4")
+        self.model = model or os.getenv("OBSERVATORY_JUDGE_MODEL", "gpt-4o")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self._rubric_dir = rubric_dir or _DEFAULT_RUBRIC_DIR
 
