@@ -128,9 +128,12 @@ async def test_get_trace_not_found(client):
 
 @pytest.mark.anyio
 async def test_get_trace_invalid_id(client):
-    """Test getting a trace with invalid ID format."""
-    response = await client.get("/v1/traces/not-a-uuid")
+    """A value that cannot be an ID is a bad request; a valid opaque ID that was never ingested
+    is simply not found (IDs are mapped, see app.ingest_validation)."""
+    response = await client.get("/v1/traces/" + "x" * 200)
     assert response.status_code == 400
+    response = await client.get("/v1/traces/not-a-uuid")
+    assert response.status_code == 404
 
 
 @pytest.mark.anyio
@@ -873,8 +876,10 @@ async def test_trace_evaluations_empty(client):
 @pytest.mark.anyio
 async def test_trace_evaluations_invalid_id(client):
     """Test GET /v1/traces/{id}/evaluations with invalid ID."""
-    resp = await client.get("/v1/traces/not-a-uuid/evaluations")
+    resp = await client.get("/v1/traces/" + "x" * 200 + "/evaluations")
     assert resp.status_code == 400
+    resp = await client.get("/v1/traces/not-a-uuid/evaluations")
+    assert resp.status_code == 404
 
 
 @pytest.mark.anyio
@@ -922,14 +927,26 @@ async def test_bulk_delete_partial(client):
 @pytest.mark.anyio
 async def test_evaluations_summary(client):
     """Test GET /v1/evaluations/summary."""
-    # Create some evaluations
-    await client.post("/v1/evaluations/", json={
+    # An evaluation of a trace that does not exist is refused (it was a 500 with foreign keys on)
+    missing = await client.post("/v1/evaluations/", json={
         "trace_id": "00000000-0000-0000-0000-000000000001",
         "evaluator_type": "rule_based",
         "score": 0.9,
     })
+    assert missing.status_code == 404
+    trace_ids = []
+    for name in ("a", "b"):
+        created = await client.post(
+            "/v1/traces/", json={"name": name, "start_time": 1700000000.0, "status": "ok"}
+        )
+        trace_ids.append(created.json()["id"])
     await client.post("/v1/evaluations/", json={
-        "trace_id": "00000000-0000-0000-0000-000000000002",
+        "trace_id": trace_ids[0],
+        "evaluator_type": "rule_based",
+        "score": 0.9,
+    })
+    await client.post("/v1/evaluations/", json={
+        "trace_id": trace_ids[1],
         "evaluator_type": "llm_judge",
         "score": 0.7,
     })

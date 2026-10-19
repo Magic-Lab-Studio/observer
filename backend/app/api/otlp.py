@@ -8,17 +8,14 @@ plus ``OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <key>`` when a key is req
 from __future__ import annotations
 
 import os
-from datetime import timezone
-from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.manitos_ingest import ManitOSIngestRequest, apply_envelope
 from app.db import get_session
-from app.models.trace import Span, Trace
+from app.models.trace import Trace
 from app.otlp import (
     MAX_BODY_BYTES,
     OtlpError,
@@ -32,6 +29,7 @@ from app.otlp import (
     capture_mode as otlp_capture_mode,
 )
 from app.ratelimit import limiter
+from app.trace_summary import refresh_trace_summary
 
 router = APIRouter()
 
@@ -40,38 +38,6 @@ _OTLP_LIMIT = os.getenv("RATE_LIMIT_OTLP", "600/minute")
 
 def _plain(status: int, message: str) -> Response:
     return Response(content=message, status_code=status, media_type="text/plain")
-
-
-async def _link_and_widen(session: AsyncSession, envelope: dict[str, Any]) -> None:
-    """Spans of one trace can arrive in several batches: keep the trace's full time range and link
-    a span to a parent stored by an earlier batch (instead of failing or orphaning it)."""
-    trace_id = envelope["trace"]["id"]
-    external = {s["_external_parent"] for s in envelope["spans"] if s.get("_external_parent")}
-    stored: set[str] = set()
-    if external:
-        rows = await session.execute(
-            select(Span.id).where(Span.id.in_(external), Span.trace_id == trace_id)
-        )
-        stored = {str(i) for i in rows.scalars()}
-    for span in envelope["spans"]:
-        parent = span.pop("_external_parent", None)
-        if parent in stored:
-            span["parent_id"] = parent
-    existing = await session.get(Trace, trace_id)
-    if existing is not None and existing.start_time is not None:
-        trace = envelope["trace"]
-        start = existing.start_time
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
-        trace["start_time"] = min(trace["start_time"], start.timestamp())
-        ends = [trace["end_time"]] if trace.get("end_time") else []
-        if existing.end_time is not None:
-            end = existing.end_time
-            if end.tzinfo is None:
-                end = end.replace(tzinfo=timezone.utc)
-            ends.append(end.timestamp())
-        trace["end_time"] = max(ends) if ends else None
-        trace["name"] = existing.name if existing.name else trace["name"]
 
 
 @router.post("/v1/traces")
@@ -100,10 +66,18 @@ async def receive_traces(
     for envelope in translated.envelopes:
         count = len(envelope["spans"])
         try:
-            await _link_and_widen(session, envelope)
             payload = ManitOSIngestRequest.model_validate(envelope)
             async with session.begin_nested():  # a rejected trace leaves no receipt behind
-                await apply_envelope(session, payload, default_capture=otlp_capture_mode())
+                await apply_envelope(
+                    session,
+                    payload,
+                    default_capture=otlp_capture_mode(),
+                    allow_pending_parents=True,
+                )
+                trace = await session.get(Trace, payload.trace.id)
+                if trace is not None:
+                    # status, interval and name over every batch of this trace, not this one
+                    await refresh_trace_summary(session, trace)
         except ValidationError as exc:
             rejected += count
             errors.append(f"trace rejected: {exc.errors()[0]['msg']}"[:200])

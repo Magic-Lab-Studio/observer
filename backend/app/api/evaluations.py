@@ -67,7 +67,13 @@ async def create_evaluation(
     eval_data: EvaluationCreate,
     session: AsyncSession = Depends(get_session),
 ) -> Evaluation:
-    """Create a new evaluation."""
+    """Create a new evaluation of a stored trace (and span, when given)."""
+    if await session.get(Trace, eval_data.trace_id) is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    if eval_data.span_id is not None:
+        span = await session.get(Span, eval_data.span_id)
+        if span is None or str(span.trace_id) != str(eval_data.trace_id):
+            raise HTTPException(status_code=404, detail="Span not found in this trace")
     evaluation = Evaluation(
         id=str(uuid.uuid4()),
         trace_id=eval_data.trace_id,
