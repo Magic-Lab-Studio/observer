@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api';
-import type { Trace, Span } from '../types';
+import type { TraceDiagnostics, Trace, Span } from '../types';
 import TraceWaterfall from '../components/TraceWaterfall';
 import SpanDetail from '../components/SpanDetail';
 import SaveAsCase from '../components/SaveAsCase';
@@ -41,6 +41,7 @@ function TraceDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Span | null>(null);
+  const [diagnostics, setDiagnostics] = useState<TraceDiagnostics | null>(null);
 
   useEffect(() => {
     if (!traceId) return;
@@ -49,6 +50,7 @@ function TraceDetail() {
       .then(([t, s]) => { setTrace(t); setSpans(s); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : t('Error desconocido')))
       .finally(() => setLoading(false));
+    api.getTraceDiagnostics(traceId).then(setDiagnostics).catch(() => setDiagnostics(null));
   }, [traceId]);
 
   const stages = useMemo(
@@ -70,7 +72,8 @@ function TraceDetail() {
 
   const dur = traceDurationMs(trace);
   const tokens = spans.reduce((a, s) => a + (s.tokens_input ?? 0) + (s.tokens_output ?? 0), 0);
-  const cost = spans.reduce((a, s) => a + (s.cost_usd ?? 0), 0);
+  const priced = spans.filter((s) => s.cost_usd != null);
+  const cost = priced.length ? priced.reduce((a, s) => a + (s.cost_usd ?? 0), 0) : null;
   const stageTotal = stages.reduce((a, s) => a + s.ms, 0) || 1;
   const meta = [
     ['Proyecto', trace.project_id], ['Entorno', trace.environment], ['Instancia', trace.service_instance_id],
@@ -95,6 +98,16 @@ function TraceDetail() {
       </div>
 
       {saving && <SaveAsCase traceId={trace.id} onClose={() => setSaving(false)} />}
+
+      {diagnostics?.repeated_calls.map((g) => (
+        <div key={`${g.parent_span_id}/${g.tool}/${g.span_ids[0]}`} role="status"
+          className="rounded-xl border border-warn/30 bg-warn/5 p-3 text-xs text-warn">
+          {t('Posible bucle: «{tool}» se llamó {n} veces seguidas con los mismos argumentos', { tool: g.tool, n: g.count })}
+          {g.same_output ? ` · ${t('siempre con la misma respuesta')}` : ''}
+          {g.errors ? ` · ${t('{n} con error', { n: g.errors })}` : ''}
+          {!g.arguments_known ? ` · ${t('sin argumentos registrados: se agrupan por nombre')}` : ''}
+        </div>
+      ))}
 
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi label={t("Duración")} value={fmtMs(dur)} />

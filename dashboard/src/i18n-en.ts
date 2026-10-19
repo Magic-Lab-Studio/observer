@@ -481,4 +481,8 @@ export const EN: Record<string, string> = {
   'sin indicar': 'not reported',
   'Llamadas a modelos de cualquier aplicación instrumentada': 'Model calls from any instrumented application',
   'La cadena de respaldo (orden de proveedores, cuotas, intentos fallidos) aparece cuando una integración la reporta, como Manitos con spans llm.chain.': 'The fallback chain (provider order, quotas, failed attempts) appears when an integration reports it, such as Manitos with llm.chain spans.',
+  'Posible bucle: «{tool}» se llamó {n} veces seguidas con los mismos argumentos': 'Possible loop: "{tool}" was called {n} times with the same arguments',
+  'siempre con la misma respuesta': 'always with the same answer',
+  '{n} con error': '{n} with errors',
+  'sin argumentos registrados: se agrupan por nombre': 'no arguments recorded: grouped by name',
 };

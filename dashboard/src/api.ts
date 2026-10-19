@@ -3,6 +3,7 @@
  */
 
 import type {
+  TraceDiagnostics,
   ProviderModelsResponse,
   Trace,
   Span,
@@ -82,6 +83,9 @@ export const api = {
     return request(`/v1/traces/${traceId}`);
   },
 
+  async getTraceDiagnostics(traceId: string): Promise<TraceDiagnostics> {
+    return request(`/v1/traces/${encodeURIComponent(traceId)}/diagnostics`);
+  },
   async getTraceSpans(traceId: string): Promise<Span[]> {
     return request(`/v1/traces/${traceId}/spans`);
   },

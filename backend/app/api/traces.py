@@ -33,6 +33,7 @@ from app.limits import (
     MAX_TRACES_PER_IMPORT,
     bounded_json,
 )
+from app.loop_detection import min_repeats, repeated_calls
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
 from app.ratelimit import limiter
@@ -663,6 +664,23 @@ async def get_trace_spans(
     )
     result = await session.execute(query)
     return list(result.scalars().all())
+
+
+@router.get("/{trace_id}/diagnostics")
+async def get_trace_diagnostics(
+    trace_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``)."""
+    valid_id = await _resolve_trace_id(session, trace_id)
+    if await session.get(Trace, valid_id) is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    rows = (await session.execute(select(Span).where(Span.trace_id == valid_id))).scalars().all()
+    return {
+        "trace_id": valid_id,
+        "min_repeats": min_repeats(),
+        "repeated_calls": repeated_calls(list(rows)),
+    }
 
 
 @router.delete("/{trace_id}")

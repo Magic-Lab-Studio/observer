@@ -232,3 +232,9 @@ export interface IngestProject {
   traces_5m: number; traces_1h: number; traces_24h: number;
 }
 export interface IngestHealth { checked_at: string; projects: IngestProject[] }
+
+export interface RepeatedCalls {
+  tool: string; parent_span_id: string | null; count: number; errors: number;
+  arguments_known: boolean; same_output: boolean; span_ids: string[]; window_ms: number | null; severity: 'warning';
+}
+export interface TraceDiagnostics { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }
