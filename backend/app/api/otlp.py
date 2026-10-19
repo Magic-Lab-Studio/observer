@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Request, Response
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.manitos_ingest import ManitOSIngestRequest, apply_envelope
-from app.db import get_session
+from app.db import DbSession
 from app.models.trace import Trace
 from app.otlp import (
     MAX_BODY_BYTES,
@@ -43,7 +43,7 @@ def _plain(status: int, message: str) -> Response:
 @router.post("/v1/traces")
 @limiter.limit(_OTLP_LIMIT)
 async def receive_traces(
-    request: Request, session: AsyncSession = Depends(get_session)
+    request: Request, session: AsyncSession = DbSession
 ) -> Response:
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > MAX_BODY_BYTES:

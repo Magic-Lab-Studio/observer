@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.capture import apply_capture, capture_mode
-from app.db import get_session
+from app.db import DbSession
 from app.ingest_validation import (
     OpaqueId,
     OptionalTimestamp,
@@ -243,7 +243,7 @@ class SpanResponse(BaseModel):
 @router.post("/", response_model=TraceResponse)
 async def create_trace(
     trace_data: TraceCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Trace:
     """Create a new trace with optional spans."""
     trace_id = str(uuid.uuid4())
@@ -414,7 +414,7 @@ async def create_traces_batch(
     request: Request,
     response: Response,
     batch_data: BatchSpansCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[Trace]:
     """Create or extend traces from a batch of spans (the SDK exporters' endpoint).
 
@@ -471,7 +471,7 @@ async def list_traces(
     search: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """List traces with optional filtering and server-side search."""
     base_query = select(Trace)
@@ -565,7 +565,7 @@ async def export_traces(
     session_id: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Export traces with spans in JSON format.
 
@@ -634,7 +634,7 @@ async def export_traces(
 @router.get("/{trace_id}", response_model=TraceResponse)
 async def get_trace(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Trace:
     """Get a trace by ID."""
     valid_id = await _resolve_trace_id(session, trace_id)
@@ -652,7 +652,7 @@ async def get_trace(
 @router.get("/{trace_id}/spans", response_model=list[SpanResponse])
 async def get_trace_spans(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[Span]:
     """Get all spans for a trace."""
     valid_id = await _resolve_trace_id(session, trace_id)
@@ -669,7 +669,7 @@ async def get_trace_spans(
 @router.get("/{trace_id}/diagnostics")
 async def get_trace_diagnostics(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``)."""
     valid_id = await _resolve_trace_id(session, trace_id)
@@ -686,7 +686,7 @@ async def get_trace_diagnostics(
 @router.delete("/{trace_id}")
 async def delete_trace(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, str]:
     """Delete a trace and its spans."""
     valid_id = await _resolve_trace_id(session, trace_id)
@@ -711,7 +711,7 @@ async def delete_trace(
 @router.get("/{trace_id}/evaluations")
 async def get_trace_evaluations(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[dict]:
     """Get all evaluations for a specific trace."""
     from app.models.evaluation import Evaluation
@@ -755,7 +755,7 @@ class BulkDeleteRequest(BaseModel):
 @router.post("/batch-delete")
 async def bulk_delete_traces(
     req: BulkDeleteRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Delete multiple traces by ID."""
     valid_ids = [tid for tid in (_safe_uuid(tid) for tid in req.trace_ids) if tid]
@@ -849,7 +849,7 @@ class ImportResponse(BaseModel):
 async def import_traces(
     request: Request,
     import_data: ImportRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Import traces from a JSON export.
 

@@ -10,11 +10,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
+from app.db import DbSession
 from app.models.trace import Trace
 
 router = APIRouter()
@@ -38,7 +38,7 @@ async def silence_minutes(
 
 
 @router.get("/health")
-async def ingest_health(session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def ingest_health(session: AsyncSession = DbSession) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     t5, t60, t24 = (now - timedelta(minutes=5), now - timedelta(hours=1), now - timedelta(days=1))
     rows = (

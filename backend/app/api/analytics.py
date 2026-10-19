@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
+from app.db import DbSession
 from app.metrics_core import percentile
 from app.metrics_query import QueryError, QueryRequest, run_query
 from app.metrics_query import schema as query_schema
@@ -108,7 +108,7 @@ class ManitOSQualitySummary(BaseModel):
 async def get_analytics_summary(
     session_id: str | None = Query(None),
     hours: int = Query(24, ge=1, le=720),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Get analytics summary for the specified time period."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -190,7 +190,7 @@ async def get_analytics_summary(
 @router.get("/cost-by-model", response_model=list[CostByModel])
 async def get_cost_by_model(
     hours: int = Query(24, ge=1, le=720),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[dict]:
     """Get cost breakdown by model (from span attributes)."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -226,7 +226,7 @@ async def get_cost_by_model(
 async def get_trace_timeline(
     hours: int = Query(24, ge=1, le=720),
     interval_minutes: int = Query(60, ge=5, le=1440),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[dict]:
     """Get trace count and cost over time."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -276,7 +276,7 @@ async def get_manitos_quality(
     environment: str | None = Query(None, min_length=1, max_length=64),
     since: datetime | None = Query(None),
     until: datetime | None = Query(None),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Aggregate bounded, metadata-only turn quality signals across SQL dialects.
 
@@ -410,7 +410,7 @@ class SessionInfo(BaseModel):
 @router.get("/sessions", response_model=list[SessionInfo])
 async def list_sessions(
     limit: int = Query(100, ge=1, le=1000),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[dict]:
     """List unique sessions with aggregated stats."""
     query = (
@@ -456,7 +456,7 @@ async def get_query_schema() -> dict:
 
 
 @router.post("/query")
-async def post_query(request: QueryRequest, session: AsyncSession = Depends(get_session)) -> dict:
+async def post_query(request: QueryRequest, session: AsyncSession = DbSession) -> dict:
     """Aggregate turns, provider attempts or turn evaluations by dimension and time."""
     try:
         return await run_query(session, request)

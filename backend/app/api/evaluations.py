@@ -7,12 +7,12 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
+from app.db import DbSession
 from app.evaluators import EvaluationCriteria, EvaluatorType, create_evaluator
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
@@ -65,7 +65,7 @@ class EvaluationResponse(BaseModel):
 @router.post("/", response_model=EvaluationResponse)
 async def create_evaluation(
     eval_data: EvaluationCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Evaluation:
     """Create a new evaluation of a stored trace (and span, when given)."""
     if await session.get(Trace, eval_data.trace_id) is None:
@@ -103,7 +103,7 @@ async def create_evaluation(
 @router.post("/run", response_model=EvaluationResponse)
 async def run_evaluation(
     run_request: EvaluationRunRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Evaluation:
     """Run an evaluation on a trace using the specified evaluator."""
     # Get the trace
@@ -207,7 +207,7 @@ async def run_evaluation(
 
 @router.get("/summary")
 async def get_evaluations_summary(
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Get aggregated evaluation statistics."""
     # By evaluator type
@@ -261,7 +261,7 @@ async def list_evaluations(
     max_score: float | None = Query(None, ge=0, le=1),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """List evaluations with optional filtering."""
     base_query = select(Evaluation)
@@ -355,7 +355,7 @@ def summarize_scores(rows: list[tuple[Any, Any]]) -> dict[str, Any]:
 async def evaluations_by_model(
     hours: int = Query(168, ge=1, le=720),
     project_id: str = Query("manitos", min_length=1, max_length=128),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     """Quality of the automatic rule-based turn evaluations, grouped by model and provider."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -376,7 +376,7 @@ async def evaluations_by_model(
 @router.get("/{evaluation_id}", response_model=EvaluationResponse)
 async def get_evaluation(
     evaluation_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Evaluation:
     """Get an evaluation by ID."""
     query = select(Evaluation).where(Evaluation.id == evaluation_id)
@@ -392,7 +392,7 @@ async def get_evaluation(
 @router.delete("/{evaluation_id}")
 async def delete_evaluation(
     evaluation_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, str]:
     """Delete an evaluation."""
     query = select(Evaluation).where(Evaluation.id == evaluation_id)

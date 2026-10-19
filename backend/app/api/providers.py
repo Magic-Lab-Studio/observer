@@ -18,12 +18,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
+from app.db import DbSession
 from app.metrics_core import classify_attempt as _classify
 from app.metrics_core import parse_attempts, percentile
 from app.models.trace import Span, Trace
@@ -216,7 +216,7 @@ async def get_providers(
     hours: int = Query(24, ge=1, le=720),
     project_id: str = Query("manitos", min_length=1, max_length=128),
     environment: str | None = Query(None, min_length=1, max_length=64),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     query = (
@@ -279,7 +279,7 @@ async def get_provider_models(
     hours: int = Query(24, ge=1, le=720),
     project_id: str | None = Query(None, min_length=1, max_length=128),
     environment: str | None = Query(None, min_length=1, max_length=64),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     """Calls, errors, latency, tokens and cost per provider and model, from LLM spans.
 
