@@ -229,19 +229,26 @@ async def get_evaluations_summary(
             "avg_score": float(row[2]) if row[1] > 0 else None,
         }
 
-    # Pass rate (score >= 0.8)
-    pass_query = select(func.count(Evaluation.id)).where(Evaluation.score >= 0.8)
-    pass_result = await session.execute(pass_query)
-    passed = pass_result.scalar() or 0
+    # An evaluation passes when it says so; one that could not judge every criterion
+    # (passed: null) is incomplete, never a pass. Rows without a verdict (older ones, or created
+    # directly with a score) keep the historical rule: score >= 0.8.
+    passed = incomplete = total = 0
+    for score, result in (await session.execute(select(Evaluation.score, Evaluation.result))).all():
+        total += 1
+        verdict = result.get("passed", "absent") if isinstance(result, dict) else "absent"
+        if verdict is None:
+            incomplete += 1
+        elif verdict == "absent":
+            passed += 1 if score is not None and float(score) >= 0.8 else 0
+        elif verdict is True:
+            passed += 1
 
-    total_query = select(func.count(Evaluation.id))
-    total_result = await session.execute(total_query)
-    total = total_result.scalar() or 0
-
+    decided = total - incomplete
     return {
         "total": total,
         "passed": passed,
-        "pass_rate": passed / total if total > 0 else 0,
+        "incomplete": incomplete,
+        "pass_rate": passed / decided if decided > 0 else 0,
         "by_type": by_type,
     }
 
