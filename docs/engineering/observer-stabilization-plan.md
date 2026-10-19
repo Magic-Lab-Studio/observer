@@ -6,8 +6,8 @@ Findings, root causes and tests per finding: [observer-findings-matrix.md](obser
 
 * **Start:** `6e176d3` on `audit-2026-10-17` (evaluated commit `f1d25a5` + 4 audit commits; C1
   was already fixed there). Branch `fix/observer-stabilization-2026-10`.
-* **End:** the last commit of this branch (12 commits on top of the start, plus this document).
-  Not pushed, not merged, nothing published.
+* **End:** the last commit of this branch. Migration notes:
+  [migration-20261019-parent-ref.md](migration-20261019-parent-ref.md).
 * **Milestones in the order run:** 0 baseline → 1 SDK (C1, C2) → 2 ingestion integrity (A1–A5,
   M1–M6, B1, plus the parent foreign-key defect) → 3 generic analytics and dashboard (C3, M7,
   B2–B4) → A6 pricing (moved ahead of the docs milestone so the scenarios could pass end to end)
@@ -45,13 +45,15 @@ Findings, root causes and tests per finding: [observer-findings-matrix.md](obser
   judge default model is `gpt-4o` as documented (code said `gpt-4`).
 * The dashboard changes were checked by screenshots on a throwaway instance, not by automated
   UI tests.
+* Found later, fixed in this branch: the API acknowledged writes before committing them (the
+  session committed after the response was sent). Every route now commits first.
 
 ## C. Test report (commands run in this session)
 
 | Suite | Command | Result |
 |---|---|---|
 | Lint | `ruff check backend cli sdk/python` | clean |
-| Backend | `cd backend && pytest tests -q` | 300 passed (baseline 236) |
+| Backend | `cd backend && pytest tests -q` | 304 passed (baseline 236) |
 | Python SDK | `cd sdk/python && pytest tests -q` | 90 passed (baseline 47) |
 | CLI | `cd cli && pytest tests -q` | 63 passed (baseline 63) |
 | TypeScript SDK | `npx tsc --noEmit && npm run test:run` | clean, 33 passed (baseline 30) |
