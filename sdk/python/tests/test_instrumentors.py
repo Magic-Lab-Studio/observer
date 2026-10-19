@@ -131,15 +131,19 @@ class TestTracerWithExporter:
         tracer.add_exporter(mock_exporter)
         assert mock_exporter in tracer._exporters
 
-    def test_auto_export_on_span_creation(self):
-        """Test that spans are automatically exported when exporters are registered."""
+    def test_span_is_exported_when_it_ends_not_when_it_starts(self):
+        """A span is queued at end() (evaluation C2): exporting it at creation sent no end time,
+        no status and no tokens, and the later mutations never reached the backend."""
         tracer = Tracer(batch_size=1)
         mock_exporter = MagicMock()
         tracer.add_exporter(mock_exporter)
 
-        tracer.start_span("test-span")
+        span = tracer.start_span("test-span")
+        tracer.flush()
+        mock_exporter.export.assert_not_called()
 
-        # Should have exported the span
+        span.end()
+        tracer.flush()
         mock_exporter.export.assert_called()
         call_args = mock_exporter.export.call_args[0][0]
         assert len(call_args) == 1
@@ -151,10 +155,10 @@ class TestTracerWithExporter:
         mock_exporter = MagicMock()
         tracer.add_exporter(mock_exporter)
 
-        tracer.start_span("span-1")
-        tracer.start_span("span-2")
+        tracer.start_span("span-1").end()
+        tracer.start_span("span-2").end()
 
-        # Buffer should have 2 spans (not yet flushed)
+        # Buffer should have 2 finished spans (not yet flushed)
         assert len(tracer._buffer) == 2
 
         tracer.flush()
