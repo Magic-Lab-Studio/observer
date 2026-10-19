@@ -44,8 +44,10 @@ jobs:
         run: >-
           python -m pip install
           -e "./backend[dev,sqlite]"
-          -e "./sdk/python[dev]"
+          -e "./sdk/python[dev,openai,anthropic]"
           -e ./cli
+      # The real-client instrumentor tests (evaluation C1) and the Anthropic judge test skip
+      # without these packages; installing them keeps the regressions gated.
       - name: Backend tests
         run: python -m pytest tests -q
         working-directory: backend
@@ -55,6 +57,30 @@ jobs:
       - name: CLI tests
         run: python -m pytest tests -q
         working-directory: cli
+
+  agent-scenarios:
+    # Six agent scenarios through the SDK into a running backend (SQLite), read back through the
+    # API: the end-to-end check of the 2026-10-18 evaluation. Model calls use a mocked transport.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install -e "./backend[sqlite]" -e "./sdk/python[anthropic]"
+      - name: Start the backend and run the scenarios
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./scenarios.db
+          OBSERVATORY_ALERTS: "0"
+          OBSERVATORY_AUTO_EVAL: "0"
+        run: |
+          (cd backend && alembic upgrade head && (uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../backend.log 2>&1 &))
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          python scripts/agent_scenarios.py --endpoint http://127.0.0.1:8000 --slow-seconds 2 || (cat backend.log; exit 1)
 
   sqlite-migrations:
     runs-on: ubuntu-latest
