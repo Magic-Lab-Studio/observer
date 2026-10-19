@@ -191,10 +191,10 @@ function Overview() {
                   tone={(summary?.span_error_count ?? 0) > 0 ? 'warn' : 'neutral'} />
               </>
             )}
-            <Kpi label={t("Costo")} value={summary && summary.priced_span_count === 0 && summary.total_spans > 0 ? '–' : fmtUsd(summary?.total_cost_usd ?? 0)}
-              hint={summary && summary.priced_span_count === 0 && summary.total_spans > 0
-                ? t('ningún span informó costo')
-                : (summary?.total_cost_usd ?? 0) === 0 ? t('modelos gratuitos o locales') : `${fmtInt(summary?.total_spans)} spans`} />
+            <Kpi label={t("Costo")} value={!summary || !summary.priced_span_count ? '–' : fmtUsd(summary.total_cost_usd)}
+              hint={!summary || summary.total_spans === 0 ? t('Sin datos')
+                : !summary.priced_span_count ? t('ningún span informó costo')
+                : summary.total_cost_usd === 0 ? t('modelos gratuitos o locales') : `${fmtInt(summary.total_spans)} spans`} />
           </>
         )}
       </dl>
