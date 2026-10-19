@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.datasets import _dataset, _observed
 from app.case_check import check_case, compare_results
-from app.db import get_session
+from app.db import DbSession
 from app.evaluators.manitos_turn import RUBRIC
 from app.models.datasets import DatasetItem
 from app.models.runs import DatasetRun, RunResult
@@ -94,7 +94,7 @@ async def _results(session: AsyncSession, run_id: str) -> list[RunResult]:
 
 @router.post("/{dataset_id}/runs")
 async def create_run(
-    dataset_id: str, body: RunIn, session: AsyncSession = Depends(get_session)
+    dataset_id: str, body: RunIn, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     await _dataset(session, dataset_id)
     items = {
@@ -133,7 +133,7 @@ async def create_run(
 
 @router.get("/{dataset_id}/runs")
 async def list_runs(
-    dataset_id: str, session: AsyncSession = Depends(get_session)
+    dataset_id: str, session: AsyncSession = DbSession
 ) -> list[dict[str, Any]]:
     await _dataset(session, dataset_id)
     runs = (
@@ -152,7 +152,7 @@ async def compare_runs(
     dataset_id: str,
     base: str = Query(..., max_length=36),
     candidate: str = Query(..., max_length=36),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     """Case-by-case difference between two runs of the same dataset."""
     runs = {}
@@ -174,7 +174,7 @@ async def compare_runs(
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def get_run(run_id: str, session: AsyncSession = DbSession) -> dict[str, Any]:
     run = await session.get(DatasetRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
@@ -183,7 +183,7 @@ async def get_run(run_id: str, session: AsyncSession = Depends(get_session)) -> 
 
 
 @router.delete("/runs/{run_id}")
-async def delete_run(run_id: str, session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+async def delete_run(run_id: str, session: AsyncSession = DbSession) -> dict[str, str]:
     run = await session.get(DatasetRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")

@@ -10,14 +10,14 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.capture import apply_capture, capture_mode
-from app.db import get_session
+from app.db import DbSession
 from app.models.ingestion import IngestionReceipt
 from app.models.trace import Span, Trace
 from app.ratelimit import limiter
@@ -311,7 +311,7 @@ def _duplicate_response(
 async def ingest_manitos_trace(
     request: Request,
     payload: ManitOSIngestRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> ManitOSIngestResponse:
     """Upsert a complete integration trace with retry-safe semantics."""
 
@@ -320,11 +320,17 @@ async def ingest_manitos_trace(
 
 
 async def apply_envelope(
-    session: AsyncSession, payload: ManitOSIngestRequest, default_capture: str = "full"
+    session: AsyncSession,
+    payload: ManitOSIngestRequest,
+    default_capture: str = "full",
+    *,
+    allow_pending_parents: bool = False,
 ) -> ManitOSIngestResponse:
     """The ingestion itself (also used by the OTLP receiver, which builds envelopes).
 
-    ``default_capture`` is the path's capture mode when the project has none of its own."""
+    ``default_capture`` is the path's capture mode when the project has none of its own.
+    ``allow_pending_parents`` (OTLP) accepts a parent that has not been stored yet; a parent
+    stored under another trace is refused either way."""
     mode = await capture_mode(session, payload.project_id, default_capture)
 
     digest = _payload_hash(payload)
@@ -403,13 +409,11 @@ async def apply_envelope(
     }
     if external_parent_ids:
         parent_result = await session.execute(select(Span).where(Span.id.in_(external_parent_ids)))
-        valid_parents = {
-            str(span.id)
-            for span in parent_result.scalars().all()
-            if str(span.trace_id) == payload.trace.id
-        }
-        missing_parents = external_parent_ids - valid_parents
-        if missing_parents:
+        found = {str(span.id): str(span.trace_id) for span in parent_result.scalars().all()}
+        if any(trace_id != payload.trace.id for trace_id in found.values()):
+            raise HTTPException(status_code=409, detail="parent span does not belong to this trace")
+        missing_parents = external_parent_ids - set(found)
+        if missing_parents and not allow_pending_parents:
             raise HTTPException(status_code=409, detail="parent span does not belong to this trace")
 
     accepted = 0

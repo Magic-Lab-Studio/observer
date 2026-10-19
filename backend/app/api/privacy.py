@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,7 @@ from app.capture import (
     default_mode,
     has_sensitive_patterns,
 )
-from app.db import get_session
+from app.db import DbSession
 from app.models.settings import ProjectSetting
 from app.models.trace import Span, Trace
 
@@ -73,7 +73,7 @@ def _entry(project_id: str, setting: str | None) -> dict[str, Any]:
 
 
 @router.get("/projects")
-async def list_projects(session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def list_projects(session: AsyncSession = DbSession) -> dict[str, Any]:
     """Every known project with its capture mode and what its latest spans hold."""
     settings = {
         pid: mode
@@ -104,7 +104,7 @@ async def list_projects(session: AsyncSession = Depends(get_session)) -> dict[st
 
 @router.put("/projects/{project_id}")
 async def set_mode(
-    project_id: str, body: ModeIn, session: AsyncSession = Depends(get_session)
+    project_id: str, body: ModeIn, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     if not 0 < len(project_id) <= 128:
         raise HTTPException(status_code=422, detail="invalid project id")
@@ -119,7 +119,7 @@ async def set_mode(
 
 @router.delete("/projects/{project_id}")
 async def clear_mode(
-    project_id: str, session: AsyncSession = Depends(get_session)
+    project_id: str, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     """Back to the ingestion paths' defaults."""
     await session.execute(delete(ProjectSetting).where(ProjectSetting.project_id == project_id))
@@ -128,7 +128,7 @@ async def clear_mode(
 
 @router.post("/projects/{project_id}/enforce")
 async def enforce_mode(
-    project_id: str, body: ConfirmIn, session: AsyncSession = Depends(get_session)
+    project_id: str, body: ConfirmIn, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     """Re-apply the project's mode to what is already stored. **Irreversible** for ``metadata``
     (stored input/output are removed) and ``redacted`` (matches are replaced): needs ``confirm``."""

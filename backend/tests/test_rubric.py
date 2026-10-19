@@ -614,4 +614,7 @@ class TestLLMJudgeEvaluatorMocked:
         # All 4 deterministic pass → composite should be high
         assert result.score >= 0.9
         assert result.details["grade"] == "A"
-        assert result.passed is True
+        # ...but the qualitative criteria were never judged: no PASS without evidence (P5)
+        assert result.passed is None
+        assert result.details["evaluation_status"] == "incomplete"
+        assert {s["reason"] for s in result.details["skipped_criteria"]} == {"judge_not_configured"}

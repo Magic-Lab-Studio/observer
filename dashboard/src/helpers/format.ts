@@ -1,9 +1,10 @@
-import { parseApiDate } from '../dates';
-import { localeTag, t } from '../i18n';
-import type { Trace } from '../types';
+import { parseApiDate } from '../dates.ts';
+import { localeTag, t } from '../i18n.ts';
+import type { Trace } from '../types.ts';
 
 export function fmtMs(ms: number | null | undefined): string {
   if (ms == null || Number.isNaN(ms)) return '–';
+  if (ms === 0) return '0 ms';
   if (ms < 1) return '<1 ms';
   if (ms < 1000) return `${Math.round(ms)} ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`;
@@ -20,9 +21,16 @@ export function fmtInt(n: number | null | undefined): string {
   return n == null ? '–' : n.toLocaleString(localeTag());
 }
 
+/** Dollars and cents from $1, four decimals below; under a cent, three significant digits so a
+ * $0.0000012 call does not round to $0.000001 (B4). Display only: the API keeps full precision. */
 export function fmtUsd(n: number | null | undefined): string {
-  if (n == null) return '–';
-  return n === 0 ? '$0' : `$${n < 0.01 ? n.toFixed(6) : n.toFixed(4)}`;
+  if (n == null || Number.isNaN(n)) return '–';
+  if (n === 0) return '$0';
+  const abs = Math.abs(n);
+  if (abs >= 1) return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (abs >= 0.01) return `$${n.toFixed(4)}`;
+  const digits = Math.min(20, 2 - Math.floor(Math.log10(abs)));
+  return `$${n.toFixed(digits).replace(/(\.\d*?[1-9])0+$/, '$1')}`;
 }
 
 export function shortId(id: string | null | undefined, n = 8): string {

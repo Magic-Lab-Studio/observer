@@ -56,12 +56,22 @@ export interface SummaryData {
   error_rate: number;
   total_evaluations: number;
   avg_evaluation_score: number;
+  completed_traces?: number;
+  running_traces?: number;
+  trace_error_rate?: number | null;
+  span_error_count?: number;
+  llm_span_count?: number;
+  tool_span_count?: number;
+  priced_span_count?: number;
+  p50_trace_duration_ms?: number | null;
+  p95_trace_duration_ms?: number | null;
 }
 
 export interface TimelinePoint {
   timestamp: string;
   count: number;
   cost_usd: number;
+  error_count?: number;
 }
 
 export interface CostByModel {
@@ -93,8 +103,8 @@ export interface ManitOSQualitySummary {
   fallback_rate: number;
   tts_error_count: number;
   tts_error_rate: number;
-  avg_duration_ms: number;
-  avg_ttft_ms: number;
+  avg_duration_ms: number | null;
+  avg_ttft_ms: number | null;
   models: QualityBreakdown[];
   languages: QualityBreakdown[];
 }
@@ -136,6 +146,16 @@ export interface ProvidersResponse {
   providers: ProviderStats[];
   fallback_depth: { depth: number; count: number }[];
   paths: { path: string; count: number }[];
+}
+
+export interface ProviderModelRow {
+  provider: string; model: string; calls: number; errors: number; error_rate: number;
+  p50_ms: number | null; p95_ms: number | null; tokens_input: number | null; tokens_output: number | null;
+  cost_usd: number | null; priced_calls: number; last_seen: string | null;
+}
+export interface ProviderModelsResponse {
+  hours: number; project_id: string | null; environment: string | null; calls: number;
+  models: ProviderModelRow[]; truncated: boolean;
 }
 
 export interface ScoreGroup {
@@ -212,3 +232,9 @@ export interface IngestProject {
   traces_5m: number; traces_1h: number; traces_24h: number;
 }
 export interface IngestHealth { checked_at: string; projects: IngestProject[] }
+
+export interface RepeatedCalls {
+  tool: string; parent_span_id: string | null; count: number; errors: number;
+  arguments_known: boolean; same_output: boolean; span_ids: string[]; window_ms: number | null; severity: 'warning';
+}
+export interface TraceDiagnostics { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }

@@ -47,7 +47,9 @@ class Span(Base):
     trace_id = Column(
         String(36), ForeignKey("traces.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    parent_span_id = Column(String(36), ForeignKey("spans.id"), nullable=True, index=True)
+    # A reference, not a foreign key: a child span is exported before its parent finishes, and an
+    # OpenTelemetry parent may belong to another service (migration 20261019_parent_ref).
+    parent_span_id = Column(String(36), nullable=True, index=True)
     name = Column(String(255), nullable=False)
     span_type = Column(String(50), nullable=False, default="generic")
     start_time = Column(DateTime(timezone=True), nullable=False)
@@ -63,4 +65,3 @@ class Span(Base):
 
     # Relationships
     trace = relationship("Trace", back_populates="spans")
-    parent = relationship("Span", remote_side=[id], backref="children")
