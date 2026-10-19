@@ -181,3 +181,19 @@ async def test_anthropic_judge_through_the_sdk(monkeypatch, status, body, reason
     else:
         assert result.passed is None
         assert {s["reason"] for s in result.details["skipped_criteria"]} == {reason}
+
+
+@pytest.mark.anyio
+async def test_summary_follows_the_evaluator_verdict_and_says_correctness_is_unknown(client):
+    """The 2026-10-19 rehearsal: on real data the pass rate moved from 85.1 % (score >= 0.8) to
+    97.6 % (the evaluator's own verdict, health >= 0.6). Neither measured correctness."""
+    trace = await client.post("/v1/traces/", json={"name": "t", "start_time": 1700000000.0})
+    tid = trace.json()["id"]
+    for score, passed in ((0.85, True), (0.7, True), (0.5, False)):
+        await client.post("/v1/evaluations/", json={
+            "trace_id": tid, "evaluator_type": "rule_based", "score": score,
+            "result": {"passed": passed, "correctness": {"status": "unknown", "score": None}},
+        })
+    summary = (await client.get("/v1/evaluations/summary")).json()
+    assert summary["passed"] == 2 and summary["pass_rate"] == pytest.approx(2 / 3)
+    assert summary["correctness_known"] == 0 and summary["pass_basis"] == "evaluator_verdict"

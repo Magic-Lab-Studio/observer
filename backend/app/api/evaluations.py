@@ -232,9 +232,12 @@ async def get_evaluations_summary(
     # An evaluation passes when it says so; one that could not judge every criterion
     # (passed: null) is incomplete, never a pass. Rows without a verdict (older ones, or created
     # directly with a score) keep the historical rule: score >= 0.8.
-    passed = incomplete = total = 0
+    passed = incomplete = total = correctness_known = 0
     for score, result in (await session.execute(select(Evaluation.score, Evaluation.result))).all():
         total += 1
+        correctness = result.get("correctness") if isinstance(result, dict) else None
+        if isinstance(correctness, dict) and correctness.get("status") not in (None, "unknown"):
+            correctness_known += 1
         verdict = result.get("passed", "absent") if isinstance(result, dict) else "absent"
         if verdict is None:
             incomplete += 1
@@ -249,6 +252,11 @@ async def get_evaluations_summary(
         "passed": passed,
         "incomplete": incomplete,
         "pass_rate": passed / decided if decided > 0 else 0,
+        # How many verdicts rest on a measured correctness signal. Rule-based turn evaluations
+        # (manitos_turn) pass on operational health alone, so a pass rate without known
+        # correctness says nothing about whether the answers were right.
+        "correctness_known": correctness_known,
+        "pass_basis": "evaluator_verdict",
         "by_type": by_type,
     }
 
