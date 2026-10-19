@@ -18,12 +18,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
+from app.db import DbSession
 from app.metrics_core import classify_attempt as _classify
 from app.metrics_core import parse_attempts, percentile
 from app.models.trace import Span, Trace
@@ -216,7 +216,7 @@ async def get_providers(
     hours: int = Query(24, ge=1, le=720),
     project_id: str = Query("manitos", min_length=1, max_length=128),
     environment: str | None = Query(None, min_length=1, max_length=64),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     query = (
@@ -247,4 +247,110 @@ async def get_providers(
         "environment": environment,
         "snapshot": snapshot,
         **stats,
+    }
+
+
+# ── Generic provider/model analytics (any instrumented application) ────────────────────
+
+
+def _first_str(attrs: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = attrs.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:160]
+    return None
+
+
+def call_identity(span_type: str, attrs: dict[str, Any]) -> tuple[str, str] | None:
+    """``(provider, model)`` of an LLM call, from OpenTelemetry GenAI attributes (both the current
+    ``gen_ai.provider.name`` and the older ``gen_ai.system``) or the plain ``model`` attribute.
+    Not an LLM call: ``None``. A provider the telemetry does not name is ``unknown``, never
+    guessed from the model name."""
+    model = _first_str(attrs, "gen_ai.response.model", "gen_ai.request.model", "model")
+    is_llm = span_type == "llm" or any(str(k).startswith("gen_ai.") for k in attrs)
+    if not is_llm:
+        return None
+    provider = _first_str(attrs, "gen_ai.provider.name", "gen_ai.system") or "unknown"
+    return provider.lower(), model or "unknown"
+
+
+@router.get("/models")
+async def get_provider_models(
+    hours: int = Query(24, ge=1, le=720),
+    project_id: str | None = Query(None, min_length=1, max_length=128),
+    environment: str | None = Query(None, min_length=1, max_length=64),
+    session: AsyncSession = DbSession,
+) -> dict[str, Any]:
+    """Calls, errors, latency, tokens and cost per provider and model, from LLM spans.
+
+    Works for any application; needs no provider snapshot and no fallback chain. Latency is the
+    span's own duration; spans without an end are counted as calls but not in latency."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    query = (
+        select(
+            Span.span_type, Span.attributes, Span.status, Span.start_time, Span.end_time,
+            Span.tokens_input, Span.tokens_output, Span.cost_usd, Trace.created_at,
+        )
+        .join(Trace, Trace.id == Span.trace_id)
+        .where(Trace.created_at >= cutoff)
+        .order_by(Trace.created_at.desc())
+        .limit(_ROW_LIMIT)
+    )
+    if project_id:
+        query = query.where(Trace.project_id == project_id)
+    if environment:
+        query = query.where(Trace.environment == environment)
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    rows = (await session.execute(query)).all()
+    for row in rows:
+        attrs = row.attributes if isinstance(row.attributes, dict) else {}
+        identity = call_identity(row.span_type or "", attrs)
+        if identity is None:
+            continue
+        g = groups.setdefault(identity, {
+            "calls": 0, "errors": 0, "ms": [], "tokens_input": 0, "tokens_output": 0,
+            "tokens_known": 0, "cost_usd": 0.0, "priced": 0, "last_seen": None,
+        })
+        g["calls"] += 1
+        g["errors"] += row.status == "error"
+        if row.start_time is not None and row.end_time is not None:
+            g["ms"].append((_aware(row.end_time) - _aware(row.start_time)).total_seconds() * 1000)
+        if row.tokens_input is not None or row.tokens_output is not None:
+            g["tokens_known"] += 1
+            g["tokens_input"] += row.tokens_input or 0
+            g["tokens_output"] += row.tokens_output or 0
+        if row.cost_usd is not None:
+            g["priced"] += 1
+            g["cost_usd"] += float(row.cost_usd)
+        seen = _aware(row.created_at)
+        if seen and (g["last_seen"] is None or seen > g["last_seen"]):
+            g["last_seen"] = seen
+    models = sorted(
+        (
+            {
+                "provider": provider,
+                "model": model,
+                "calls": g["calls"],
+                "errors": g["errors"],
+                "error_rate": g["errors"] / g["calls"],
+                "p50_ms": percentile(g["ms"], 0.5),
+                "p95_ms": percentile(g["ms"], 0.95),
+                "tokens_input": g["tokens_input"] if g["tokens_known"] else None,
+                "tokens_output": g["tokens_output"] if g["tokens_known"] else None,
+                # null when no call of this model reported a cost (unknown, not free)
+                "cost_usd": g["cost_usd"] if g["priced"] else None,
+                "priced_calls": g["priced"],
+                "last_seen": g["last_seen"].isoformat() if g["last_seen"] else None,
+            }
+            for (provider, model), g in groups.items()
+        ),
+        key=lambda m: -m["calls"],
+    )
+    return {
+        "hours": hours,
+        "project_id": project_id,
+        "environment": environment,
+        "calls": sum(m["calls"] for m in models),
+        "models": models,
+        "truncated": len(rows) >= _ROW_LIMIT,
     }

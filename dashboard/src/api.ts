@@ -3,6 +3,8 @@
  */
 
 import type {
+  TraceDiagnostics,
+  ProviderModelsResponse,
   Trace,
   Span,
   TraceListResponse,
@@ -29,15 +31,25 @@ import type {
   IngestHealth,
 } from './types';
 
+import { ApiError, classifyStatus, detailFromBody } from './helpers/errors';
+
 const BASE_URL = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+  } catch {
+    throw new ApiError('network', null, null);
+  }
   if (!response.ok) {
-    throw new Error(`API error: ${response.status} ${response.statusText}`);
+    const body = await response.json().catch(() => null);
+    // The dev proxy and nginx answer 502/504 when the backend itself is down.
+    const kind = response.status === 502 || response.status === 504 ? 'network' : classifyStatus(response.status);
+    throw new ApiError(kind, response.status, detailFromBody(body));
   }
   return response.json();
 }
@@ -71,6 +83,9 @@ export const api = {
     return request(`/v1/traces/${traceId}`);
   },
 
+  async getTraceDiagnostics(traceId: string): Promise<TraceDiagnostics> {
+    return request(`/v1/traces/${encodeURIComponent(traceId)}/diagnostics`);
+  },
   async getTraceSpans(traceId: string): Promise<Span[]> {
     return request(`/v1/traces/${traceId}/spans`);
   },
@@ -120,6 +135,11 @@ export const api = {
     return request(`/v1/providers/?${qs.toString()}`);
   },
 
+  async getProviderModels(hours = 24, environment?: string): Promise<ProviderModelsResponse> {
+    const q = new URLSearchParams({ hours: String(hours) });
+    if (environment) q.set('environment', environment);
+    return request(`/v1/providers/models?${q}`);
+  },
   async getEvaluationsByModel(hours = 168): Promise<EvaluationsByModel> {
     return request(`/v1/evaluations/by-model?hours=${hours}`);
   },

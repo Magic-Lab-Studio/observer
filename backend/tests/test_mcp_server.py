@@ -203,7 +203,7 @@ async def test_datasets_runs_comparison_and_metrics_are_readable(client, db_sess
 async def test_errors_are_reported_cleanly(client):
     server, _ = await _session(client)
     async with create_connected_server_and_client_session(server._mcp_server) as session:
-        result = await session.call_tool("get_trace", {"trace_id": "not-a-uuid"})
+        result = await session.call_tool("get_trace", {"trace_id": "x" * 200})
         assert result.isError and "400" in result.content[0].text
     down = ObserverReader("http://127.0.0.1:1")
     with pytest.raises(ObserverReadError, match="unreachable"):

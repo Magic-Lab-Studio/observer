@@ -277,7 +277,6 @@ def translate(
     envelopes: list[dict[str, Any]] = []
     for tid, bucket in per_trace.items():
         items = list(bucket["spans"].values())
-        ids = {i["id"] for i in items}
         roots = [i for i in items if i["_root"]]
         head = min(roots or items, key=lambda i: i["start_time"])
         starts = [i["start_time"] for i in items]
@@ -292,11 +291,9 @@ def translate(
             spans = []
             for i in chunk:
                 clean = {k: v for k, v in i.items() if not k.startswith("_") and v is not None}
-                parent = i["_parent"]
-                clean["parent_id"] = (
-                    parent if parent in ids else None
-                )  # may arrive in a later batch
-                clean["_external_parent"] = parent if parent not in ids else None
+                # Kept even when the parent is not in this request: a child is exported before
+                # its parent ends, and a parent may live in another service.
+                clean["parent_id"] = i["_parent"]
                 spans.append(clean)
             body = {
                 "schema_version": "manitos.telemetry.v1",

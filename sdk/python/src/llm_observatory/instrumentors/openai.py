@@ -4,29 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from llm_observatory.instrumentors._patching import _as_method, _unwrap, record_exception
 from llm_observatory.pricing import calculate_cost
 from llm_observatory.tracer import Span, SpanStatus, get_tracer
-
-
-def _unwrap(func):
-    return getattr(func, "_llm_observatory_original", None) or func
-
-
-def _as_method(patched, original):
-    """A plain function the class can bind: assigning a BOUND method as a class attribute lost
-    the instance, so every
-    instrumented call failed with "missing 1 required positional argument: 'self'"
-    (audit 2026-10-17). Idempotent:
-    a class already patched by this SDK is returned to its original before being patched again."""
-    if getattr(original, "_llm_observatory_original", None) is not None:
-        original = original._llm_observatory_original
-
-    def wrapper(inst, *args, **kwargs):
-        return patched(inst, *args, **kwargs)
-
-    wrapper._llm_observatory_original = original
-    wrapper._llm_observatory_patched = True
-    return wrapper
 
 
 class OpenAIInstrumentor:
@@ -70,6 +50,8 @@ class OpenAIInstrumentor:
         )
         span.set_input({"model": model, "messages": messages})
         span.set_attribute("gen_ai.system", "openai")
+        span.set_attribute("gen_ai.provider.name", "openai")
+        span.set_attribute("gen_ai.operation.name", "chat")
         span.set_attribute("gen_ai.request.model", model)
         return span, tracer
 
@@ -100,11 +82,25 @@ class OpenAIInstrumentor:
                     span.set_output(output)
 
             span.set_attribute("response_id", getattr(result, "id", None))
+            reasons = [
+                c.finish_reason
+                for c in (getattr(result, "choices", None) or [])
+                if isinstance(getattr(c, "finish_reason", None), str)
+            ]
+            if reasons:
+                span.set_attribute("gen_ai.response.finish_reasons", reasons)
+            response_model = getattr(result, "model", None)
+            if isinstance(response_model, str):
+                span.set_attribute("gen_ai.response.model", response_model)
+            if span.tokens is not None:
+                span.set_attribute("gen_ai.usage.input_tokens", span.tokens.input)
+                span.set_attribute("gen_ai.usage.output_tokens", span.tokens.output)
             span.set_status(SpanStatus.OK)
 
         except Exception as e:
-            span.set_status(SpanStatus.ERROR)
-            span.set_attribute("error.message", str(e))
+            # The call succeeded; only reading its result for telemetry failed.
+            span.set_status(SpanStatus.OK)
+            span.set_attribute("observer.instrumentation_error", str(e)[:500])
 
         finally:
             span.end()
@@ -120,10 +116,8 @@ class OpenAIInstrumentor:
             result = self._original_sync_create(inst, *args, **kwargs)
             self._finish_span(span, result, model)
             return result
-        except Exception as e:
-            span.set_status(SpanStatus.ERROR)
-            span.set_attribute("error.message", str(e))
-            span.end()
+        except BaseException as e:
+            record_exception(span, e)
             raise
 
     async def _patched_async_create(self, inst: Any, *args: Any, **kwargs: Any) -> Any:
@@ -137,10 +131,8 @@ class OpenAIInstrumentor:
             result = await self._original_async_create(inst, *args, **kwargs)
             self._finish_span(span, result, model)
             return result
-        except Exception as e:
-            span.set_status(SpanStatus.ERROR)
-            span.set_attribute("error.message", str(e))
-            span.end()
+        except BaseException as e:
+            record_exception(span, e)
             raise
 
     def uninstrument(self) -> None:

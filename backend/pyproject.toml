@@ -10,7 +10,7 @@ readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.111.0",
+    "fastapi>=0.121.0",  # Depends(scope="function"): commit before the response
     "uvicorn[standard]>=0.30.0",
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.29.0",
@@ -41,6 +41,11 @@ sqlite = [
 ]
 mcp = [
     "mcp>=1.2,<2",
+]
+# LLM judge through Anthropic (OBSERVATORY_JUDGE_PROVIDER=anthropic); OpenAI and
+# OpenAI-compatible judges need nothing extra.
+judge-anthropic = [
+    "anthropic>=1.0,<2",
 ]
 dev = [
     "pytest>=8.0",
