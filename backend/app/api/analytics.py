@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.metrics_core import percentile
 from app.metrics_query import QueryError, QueryRequest, run_query
 from app.metrics_query import schema as query_schema
 from app.models.evaluation import Evaluation
@@ -22,7 +23,14 @@ router = APIRouter()
 
 
 class AnalyticsSummary(BaseModel):
-    """Summary analytics response."""
+    """Summary analytics response: generic trace metrics, valid for any instrumented application.
+
+    ``avg_latency_ms`` is the mean span duration (kept for compatibility); trace latency is
+    ``p50_trace_duration_ms``/``p95_trace_duration_ms`` over traces that have finished.
+    ``error_count`` counts traces whose status is ``error`` (``unset`` never counts); spans that
+    failed inside a trace that succeeded are in ``span_error_count``. Fields that cannot be
+    computed from the data are ``null``, never ``0``.
+    """
 
     total_traces: int
     total_spans: int
@@ -32,6 +40,15 @@ class AnalyticsSummary(BaseModel):
     error_rate: float
     total_evaluations: int
     avg_evaluation_score: float | None
+    completed_traces: int = 0
+    running_traces: int = 0
+    trace_error_rate: float | None = None
+    span_error_count: int = 0
+    llm_span_count: int = 0
+    tool_span_count: int = 0
+    priced_span_count: int = 0
+    p50_trace_duration_ms: float | None = None
+    p95_trace_duration_ms: float | None = None
 
 
 class CostByModel(BaseModel):
@@ -48,6 +65,7 @@ class TraceTimeline(BaseModel):
     timestamp: str
     count: int
     cost_usd: float
+    error_count: int = 0
 
 
 class QualityBreakdown(BaseModel):
@@ -79,8 +97,9 @@ class ManitOSQualitySummary(BaseModel):
     fallback_rate: float
     tts_error_count: int
     tts_error_rate: float
-    avg_duration_ms: float
-    avg_ttft_ms: float
+    # null when no turn reported it (B2: a missing first-token time read as "<1 ms")
+    avg_duration_ms: float | None
+    avg_ttft_ms: float | None
     models: list[QualityBreakdown]
     languages: list[QualityBreakdown]
 
@@ -94,16 +113,24 @@ async def get_analytics_summary(
     """Get analytics summary for the specified time period."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-    # Total traces
-    trace_query = select(func.count(Trace.id)).where(Trace.created_at >= cutoff)
+    # Traces
+    trace_query = select(Trace.start_time, Trace.end_time, Trace.status).where(
+        Trace.created_at >= cutoff
+    )
     if session_id:
         trace_query = trace_query.where(Trace.session_id == session_id)
-    result = await session.execute(trace_query)
-    total_traces = result.scalar() or 0
+    trace_rows = (await session.execute(trace_query)).all()
+    total_traces = len(trace_rows)
+    trace_durations = sorted(
+        (row.end_time - row.start_time).total_seconds() * 1000
+        for row in trace_rows
+        if row.start_time is not None and row.end_time is not None
+    )
+    running_traces = sum(1 for row in trace_rows if row.end_time is None and row.status != "error")
 
     # Total spans and cost
     span_query = (
-        select(Span.start_time, Span.end_time, Span.cost_usd)
+        select(Span.start_time, Span.end_time, Span.cost_usd, Span.status, Span.span_type)
         .join(Trace, Span.trace_id == Trace.id)
         .where(Trace.created_at >= cutoff)
     )
@@ -113,6 +140,7 @@ async def get_analytics_summary(
     span_rows = result.all()
     total_spans = len(span_rows)
     total_cost_usd = sum(float(row.cost_usd or 0) for row in span_rows)
+    priced_span_count = sum(1 for row in span_rows if row.cost_usd is not None)
     latencies_ms = [
         (row.end_time - row.start_time).total_seconds() * 1000
         for row in span_rows
@@ -120,14 +148,7 @@ async def get_analytics_summary(
     ]
     avg_latency_ms = sum(latencies_ms) / len(latencies_ms) if latencies_ms else 0.0
 
-    # Error count
-    error_query = select(func.count(Trace.id)).where(
-        Trace.created_at >= cutoff, Trace.status == "error"
-    )
-    if session_id:
-        error_query = error_query.where(Trace.session_id == session_id)
-    result = await session.execute(error_query)
-    error_count = result.scalar() or 0
+    error_count = sum(1 for row in trace_rows if row.status == "error")
 
     # Evaluations
     eval_query = (
@@ -154,6 +175,15 @@ async def get_analytics_summary(
         "error_rate": error_count / total_traces if total_traces > 0 else 0,
         "total_evaluations": total_evaluations,
         "avg_evaluation_score": avg_score,
+        "completed_traces": len(trace_durations),
+        "running_traces": running_traces,
+        "trace_error_rate": error_count / total_traces if total_traces else None,
+        "span_error_count": sum(1 for row in span_rows if row.status == "error"),
+        "llm_span_count": sum(1 for row in span_rows if row.span_type == "llm"),
+        "tool_span_count": sum(1 for row in span_rows if row.span_type == "tool"),
+        "priced_span_count": priced_span_count,
+        "p50_trace_duration_ms": percentile(trace_durations, 0.5),
+        "p95_trace_duration_ms": percentile(trace_durations, 0.95),
     }
 
 
@@ -178,7 +208,12 @@ async def get_cost_by_model(
     by_model: dict[str, dict[str, str | float | int]] = {}
     for row in rows:
         attributes = row.attributes if isinstance(row.attributes, dict) else {}
-        model = str(attributes.get("model") or "").strip()
+        model = str(
+            attributes.get("model")
+            or attributes.get("gen_ai.response.model")
+            or attributes.get("gen_ai.request.model")
+            or ""
+        ).strip()
         if not model:
             continue
         bucket = by_model.setdefault(model, {"model": model, "cost_usd": 0.0, "span_count": 0})
@@ -226,8 +261,9 @@ async def get_trace_timeline(
         ts = datetime.fromtimestamp(int(created.timestamp()) // step * step, tz=timezone.utc)
         key = ts.isoformat()
         if key not in buckets:
-            buckets[key] = {"timestamp": key, "count": 0, "cost_usd": 0}
+            buckets[key] = {"timestamp": key, "count": 0, "cost_usd": 0, "error_count": 0}
         buckets[key]["count"] += 1
+        buckets[key]["error_count"] += 1 if trace.status == "error" else 0
         buckets[key]["cost_usd"] += cost_by_trace.get(trace.id, 0)
 
     return list(buckets.values())
@@ -351,8 +387,8 @@ async def get_manitos_quality(
         "fallback_rate": rate(len(fallbacks)),
         "tts_error_count": len(tts_errors),
         "tts_error_rate": rate(len(tts_errors)),
-        "avg_duration_ms": sum(durations) / len(durations) if durations else 0.0,
-        "avg_ttft_ms": sum(ttfts) / len(ttfts) if ttfts else 0.0,
+        "avg_duration_ms": sum(durations) / len(durations) if durations else None,
+        "avg_ttft_ms": sum(ttfts) / len(ttfts) if ttfts else None,
         "models": breakdown(models),
         "languages": breakdown(languages),
     }
