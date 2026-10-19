@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts import evaluate_rules, event_to_dict, rule_to_dict
-from app.db import get_session
+from app.db import DbSession
 from app.metrics_core import METRICS
 from app.models.alerts import AlertEvent, AlertRule
 
@@ -61,13 +61,13 @@ async def list_metrics() -> list[dict[str, Any]]:
 
 
 @router.get("/rules")
-async def list_rules(session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
+async def list_rules(session: AsyncSession = DbSession) -> list[dict[str, Any]]:
     rules = (await session.execute(select(AlertRule).order_by(AlertRule.created_at))).scalars()
     return [rule_to_dict(r) for r in rules]
 
 
 @router.post("/rules")
-async def create_rule(body: RuleIn, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def create_rule(body: RuleIn, session: AsyncSession = DbSession) -> dict[str, Any]:
     _check_metric(body.metric)
     rule = AlertRule(**body.model_dump())
     session.add(rule)
@@ -77,7 +77,7 @@ async def create_rule(body: RuleIn, session: AsyncSession = Depends(get_session)
 
 @router.patch("/rules/{rule_id}")
 async def update_rule(
-    rule_id: str, body: RulePatch, session: AsyncSession = Depends(get_session)
+    rule_id: str, body: RulePatch, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     rule = await session.get(AlertRule, rule_id)
     if rule is None:
@@ -89,7 +89,7 @@ async def update_rule(
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_rule(rule_id: str, session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+async def delete_rule(rule_id: str, session: AsyncSession = DbSession) -> dict[str, str]:
     rule = await session.get(AlertRule, rule_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="rule not found")
@@ -103,7 +103,7 @@ async def delete_rule(rule_id: str, session: AsyncSession = Depends(get_session)
 async def list_events(
     state: Literal["open", "resolved"] | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     query = select(AlertEvent).order_by(AlertEvent.fired_at.desc()).limit(limit)
     if state:
@@ -116,7 +116,7 @@ async def list_events(
 
 
 @router.post("/events/{event_id}/ack")
-async def ack_event(event_id: str, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def ack_event(event_id: str, session: AsyncSession = DbSession) -> dict[str, Any]:
     event = await session.get(AlertEvent, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="event not found")
@@ -126,7 +126,7 @@ async def ack_event(event_id: str, session: AsyncSession = Depends(get_session))
 
 
 @router.post("/evaluate")
-async def evaluate_now(session: AsyncSession = Depends(get_session)) -> dict[str, int]:
+async def evaluate_now(session: AsyncSession = DbSession) -> dict[str, int]:
     """Run one evaluation pass now (the loop does it every minute)."""
     result = await evaluate_rules(session)
     return {"evaluated": result.evaluated, "opened": result.opened, "resolved": result.resolved}

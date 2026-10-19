@@ -26,7 +26,7 @@ def cli(ctx: click.Context, api_key: str | None) -> None:
 
 
 @cli.command()
-@click.option("--db", type=click.Path(exists=True), default="observatory.db", help="SQLite database path")
+@click.option("--db", type=click.Path(exists=True), envvar="OBSERVATORY_DB", default="observatory.db", show_default=True, help="SQLite database path (env OBSERVATORY_DB)")
 @click.option("--limit", default=20, help="Number of traces to show")
 @click.option("--status", type=click.Choice(["ok", "error", "unset"]), help="Filter by status")
 @click.option("--search", help="Search trace names")
@@ -61,7 +61,7 @@ def traces(db: str, limit: int, status: str | None, search: str | None) -> None:
 
 @cli.command()
 @click.argument("trace_id")
-@click.option("--db", type=click.Path(exists=True), default="observatory.db", help="SQLite database path")
+@click.option("--db", type=click.Path(exists=True), envvar="OBSERVATORY_DB", default="observatory.db", show_default=True, help="SQLite database path (env OBSERVATORY_DB)")
 def inspect(trace_id: str, db: str) -> None:
     """Inspect a trace and its spans."""
     from cli.db import get_trace, get_trace_spans
@@ -108,7 +108,7 @@ def inspect(trace_id: str, db: str) -> None:
 
 @cli.command(name="import")
 @click.argument("file", type=click.Path(exists=True))
-@click.option("--db", type=click.Path(), default="observatory.db", help="SQLite database path")
+@click.option("--db", type=click.Path(), envvar="OBSERVATORY_DB", default="observatory.db", show_default=True, help="SQLite database path (env OBSERVATORY_DB)")
 @click.option("--dry-run", is_flag=True, help="Preview without writing")
 def import_data(file: str, db: str, dry_run: bool) -> None:
     """Import traces from a JSON export file."""
@@ -178,7 +178,7 @@ def import_data(file: str, db: str, dry_run: bool) -> None:
 
 
 @cli.command()
-@click.option("--db", type=click.Path(exists=True), default="observatory.db", help="SQLite database path")
+@click.option("--db", type=click.Path(exists=True), envvar="OBSERVATORY_DB", default="observatory.db", show_default=True, help="SQLite database path (env OBSERVATORY_DB)")
 def stats(db: str) -> None:
     """Show summary statistics."""
     from cli.db import get_stats
@@ -199,7 +199,7 @@ def stats(db: str) -> None:
 
 @cli.command()
 @click.argument("trace_id")
-@click.option("--db", type=click.Path(exists=True), default="observatory.db", help="SQLite database path")
+@click.option("--db", type=click.Path(exists=True), envvar="OBSERVATORY_DB", default="observatory.db", show_default=True, help="SQLite database path (env OBSERVATORY_DB)")
 @click.option("--format", "output_format", type=click.Choice(["json", "table"]), default="table")
 def spans(trace_id: str, db: str, output_format: str) -> None:
     """List spans for a trace."""
@@ -256,7 +256,7 @@ def spans(trace_id: str, db: str, output_format: str) -> None:
 
 
 @cli.command()
-@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--host", default="127.0.0.1", help="Host to bind to (loopback by default; see docs/security.md)")
 @click.option("--port", default=8000, help="Port to bind to")
 @click.option("--reload", is_flag=True, help="Enable auto-reload")
 @click.option("--db", default="sqlite+aiosqlite:///./observatory.db", help="Database URL")
@@ -293,7 +293,7 @@ def serve(host: str, port: int, reload: bool, db: str) -> None:
     help="Evaluator type",
 )
 @click.option("--criteria", help="Comma-separated criteria for evaluation")
-@click.option("--endpoint", default="http://localhost:8000", help="API endpoint")
+@click.option("--endpoint", envvar="OBSERVER_API_URL", default="http://localhost:8000", show_default=True, help="API endpoint (env OBSERVER_API_URL)")
 @click.pass_context
 def evaluate(
     ctx: click.Context,
@@ -339,7 +339,7 @@ def evaluate(
 
 
 @cli.command()
-@click.option("--db", type=click.Path(exists=True), default="observatory.db", help="SQLite database path")
+@click.option("--db", type=click.Path(exists=True), envvar="OBSERVATORY_DB", default="observatory.db", show_default=True, help="SQLite database path (env OBSERVATORY_DB)")
 @click.option("--format", "output_format", type=click.Choice(["json"]), default="json", help="Export format")
 @click.option("--output", "-o", type=click.Path(), help="Output file (default: stdout)")
 @click.option("--status", type=click.Choice(["ok", "error", "unset"]), help="Filter by status")
@@ -389,7 +389,7 @@ def export(db: str, output_format: str, output: str | None, status: str | None, 
 
 
 @cli.command()
-@click.option("--endpoint", default="http://localhost:8000", help="API endpoint")
+@click.option("--endpoint", envvar="OBSERVER_API_URL", default="http://localhost:8000", show_default=True, help="API endpoint (env OBSERVER_API_URL)")
 @click.pass_context
 def status(ctx: click.Context, endpoint: str) -> None:
     """Check the status of the observatory server."""
@@ -401,13 +401,22 @@ def status(ctx: click.Context, endpoint: str) -> None:
         headers["Authorization"] = f"Bearer {api_key}"
 
     try:
-        response = httpx.get(f"{endpoint}/health", headers=headers)
-        response.raise_for_status()
-
+        response = httpx.get(f"{endpoint}/health", headers=headers, timeout=5.0)
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Server is not responding[/red] at {endpoint}: {type(exc).__name__}")
+        console.print("Set --endpoint or OBSERVER_API_URL if the server listens elsewhere.")
+        raise SystemExit(1) from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if response.is_success:
         console.print("[green]Server is healthy![/green]")
-        console.print(f"Endpoint: {endpoint}")
-    except httpx.HTTPError:
-        console.print("[red]Server is not responding[/red]")
+    else:
+        console.print(f"[red]Server answered {response.status_code}[/red] {body}")
+    console.print(f"Endpoint: {endpoint}  db: {body.get('db', '?')}  version: {body.get('version', '?')}")
+    if not response.is_success:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

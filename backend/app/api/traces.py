@@ -2,61 +2,87 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.capture import apply_capture, capture_mode
-from app.db import get_session
+from app.db import DbSession
+from app.ingest_validation import (
+    OpaqueId,
+    OptionalTimestamp,
+    SpanStatusValue,
+    Timestamp,
+    span_storage_id,
+    to_datetime,
+    trace_lookup_id,
+    trace_storage_id,
+)
 from app.limits import (
     MAX_SPANS_PER_BATCH,
     MAX_SPANS_PER_TRACE,
     MAX_TRACES_PER_IMPORT,
     bounded_json,
 )
+from app.loop_detection import min_repeats, repeated_calls
+from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
 from app.ratelimit import limiter
+from app.trace_summary import fill_trace_identity, refresh_trace_summary
 from app.websocket import manager
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # The SDK flushes every few seconds, so the old fixed 10/minute rejected healthy senders.
 _BATCH_LIMIT = os.getenv("RATE_LIMIT_BATCH", "120/minute")
 
 
-def _safe_uuid(value: str | None) -> str | None:
-    """Validate and return a UUID string, or None if invalid."""
-    if not value:
-        return None
-    try:
-        uuid.UUID(value)
-        return value
-    except ValueError:
-        return None
+async def _resolve_trace_id(session: AsyncSession, raw: str) -> str:
+    """The stored ID for a path's trace ID: the mapped ID, or the raw value for a trace stored
+    under a non-UUID ID before IDs were mapped. 400 when the value cannot be an ID."""
+    mapped = trace_lookup_id(raw)
+    if mapped is None:
+        raise HTTPException(status_code=400, detail="Invalid trace ID format")
+    if raw != mapped and await session.get(Trace, mapped) is None:
+        if await session.get(Trace, raw) is not None:
+            return raw
+    return mapped
+
+
+_safe_uuid = trace_lookup_id
+
+
+def _check_interval(start: float | None, end: float | None) -> None:
+    if start is not None and end is not None and end < start:
+        raise ValueError("end_time cannot precede start_time")
 
 
 class SpanCreate(BaseModel):
-    """Schema for creating a span."""
+    """Schema for creating a span (see ``app.ingest_validation`` for the field rules)."""
 
-    id: str | None = Field(None, max_length=64)
-    trace_id: str | None = Field(None, max_length=64)
-    parent_id: str | None = Field(None, max_length=64)
-    name: str = Field(max_length=255)
-    span_type: str = Field("generic", max_length=50)
-    start_time: float
-    end_time: float | None = None
-    status: str = Field("unset", max_length=20)
+    id: OpaqueId = None
+    trace_id: OpaqueId = None
+    parent_id: OpaqueId = None
+    name: str = Field(min_length=1, max_length=255)
+    span_type: str = Field("generic", min_length=1, max_length=50)
+    start_time: Timestamp
+    end_time: OptionalTimestamp = None
+    status: SpanStatusValue = "unset"
     input: dict | None = None
     output: dict | None = None
-    tokens_input: int | None = None
-    tokens_output: int | None = None
-    cost_usd: float | None = None
+    tokens_input: int | None = Field(None, ge=0)
+    tokens_output: int | None = Field(None, ge=0)
+    cost_usd: float | None = Field(None, ge=0, allow_inf_nan=False)
     metadata: dict | None = None
     attributes: dict | None = None
 
@@ -65,15 +91,28 @@ class SpanCreate(BaseModel):
     def _bounded(cls, value: dict | None) -> dict | None:
         return bounded_json(value)
 
+    @model_validator(mode="after")
+    def _interval(self) -> SpanCreate:
+        _check_interval(self.start_time, self.end_time)
+        if self.trace_id is not None:
+            self.trace_id = trace_storage_id(self.trace_id)
+        if self.id is not None:
+            self.id = span_storage_id(self.id, self.trace_id)
+        if self.parent_id is not None:
+            self.parent_id = span_storage_id(self.parent_id, self.trace_id)
+            if self.parent_id == self.id:
+                raise ValueError("a span cannot be its own parent")
+        return self
+
 
 class TraceCreate(BaseModel):
     """Schema for creating a trace."""
 
-    name: str = Field(max_length=255)
+    name: str = Field(min_length=1, max_length=255)
     session_id: str | None = None
-    start_time: float
-    end_time: float | None = None
-    status: str = Field("unset", max_length=20)
+    start_time: Timestamp
+    end_time: OptionalTimestamp = None
+    status: SpanStatusValue = "unset"
     metadata: dict | None = None
     spans: list[SpanCreate] = Field(default_factory=list, max_length=MAX_SPANS_PER_TRACE)
 
@@ -81,6 +120,11 @@ class TraceCreate(BaseModel):
     @classmethod
     def _bounded_metadata(cls, value: dict | None) -> dict | None:
         return bounded_json(value)
+
+    @model_validator(mode="after")
+    def _interval(self) -> TraceCreate:
+        _check_interval(self.start_time, self.end_time)
+        return self
 
     @field_validator("session_id")
     @classmethod
@@ -199,7 +243,7 @@ class SpanResponse(BaseModel):
 @router.post("/", response_model=TraceResponse)
 async def create_trace(
     trace_data: TraceCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Trace:
     """Create a new trace with optional spans."""
     trace_id = str(uuid.uuid4())
@@ -207,12 +251,8 @@ async def create_trace(
         id=trace_id,
         name=trace_data.name,
         session_id=trace_data.session_id,
-        start_time=datetime.fromtimestamp(trace_data.start_time, tz=timezone.utc),
-        end_time=(
-            datetime.fromtimestamp(trace_data.end_time, tz=timezone.utc)
-            if trace_data.end_time
-            else None
-        ),
+        start_time=to_datetime(trace_data.start_time),
+        end_time=to_datetime(trace_data.end_time),
         status=trace_data.status,
         meta=trace_data.metadata,
     )
@@ -221,11 +261,7 @@ async def create_trace(
     # Add spans
     mode = await capture_mode(session, trace.project_id, "full")
     for span_data in trace_data.spans:
-        span_end = (
-            datetime.fromtimestamp(span_data.end_time, tz=timezone.utc)
-            if span_data.end_time
-            else None
-        )
+        span_end = to_datetime(span_data.end_time)
         captured = apply_capture(
             mode,
             inp=span_data.input,
@@ -236,10 +272,10 @@ async def create_trace(
         span = Span(
             id=span_data.id or str(uuid.uuid4()),
             trace_id=trace_id,
-            parent_span_id=_safe_uuid(span_data.parent_id),
+            parent_span_id=span_data.parent_id,
             name=span_data.name,
             span_type=span_data.span_type,
-            start_time=datetime.fromtimestamp(span_data.start_time, tz=timezone.utc),
+            start_time=to_datetime(span_data.start_time),
             end_time=span_end,
             status=span_data.status,
             inp=captured[0],
@@ -268,98 +304,149 @@ async def create_trace(
     return trace
 
 
+def _span_values(span_data: SpanCreate, mode: str) -> dict[str, Any]:
+    inp, out, attributes, meta = apply_capture(
+        mode,
+        inp=span_data.input,
+        out=span_data.output,
+        attributes=span_data.attributes,
+        meta=span_data.metadata,
+    )
+    return {
+        "parent_span_id": span_data.parent_id,
+        "name": span_data.name,
+        "span_type": span_data.span_type,
+        "start_time": to_datetime(span_data.start_time),
+        "end_time": to_datetime(span_data.end_time),
+        "status": span_data.status,
+        "inp": inp,
+        "out": out,
+        "tokens_input": span_data.tokens_input,
+        "tokens_output": span_data.tokens_output,
+        "cost_usd": span_data.cost_usd,
+        "meta": meta,
+        "attributes": attributes,
+    }
+
+
+def _same_instant(left: datetime | None, right: datetime | None) -> bool:
+    if left is None or right is None:
+        return left is right
+    if left.tzinfo is None:
+        left = left.replace(tzinfo=timezone.utc)
+    if right.tzinfo is None:
+        right = right.replace(tzinfo=timezone.utc)
+    return abs(left.timestamp() - right.timestamp()) < 0.000001
+
+
+def _same_span(existing: Span, values: dict[str, Any]) -> bool:
+    for key, value in values.items():
+        current = getattr(existing, key)
+        if key in {"start_time", "end_time"}:
+            if not _same_instant(current, value):
+                return False
+        elif key == "cost_usd":
+            if (round(float(current), 6) if current is not None else None) != (
+                round(value, 6) if value is not None else None
+            ):
+                return False
+        elif current != value:
+            return False
+    return True
+
+
+async def _ingest_trace_group(
+    session: AsyncSession, trace_id: str, spans: list[SpanCreate], counts: dict[str, int]
+) -> Trace:
+    """Store one trace's spans. A stored span that has not ended yet is completed by a newer
+    version; a finished span is never overwritten (a retry of the same data is a duplicate, a
+    different version a conflict). Capture mode applies to every write, updates included."""
+    trace = await session.get(Trace, trace_id)
+    if trace is None:
+        first = min(spans, key=lambda s: s.start_time)
+        trace = Trace(
+            id=trace_id,
+            name=first.name,
+            start_time=to_datetime(first.start_time),
+            status="unset",
+        )
+        session.add(trace)
+    # before the capture mode is read: the project decides it
+    fill_trace_identity(trace, [s.attributes for s in spans])
+    await session.flush()
+
+    mode = await capture_mode(session, trace.project_id, "full")
+    ids = [s.id for s in spans if s.id]
+    stored: dict[str, Span] = {}
+    if ids:
+        rows = await session.execute(select(Span).where(Span.id.in_(ids)))
+        stored = {str(span.id): span for span in rows.scalars()}
+
+    for span_data in spans:
+        values = _span_values(span_data, mode)
+        existing = stored.get(span_data.id) if span_data.id else None
+        if existing is None:
+            span = Span(id=span_data.id or str(uuid.uuid4()), trace_id=trace_id, **values)
+            session.add(span)
+            if span_data.id:
+                stored[span_data.id] = span
+            counts["accepted"] += 1
+        elif str(existing.trace_id) != trace_id:
+            counts["conflict"] += 1
+            logger.warning("span %s belongs to another trace; not stored", existing.id)
+        elif _same_span(existing, values):
+            counts["duplicate"] += 1
+        elif existing.end_time is None:
+            for key, value in values.items():
+                setattr(existing, key, value)
+            counts["updated"] += 1
+        else:
+            counts["conflict"] += 1
+            logger.info("span %s is already finished; a different version was ignored", existing.id)
+
+    await refresh_trace_summary(session, trace)
+    return trace
+
+
 @router.post("/batch", response_model=list[TraceResponse])
 @limiter.limit(_BATCH_LIMIT)
 async def create_traces_batch(
     request: Request,
+    response: Response,
     batch_data: BatchSpansCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[Trace]:
-    """Create traces from a batch of spans.
+    """Create or extend traces from a batch of spans (the SDK exporters' endpoint).
 
-    Spans are grouped by trace_id. If a trace_id doesn't exist, a new trace is created.
-    This endpoint is designed for SDK exporters that send spans directly.
+    Spans are grouped by ``trace_id`` (a span without one starts a new trace). Retries are safe:
+    a span already stored with the same data is a duplicate. A span stored before it finished is
+    completed by the finished version; a finished span is never overwritten. After each batch the
+    trace's status, interval and name are derived from all of its stored spans
+    (``app.trace_summary``). The ``X-Observer-Spans`` header reports
+    ``accepted``, ``updated``, ``duplicate`` and ``conflict`` counts.
     """
-    # Group spans by trace_id
     spans_by_trace: dict[str, list[SpanCreate]] = {}
     for span_data in batch_data.spans:
         trace_id = span_data.trace_id or str(uuid.uuid4())
-        if trace_id not in spans_by_trace:
-            spans_by_trace[trace_id] = []
-        spans_by_trace[trace_id].append(span_data)
+        spans_by_trace.setdefault(trace_id, []).append(span_data)
 
-    created_traces: list[Trace] = []
-
-    # A retried batch (the first answer was lost) must not fail on spans already stored.
-    wanted = [s.id for spans in spans_by_trace.values() for s in spans if s.id]
-    stored_ids: set[str] = set()
-    if wanted:
-        rows = await session.execute(select(Span.id).where(Span.id.in_(wanted)))
-        stored_ids = {str(i) for i in rows.scalars()}
-
+    counts = dict.fromkeys(("accepted", "updated", "duplicate", "conflict"), 0)
+    traces: list[Trace] = []
     for trace_id, spans in spans_by_trace.items():
-        # Check if trace already exists
-        query = select(Trace).where(Trace.id == trace_id)
-        result = await session.execute(query)
-        trace = result.scalar_one_or_none()
-
-        if not trace:
-            # Create trace from first span's timing
-            first_span = spans[0]
-            trace = Trace(
-                id=trace_id,
-                name=first_span.name,
-                start_time=datetime.fromtimestamp(first_span.start_time, tz=timezone.utc),
-                end_time=(
-                    datetime.fromtimestamp(spans[-1].end_time, tz=timezone.utc)
-                    if spans[-1].end_time
-                    else None
-                ),
-                status="ok" if all(s.status == "ok" for s in spans) else "error",
-            )
-            session.add(trace)
-
-        # Add spans
-        mode = await capture_mode(session, trace.project_id, "full")
-        for span_data in spans:
-            if span_data.id and span_data.id in stored_ids:
-                continue
-            captured = apply_capture(
-                mode,
-                inp=span_data.input,
-                out=span_data.output,
-                attributes=span_data.attributes,
-                meta=span_data.metadata,
-            )
-            span = Span(
-                id=span_data.id or str(uuid.uuid4()),
-                trace_id=trace_id,
-                parent_span_id=_safe_uuid(span_data.parent_id),
-                name=span_data.name,
-                span_type=span_data.span_type,
-                start_time=datetime.fromtimestamp(span_data.start_time, tz=timezone.utc),
-                end_time=(
-                    datetime.fromtimestamp(span_data.end_time, tz=timezone.utc)
-                    if span_data.end_time
-                    else None
-                ),
-                status=span_data.status,
-                inp=captured[0],
-                out=captured[1],
-                tokens_input=span_data.tokens_input,
-                tokens_output=span_data.tokens_output,
-                cost_usd=span_data.cost_usd,
-                meta=captured[3],
-                attributes=captured[2],
-            )
-            session.add(span)
-
-        created_traces.append(trace)
+        before = dict(counts)
+        try:
+            async with session.begin_nested():
+                traces.append(await _ingest_trace_group(session, trace_id, spans, counts))
+        except IntegrityError:
+            # A concurrent request stored the same trace or span first: read what it stored.
+            counts.update(before)
+            async with session.begin_nested():
+                traces.append(await _ingest_trace_group(session, trace_id, spans, counts))
 
     await session.flush()
+    response.headers["X-Observer-Spans"] = ",".join(f"{k}={v}" for k, v in counts.items())
 
-    # Broadcast new traces via WebSocket
-    for trace in created_traces:
+    for trace in traces:
         await manager.broadcast({
             "type": "new_trace",
             "data": {
@@ -370,7 +457,7 @@ async def create_traces_batch(
             },
         })
 
-    return created_traces
+    return traces
 
 
 @router.get("/", response_model=TraceListResponse)
@@ -384,7 +471,7 @@ async def list_traces(
     search: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """List traces with optional filtering and server-side search."""
     base_query = select(Trace)
@@ -478,7 +565,7 @@ async def export_traces(
     session_id: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Export traces with spans in JSON format.
 
@@ -547,12 +634,10 @@ async def export_traces(
 @router.get("/{trace_id}", response_model=TraceResponse)
 async def get_trace(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Trace:
     """Get a trace by ID."""
-    valid_id = _safe_uuid(trace_id)
-    if not valid_id:
-        raise HTTPException(status_code=400, detail="Invalid trace ID format")
+    valid_id = await _resolve_trace_id(session, trace_id)
 
     query = select(Trace).where(Trace.id == valid_id)
     result = await session.execute(query)
@@ -567,12 +652,10 @@ async def get_trace(
 @router.get("/{trace_id}/spans", response_model=list[SpanResponse])
 async def get_trace_spans(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[Span]:
     """Get all spans for a trace."""
-    valid_id = _safe_uuid(trace_id)
-    if not valid_id:
-        raise HTTPException(status_code=400, detail="Invalid trace ID format")
+    valid_id = await _resolve_trace_id(session, trace_id)
 
     query = (
         select(Span)
@@ -583,15 +666,30 @@ async def get_trace_spans(
     return list(result.scalars().all())
 
 
+@router.get("/{trace_id}/diagnostics")
+async def get_trace_diagnostics(
+    trace_id: str,
+    session: AsyncSession = DbSession,
+) -> dict:
+    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``)."""
+    valid_id = await _resolve_trace_id(session, trace_id)
+    if await session.get(Trace, valid_id) is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    rows = (await session.execute(select(Span).where(Span.trace_id == valid_id))).scalars().all()
+    return {
+        "trace_id": valid_id,
+        "min_repeats": min_repeats(),
+        "repeated_calls": repeated_calls(list(rows)),
+    }
+
+
 @router.delete("/{trace_id}")
 async def delete_trace(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, str]:
     """Delete a trace and its spans."""
-    valid_id = _safe_uuid(trace_id)
-    if not valid_id:
-        raise HTTPException(status_code=400, detail="Invalid trace ID format")
+    valid_id = await _resolve_trace_id(session, trace_id)
 
     query = select(Trace).where(Trace.id == valid_id)
     result = await session.execute(query)
@@ -600,6 +698,8 @@ async def delete_trace(
     if not trace:
         raise HTTPException(status_code=404, detail="Trace not found")
 
+    # SQLite ran without foreign keys (audit 2026-10-17)
+    await session.execute(delete(Evaluation).where(Evaluation.trace_id == valid_id))
     await session.delete(trace)
     await session.flush()
     return {"detail": "Trace deleted"}
@@ -611,14 +711,14 @@ async def delete_trace(
 @router.get("/{trace_id}/evaluations")
 async def get_trace_evaluations(
     trace_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[dict]:
     """Get all evaluations for a specific trace."""
     from app.models.evaluation import Evaluation
 
-    valid_id = _safe_uuid(trace_id)
-    if not valid_id:
-        raise HTTPException(status_code=400, detail="Invalid trace ID format")
+    valid_id = await _resolve_trace_id(session, trace_id)
+    if await session.get(Trace, valid_id) is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
 
     query = (
         select(Evaluation)
@@ -655,7 +755,7 @@ class BulkDeleteRequest(BaseModel):
 @router.post("/batch-delete")
 async def bulk_delete_traces(
     req: BulkDeleteRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Delete multiple traces by ID."""
     valid_ids = [tid for tid in (_safe_uuid(tid) for tid in req.trace_ids) if tid]
@@ -667,6 +767,9 @@ async def bulk_delete_traces(
     traces = list(result.scalars().all())
 
     deleted = 0
+    if traces:
+        trace_ids = [t.id for t in traces]
+        await session.execute(delete(Evaluation).where(Evaluation.trace_id.in_(trace_ids)))
     for trace in traces:
         await session.delete(trace)
         deleted += 1
@@ -681,16 +784,16 @@ async def bulk_delete_traces(
 class ImportSpanData(BaseModel):
     """Span data for import."""
 
-    name: str = Field(max_length=255)
-    span_type: str = Field("generic", max_length=50)
-    start_time: float
-    end_time: float | None = None
-    status: str = Field("ok", max_length=20)
+    name: str = Field(min_length=1, max_length=255)
+    span_type: str = Field("generic", min_length=1, max_length=50)
+    start_time: Timestamp
+    end_time: OptionalTimestamp = None
+    status: SpanStatusValue = "ok"
     input: dict | None = None
     output: dict | None = None
-    tokens_input: int | None = None
-    tokens_output: int | None = None
-    cost_usd: float | None = None
+    tokens_input: int | None = Field(None, ge=0)
+    tokens_output: int | None = Field(None, ge=0)
+    cost_usd: float | None = Field(None, ge=0, allow_inf_nan=False)
     metadata: dict | None = None
     attributes: dict | None = None
 
@@ -698,6 +801,11 @@ class ImportSpanData(BaseModel):
     @classmethod
     def _bounded(cls, value: dict | None) -> dict | None:
         return bounded_json(value)
+
+    @model_validator(mode="after")
+    def _interval(self) -> ImportSpanData:
+        _check_interval(self.start_time, self.end_time)
+        return self
 
 
 class ImportTraceData(BaseModel):
@@ -711,9 +819,9 @@ class ImportTraceData(BaseModel):
     service_instance_id: str | None = None
     actor_id_hash: str | None = None
     schema_version: str = "observer.trace.v1"
-    start_time: float | None = None
-    end_time: float | None = None
-    status: str = "ok"
+    start_time: OptionalTimestamp = None
+    end_time: OptionalTimestamp = None
+    status: SpanStatusValue = "ok"
     metadata: dict | None = None
     spans: list[ImportSpanData] = Field(default_factory=list, max_length=MAX_SPANS_PER_TRACE)
 
@@ -741,7 +849,7 @@ class ImportResponse(BaseModel):
 async def import_traces(
     request: Request,
     import_data: ImportRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Import traces from a JSON export.
 
@@ -750,16 +858,8 @@ async def import_traces(
     trace_ids = []
 
     for trace_data in import_data.traces:
-        start_dt = (
-            datetime.fromtimestamp(trace_data.start_time, tz=timezone.utc)
-            if trace_data.start_time
-            else datetime.now(timezone.utc)
-        )
-        end_dt = (
-            datetime.fromtimestamp(trace_data.end_time, tz=timezone.utc)
-            if trace_data.end_time
-            else None
-        )
+        start_dt = to_datetime(trace_data.start_time) or datetime.now(timezone.utc)
+        end_dt = to_datetime(trace_data.end_time)
 
         trace = Trace(
             id=str(uuid.uuid4()),
@@ -781,12 +881,8 @@ async def import_traces(
 
         mode = await capture_mode(session, trace.project_id, "full")
         for span_data in trace_data.spans:
-            span_start = datetime.fromtimestamp(span_data.start_time, tz=timezone.utc)
-            span_end = (
-                datetime.fromtimestamp(span_data.end_time, tz=timezone.utc)
-                if span_data.end_time
-                else None
-            )
+            span_start = to_datetime(span_data.start_time)
+            span_end = to_datetime(span_data.end_time)
             captured = apply_capture(
                 mode,
                 inp=span_data.input,

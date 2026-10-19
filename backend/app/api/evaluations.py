@@ -7,12 +7,12 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
+from app.db import DbSession
 from app.evaluators import EvaluationCriteria, EvaluatorType, create_evaluator
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
@@ -65,9 +65,15 @@ class EvaluationResponse(BaseModel):
 @router.post("/", response_model=EvaluationResponse)
 async def create_evaluation(
     eval_data: EvaluationCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Evaluation:
-    """Create a new evaluation."""
+    """Create a new evaluation of a stored trace (and span, when given)."""
+    if await session.get(Trace, eval_data.trace_id) is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    if eval_data.span_id is not None:
+        span = await session.get(Span, eval_data.span_id)
+        if span is None or str(span.trace_id) != str(eval_data.trace_id):
+            raise HTTPException(status_code=404, detail="Span not found in this trace")
     evaluation = Evaluation(
         id=str(uuid.uuid4()),
         trace_id=eval_data.trace_id,
@@ -97,7 +103,7 @@ async def create_evaluation(
 @router.post("/run", response_model=EvaluationResponse)
 async def run_evaluation(
     run_request: EvaluationRunRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Evaluation:
     """Run an evaluation on a trace using the specified evaluator."""
     # Get the trace
@@ -201,7 +207,7 @@ async def run_evaluation(
 
 @router.get("/summary")
 async def get_evaluations_summary(
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """Get aggregated evaluation statistics."""
     # By evaluator type
@@ -223,19 +229,34 @@ async def get_evaluations_summary(
             "avg_score": float(row[2]) if row[1] > 0 else None,
         }
 
-    # Pass rate (score >= 0.8)
-    pass_query = select(func.count(Evaluation.id)).where(Evaluation.score >= 0.8)
-    pass_result = await session.execute(pass_query)
-    passed = pass_result.scalar() or 0
+    # An evaluation passes when it says so; one that could not judge every criterion
+    # (passed: null) is incomplete, never a pass. Rows without a verdict (older ones, or created
+    # directly with a score) keep the historical rule: score >= 0.8.
+    passed = incomplete = total = correctness_known = 0
+    for score, result in (await session.execute(select(Evaluation.score, Evaluation.result))).all():
+        total += 1
+        correctness = result.get("correctness") if isinstance(result, dict) else None
+        if isinstance(correctness, dict) and correctness.get("status") not in (None, "unknown"):
+            correctness_known += 1
+        verdict = result.get("passed", "absent") if isinstance(result, dict) else "absent"
+        if verdict is None:
+            incomplete += 1
+        elif verdict == "absent":
+            passed += 1 if score is not None and float(score) >= 0.8 else 0
+        elif verdict is True:
+            passed += 1
 
-    total_query = select(func.count(Evaluation.id))
-    total_result = await session.execute(total_query)
-    total = total_result.scalar() or 0
-
+    decided = total - incomplete
     return {
         "total": total,
         "passed": passed,
-        "pass_rate": passed / total if total > 0 else 0,
+        "incomplete": incomplete,
+        "pass_rate": passed / decided if decided > 0 else 0,
+        # How many verdicts rest on a measured correctness signal. Rule-based turn evaluations
+        # (manitos_turn) pass on operational health alone, so a pass rate without known
+        # correctness says nothing about whether the answers were right.
+        "correctness_known": correctness_known,
+        "pass_basis": "evaluator_verdict",
         "by_type": by_type,
     }
 
@@ -248,7 +269,7 @@ async def list_evaluations(
     max_score: float | None = Query(None, ge=0, le=1),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict:
     """List evaluations with optional filtering."""
     base_query = select(Evaluation)
@@ -342,7 +363,7 @@ def summarize_scores(rows: list[tuple[Any, Any]]) -> dict[str, Any]:
 async def evaluations_by_model(
     hours: int = Query(168, ge=1, le=720),
     project_id: str = Query("manitos", min_length=1, max_length=128),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     """Quality of the automatic rule-based turn evaluations, grouped by model and provider."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -363,7 +384,7 @@ async def evaluations_by_model(
 @router.get("/{evaluation_id}", response_model=EvaluationResponse)
 async def get_evaluation(
     evaluation_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> Evaluation:
     """Get an evaluation by ID."""
     query = select(Evaluation).where(Evaluation.id == evaluation_id)
@@ -379,7 +400,7 @@ async def get_evaluation(
 @router.delete("/{evaluation_id}")
 async def delete_evaluation(
     evaluation_id: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> dict[str, str]:
     """Delete an evaluation."""
     query = select(Evaluation).where(Evaluation.id == evaluation_id)

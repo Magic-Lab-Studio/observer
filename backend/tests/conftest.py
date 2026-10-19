@@ -8,6 +8,7 @@ os.environ.setdefault("OBSERVATORY_AUTO_EVAL", "0")
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db import get_session
@@ -27,6 +28,13 @@ async def db_engine():
         echo=False,
         connect_args={"check_same_thread": False, "timeout": 5.0},
     )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _foreign_keys(dbapi_connection, _record):  # noqa: ANN001
+        # Production enables them (app/db/postgres.py); without this, tests missed the
+        # self-referencing parent constraint that rejected children sent before their parent.
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine

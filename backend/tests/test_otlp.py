@@ -231,3 +231,30 @@ async def test_a_trace_owned_by_another_project_is_rejected_without_a_receipt(cl
     )
     assert res.status_code == 200
     assert res.json()["partialSuccess"]["rejectedSpans"] == "3"
+
+
+@pytest.mark.anyio
+async def test_a_child_exported_before_its_parent_keeps_the_parent(client, db_session):
+    """OpenTelemetry exports a child when it ends, before its parent: the receiver used to drop a
+    parent it had not stored yet, flattening the trace."""
+    child = _request([_span(CHILD, "child", parent=ROOT, start=10_000_000, ms=50)])
+    assert (await _post(client, json.dumps(child))).status_code == 200
+    stored = (await db_session.execute(select(Span).where(Span.name == "child"))).scalar_one()
+    assert stored.parent_span_id == span_uuid(TID, ROOT)
+    assert (await db_session.get(Trace, trace_uuid(TID))).status == "unset"  # root not seen yet
+    root = _request([_span(ROOT, "agent.run", start=0, ms=500)])
+    assert (await _post(client, json.dumps(root))).status_code == 200
+    trace = await db_session.get(Trace, trace_uuid(TID))
+    await db_session.refresh(trace)
+    assert trace.name == "agent.run" and trace.status == "ok"
+
+
+@pytest.mark.anyio
+async def test_a_failed_root_stays_failed_when_a_later_batch_is_all_ok(client, db_session):
+    root = _request([_span(ROOT, "agent.run", start=0, ms=500, status=2)])
+    late = _request([_span(CHILD, "late", parent=ROOT, start=10_000_000, ms=50, status=1)])
+    assert (await _post(client, json.dumps(root))).status_code == 200
+    assert (await _post(client, json.dumps(late))).status_code == 200
+    trace = await db_session.get(Trace, trace_uuid(TID))
+    await db_session.refresh(trace)
+    assert trace.status == "error"

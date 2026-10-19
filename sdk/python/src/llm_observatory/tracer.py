@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import functools
 import logging
 import threading
 import time
 import uuid
+import weakref
+from collections import deque
 from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -39,7 +42,13 @@ class TokenUsage:
 
 @dataclass
 class Span:
-    """A single trace span representing an operation."""
+    """A single trace span representing an operation.
+
+    Lifecycle: a span is created active, is finished by ``end()`` and only then handed to its
+    tracer's export queue, so what reaches the backend carries its end time, final status,
+    tokens, output and cost. ``end()`` is idempotent: later calls change nothing. A span marked
+    ERROR stays ERROR; ``end()`` without a status marks an UNSET span OK (the historical default).
+    """
 
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     trace_id: str = ""
@@ -55,11 +64,25 @@ class Span:
     cost_usd: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     attributes: dict[str, Any] = field(default_factory=dict)
+    _tracer: Tracer | None = field(default=None, repr=False, compare=False)
 
-    def end(self, status: SpanStatus = SpanStatus.OK) -> None:
-        """End the span."""
+    def end(self, status: SpanStatus | None = None) -> None:
+        """Finish the span and queue it for export. Calling it again does nothing."""
+        if self.end_time is not None:
+            return
         self.end_time = time.time()
-        self.status = status
+        if self.status is not SpanStatus.ERROR:
+            if status is not None:
+                self.status = status
+            elif self.status is SpanStatus.UNSET:
+                self.status = SpanStatus.OK
+        if self._tracer is not None:
+            self._tracer._on_end(self)
+
+    @property
+    def ended(self) -> bool:
+        """Whether ``end()`` has been called."""
+        return self.end_time is not None
 
     def set_status(self, status: SpanStatus) -> None:
         """Set the span status."""
@@ -107,6 +130,9 @@ class Tracer:
         api_key: str | None = None,
         batch_size: int = 10,
         flush_interval: float = 5.0,
+        max_queue_size: int = 10_000,
+        max_kept_spans: int = 10_000,
+        environment: str | None = None,
     ) -> None:
         """Initialize the tracer.
 
@@ -116,38 +142,62 @@ class Tracer:
             api_key: API key for authentication.
             batch_size: Number of spans to buffer before flushing.
             flush_interval: Seconds between automatic flushes.
+            max_queue_size: Finished spans waiting for export; beyond it new ones are dropped
+                (and counted in ``dropped_spans``) instead of growing memory without bound.
+            max_kept_spans: Spans kept in memory for ``export()``; the oldest are forgotten.
+            environment: Deployment environment (``production``, ``staging``...), exported as
+                ``deployment.environment.name`` so the dashboard can filter by it.
         """
         self.service_name = service_name
         self.endpoint = endpoint
         self.api_key = api_key
         self.batch_size = batch_size
         self.flush_interval = flush_interval
-        self._spans: list[Span] = []
+        self.max_queue_size = max_queue_size
+        self.environment = environment
+        self._spans: deque[Span] = deque(maxlen=max_kept_spans)
         self._exporters: list[Any] = []
         self._buffer: list[dict[str, Any]] = []
         self._lock = threading.Lock()
+        self._wake = threading.Event()
         self._flush_thread: threading.Thread | None = None
         self._shutdown = False
+        self.dropped_spans = 0
 
         # Auto-start flush thread if we have an endpoint
         if endpoint:
             self._start_flush_thread()
 
     def _start_flush_thread(self) -> None:
-        """Start background flush thread."""
+        """Start the background thread that sends finished spans, so ``end()`` never waits on
+        the network in the caller's thread."""
         if self._flush_thread is not None:
             return
+        ref = weakref.ref(self)
 
         def flush_loop() -> None:
-            while not self._shutdown:
-                time.sleep(self.flush_interval)
+            while True:
+                tracer = ref()
+                if tracer is None or tracer._shutdown:
+                    return
+                wake, interval = tracer._wake, tracer.flush_interval
+                del tracer
+                wake.wait(interval)
+                tracer = ref()
+                if tracer is None:
+                    return
+                wake.clear()
                 try:
-                    self.flush()
+                    tracer.flush()
                 except Exception as e:
                     logger.warning(f"Flush failed: {e}")
+                del tracer
 
-        self._flush_thread = threading.Thread(target=flush_loop, daemon=True)
+        self._flush_thread = threading.Thread(
+            target=flush_loop, name="observer-flush", daemon=True
+        )
         self._flush_thread.start()
+        atexit.register(_shutdown_at_exit, ref)
 
     def add_exporter(self, exporter: Any) -> None:
         """Add an exporter to the tracer.
@@ -156,6 +206,7 @@ class Tracer:
             exporter: Exporter instance with an export(spans) method.
         """
         self._exporters.append(exporter)
+        self._start_flush_thread()
 
     def start_trace(self, name: str, **attributes: Any) -> Span:
         """Start a new trace.
@@ -172,17 +223,9 @@ class Tracer:
             name=name,
             span_type="trace",
             attributes=attributes,
+            _tracer=self,
         )
         self._spans.append(span)
-
-        # Auto-export if we have exporters
-        if self._exporters:
-            span_dict = self._span_to_dict(span)
-            with self._lock:
-                self._buffer.append(span_dict)
-                if len(self._buffer) >= self.batch_size:
-                    self._flush_buffer()
-
         return span
 
     def start_span(
@@ -210,21 +253,36 @@ class Tracer:
             name=name,
             span_type=span_type,
             attributes=attributes,
+            _tracer=self,
         )
         self._spans.append(span)
-
-        # Auto-export if we have exporters
-        if self._exporters:
-            span_dict = self._span_to_dict(span)
-            with self._lock:
-                self._buffer.append(span_dict)
-                if len(self._buffer) >= self.batch_size:
-                    self._flush_buffer()
-
         return span
 
+    def _on_end(self, span: Span) -> None:
+        """Queue a finished span; a full batch wakes the flush thread."""
+        if not self._exporters:
+            return
+        span_dict = self._span_to_dict(span)
+        with self._lock:
+            if len(self._buffer) >= self.max_queue_size:
+                self.dropped_spans += 1
+                full = True
+            else:
+                self._buffer.append(span_dict)
+                full = False
+            ready = len(self._buffer) >= self.batch_size
+        if full:
+            logger.warning("Export queue full (%d spans); span dropped", self.max_queue_size)
+        if ready:
+            self._wake.set()
+
     def _span_to_dict(self, span: Span) -> dict[str, Any]:
-        """Convert a span to a dictionary for export."""
+        """Convert a span to a dictionary for export. The tracer's service and environment travel
+        as OpenTelemetry resource attributes; the backend uses them to fill the trace's project
+        and environment (a value the span sets itself wins)."""
+        attributes = {"service.name": self.service_name, **span.attributes}
+        if self.environment:
+            attributes.setdefault("deployment.environment.name", self.environment)
         return {
             "id": span.id,
             "trace_id": span.trace_id,
@@ -240,7 +298,7 @@ class Tracer:
             "tokens_output": span.tokens.output if span.tokens else None,
             "cost_usd": span.cost_usd,
             "metadata": span.metadata,
-            "attributes": span.attributes,
+            "attributes": attributes,
         }
 
     def export(self) -> list[dict[str, Any]]:
@@ -252,7 +310,8 @@ class Tracer:
         return [self._span_to_dict(span) for span in self._spans]
 
     def flush(self) -> None:
-        """Flush buffered spans to exporters."""
+        """Send the finished spans waiting in the queue (the network call runs outside the
+        lock, so other threads can keep ending spans meanwhile)."""
         with self._lock:
             if not self._buffer:
                 return
@@ -265,32 +324,42 @@ class Tracer:
             except Exception as e:
                 logger.warning(f"Exporter failed: {e}")
 
-    def _flush_buffer(self) -> None:
-        """Flush buffer (must hold lock)."""
-        if not self._buffer:
-            return
-        spans_to_export = self._buffer.copy()
-        self._buffer.clear()
-
-        for exporter in self._exporters:
-            try:
-                exporter.export(spans_to_export)
-            except Exception as e:
-                logger.warning(f"Exporter failed: {e}")
-
     def clear(self) -> None:
         """Clear all collected spans."""
         self._spans.clear()
 
     def shutdown(self) -> None:
-        """Shutdown the tracer, flushing any remaining spans."""
+        """Shutdown the tracer, sending every finished span still queued. Spans that were never
+        ended are not sent: they have no end time or final status."""
+        if self._shutdown:
+            return
         self._shutdown = True
+        self._wake.set()
+        thread = self._flush_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=max(1.0, self.flush_interval))
         self.flush()
         for exporter in self._exporters:
             try:
                 exporter.flush()
             except Exception:
                 pass
+
+
+def _shutdown_at_exit(ref: weakref.ReferenceType[Tracer]) -> None:
+    tracer = ref()
+    if tracer is not None:
+        try:
+            tracer.shutdown()
+        except Exception:
+            logger.debug("Tracer shutdown at exit failed", exc_info=True)
+
+
+def _record_error(span: Span, exc: BaseException) -> None:
+    """An exception, a cancellation or an interrupt ends the operation unsuccessfully."""
+    span.set_status(SpanStatus.ERROR)
+    span.set_attribute("error.type", type(exc).__name__)
+    span.set_attribute("error.message", str(exc))
 
 
 def trace(
@@ -322,9 +391,8 @@ def trace(
                     result = await func(*args, **kwargs)
                     span.set_status(SpanStatus.OK)
                     return result
-                except Exception as e:
-                    span.set_status(SpanStatus.ERROR)
-                    span.set_attribute("error.message", str(e))
+                except BaseException as e:
+                    _record_error(span, e)
                     raise
                 finally:
                     span.end()
@@ -343,9 +411,8 @@ def trace(
                     result = func(*args, **kwargs)
                     span.set_status(SpanStatus.OK)
                     return result
-                except Exception as e:
-                    span.set_status(SpanStatus.ERROR)
-                    span.set_attribute("error.message", str(e))
+                except BaseException as e:
+                    _record_error(span, e)
                     raise
                 finally:
                     span.end()

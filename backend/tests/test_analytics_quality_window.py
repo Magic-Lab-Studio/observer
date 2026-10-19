@@ -62,7 +62,7 @@ async def test_manitos_quality_fixed_window_counts_and_bounds(client, db_session
     assert response.status_code == 200
     data = response.json()
     assert data["total_turns"] == 1
-    assert data["avg_duration_ms"] == 0
+    assert data["avg_duration_ms"] is None  # no turn in the window reported a duration
 
 
 @pytest.mark.anyio

@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_session
+from app.db import DbSession
 from app.evaluators.manitos_turn import score_turn
 from app.metrics_core import load_signals_for
 from app.models.datasets import Dataset, DatasetItem
@@ -164,7 +164,7 @@ async def _dataset(session: AsyncSession, dataset_id: str) -> Dataset:
 @router.get("")
 async def list_datasets(
     project_id: str = Query("manitos", min_length=1, max_length=128),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = DbSession,
 ) -> list[dict[str, Any]]:
     counts = dict(
         (
@@ -193,7 +193,7 @@ async def list_datasets(
 
 @router.post("")
 async def create_dataset(
-    body: DatasetIn, session: AsyncSession = Depends(get_session)
+    body: DatasetIn, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     dataset = Dataset(**body.model_dump())
     session.add(dataset)
@@ -203,7 +203,7 @@ async def create_dataset(
 
 @router.delete("/{dataset_id}")
 async def delete_dataset(
-    dataset_id: str, session: AsyncSession = Depends(get_session)
+    dataset_id: str, session: AsyncSession = DbSession
 ) -> dict[str, str]:
     dataset = await _dataset(session, dataset_id)
     # Children first: SQLite enforces ON DELETE CASCADE only with foreign keys switched on.
@@ -217,7 +217,7 @@ async def delete_dataset(
 
 @router.get("/{dataset_id}")
 async def get_dataset(
-    dataset_id: str, session: AsyncSession = Depends(get_session)
+    dataset_id: str, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     dataset = await _dataset(session, dataset_id)
     items = (
@@ -238,7 +238,7 @@ async def get_dataset(
 
 @router.get("/{dataset_id}/export")
 async def export_dataset(
-    dataset_id: str, session: AsyncSession = Depends(get_session)
+    dataset_id: str, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     """Portable copy of the dataset (the input a regression run reads)."""
     data = await get_dataset(dataset_id, session)
@@ -247,7 +247,7 @@ async def export_dataset(
 
 @router.post("/{dataset_id}/items")
 async def add_item(
-    dataset_id: str, body: ItemIn, session: AsyncSession = Depends(get_session)
+    dataset_id: str, body: ItemIn, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     await _dataset(session, dataset_id)
     observed: dict[str, Any] = {}
@@ -272,7 +272,7 @@ async def add_item(
 
 @router.patch("/items/{item_id}")
 async def update_item(
-    item_id: str, body: ItemPatch, session: AsyncSession = Depends(get_session)
+    item_id: str, body: ItemPatch, session: AsyncSession = DbSession
 ) -> dict[str, Any]:
     item = await session.get(DatasetItem, item_id)
     if item is None:
@@ -291,7 +291,7 @@ async def update_item(
 
 
 @router.delete("/items/{item_id}")
-async def delete_item(item_id: str, session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+async def delete_item(item_id: str, session: AsyncSession = DbSession) -> dict[str, str]:
     item = await session.get(DatasetItem, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="item not found")
