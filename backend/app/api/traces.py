@@ -36,7 +36,7 @@ from app.limits import (
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
 from app.ratelimit import limiter
-from app.trace_summary import refresh_trace_summary
+from app.trace_summary import fill_trace_identity, refresh_trace_summary
 from app.websocket import manager
 
 logger = logging.getLogger(__name__)
@@ -370,7 +370,9 @@ async def _ingest_trace_group(
             status="unset",
         )
         session.add(trace)
-        await session.flush()
+    # before the capture mode is read: the project decides it
+    fill_trace_identity(trace, [s.attributes for s in spans])
+    await session.flush()
 
     mode = await capture_mode(session, trace.project_id, "full")
     ids = [s.id for s in spans if s.id]

@@ -99,3 +99,31 @@ async def test_cost_by_model_reads_gen_ai_model_attributes(client):
     rows = (await client.get("/v1/analytics/cost-by-model")).json()
     expected = {"model": "claude-sonnet-4-5", "cost_usd": pytest.approx(0.001), "span_count": 1}
     assert rows == [expected]
+
+
+@pytest.mark.anyio
+async def test_p2_service_environment_and_session_fill_the_trace(client):
+    tid = str(uuid.uuid4())
+    attrs = {"service.name": "billing-agent", "deployment.environment.name": "staging",
+             "session.id": "sess-42"}
+    span = _span("run", trace_id=tid, attributes=attrs)
+    await client.post("/v1/traces/batch", json={"spans": [span]})
+    trace = (await client.get(f"/v1/traces/{tid}")).json()
+    assert (trace["project_id"], trace["environment"], trace["session_id"]) == (
+        "billing-agent", "staging", "sess-42")
+    # a later batch cannot move the trace to another project
+    other = {"service.name": "intruder"}
+    late = _span("x", trace_id=tid, attributes=other)
+    await client.post("/v1/traces/batch", json={"spans": [late]})
+    assert (await client.get(f"/v1/traces/{tid}")).json()["project_id"] == "billing-agent"
+
+
+@pytest.mark.anyio
+async def test_p2_the_project_capture_mode_applies_to_generic_traces(client):
+    await client.put("/v1/privacy/projects/billing-agent", json={"capture_mode": "metadata"})
+    tid = str(uuid.uuid4())
+    span = _span("run", trace_id=tid, attributes={"service.name": "billing-agent"},
+                 input={"prompt": "secret"})
+    await client.post("/v1/traces/batch", json={"spans": [span]})
+    stored = (await client.get(f"/v1/traces/{tid}/spans")).json()[0]
+    assert stored["input"] is None

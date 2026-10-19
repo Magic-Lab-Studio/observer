@@ -132,6 +132,7 @@ class Tracer:
         flush_interval: float = 5.0,
         max_queue_size: int = 10_000,
         max_kept_spans: int = 10_000,
+        environment: str | None = None,
     ) -> None:
         """Initialize the tracer.
 
@@ -144,6 +145,8 @@ class Tracer:
             max_queue_size: Finished spans waiting for export; beyond it new ones are dropped
                 (and counted in ``dropped_spans``) instead of growing memory without bound.
             max_kept_spans: Spans kept in memory for ``export()``; the oldest are forgotten.
+            environment: Deployment environment (``production``, ``staging``...), exported as
+                ``deployment.environment.name`` so the dashboard can filter by it.
         """
         self.service_name = service_name
         self.endpoint = endpoint
@@ -151,6 +154,7 @@ class Tracer:
         self.batch_size = batch_size
         self.flush_interval = flush_interval
         self.max_queue_size = max_queue_size
+        self.environment = environment
         self._spans: deque[Span] = deque(maxlen=max_kept_spans)
         self._exporters: list[Any] = []
         self._buffer: list[dict[str, Any]] = []
@@ -273,7 +277,12 @@ class Tracer:
             self._wake.set()
 
     def _span_to_dict(self, span: Span) -> dict[str, Any]:
-        """Convert a span to a dictionary for export."""
+        """Convert a span to a dictionary for export. The tracer's service and environment travel
+        as OpenTelemetry resource attributes; the backend uses them to fill the trace's project
+        and environment (a value the span sets itself wins)."""
+        attributes = {"service.name": self.service_name, **span.attributes}
+        if self.environment:
+            attributes.setdefault("deployment.environment.name", self.environment)
         return {
             "id": span.id,
             "trace_id": span.trace_id,
@@ -289,7 +298,7 @@ class Tracer:
             "tokens_output": span.tokens.output if span.tokens else None,
             "cost_usd": span.cost_usd,
             "metadata": span.metadata,
-            "attributes": span.attributes,
+            "attributes": attributes,
         }
 
     def export(self) -> list[dict[str, Any]]:

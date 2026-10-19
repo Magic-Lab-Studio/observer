@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '../api';
 import { useFilters } from '../context';
-import type { EvaluationsByModel, ProviderInfo, ProviderStats, ProvidersResponse } from '../types';
+import type { ProviderModelsResponse, EvaluationsByModel, ProviderInfo, ProviderStats, ProvidersResponse } from '../types';
 import { Card, ChartTooltip, Chip, EmptyState, ErrorState, Kpi, Meter, Skeleton } from '../components/ui';
-import { fmtAxisMs, fmtInt, fmtMs, fmtPct, timeAgo } from '../helpers/format';
+import { fmtAxisMs, fmtInt, fmtMs, fmtPct, fmtUsd, timeAgo } from '../helpers/format';
 import { t } from '../i18n';
 
 const AXIS = { stroke: 'transparent', tickLine: false, axisLine: false } as const;
@@ -32,16 +32,56 @@ const TONE: Record<string, string> = {
   bad: 'border-bad/30 bg-bad/10 text-bad', off: 'border-line-strong bg-raised text-faint',
 };
 
+/** Calls per provider and model from any application's LLM spans (no Manitos chain needed). */
+function ProviderModels({ data }: { data: ProviderModelsResponse | null }) {
+  if (!data) return <Skeleton className="h-40" />;
+  return (
+    <Card title={t("Llamadas por proveedor y modelo")}
+      subtitle={t("De los spans de LLM de cualquier aplicación (atributos gen_ai.*) · {n} llamadas", { n: fmtInt(data.calls) })} bodyClass="p-0 pt-2">
+      {data.models.length === 0 ? <div className="p-4"><EmptyState title={t("Sin llamadas a modelos en este rango")} /></div> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-faint">
+              <tr className="text-left">
+                <th className="px-4 py-2 font-normal">{t("Proveedor")}</th><th className="px-2 py-2 font-normal">{t("Modelo")}</th>
+                <th className="px-2 py-2 text-right font-normal">{t("Llamadas")}</th><th className="px-2 py-2 text-right font-normal">{t("Error")}</th>
+                <th className="px-2 py-2 text-right font-normal">p50</th><th className="px-2 py-2 text-right font-normal">p95</th>
+                <th className="px-2 py-2 text-right font-normal">{t("Tokens")}</th><th className="px-4 py-2 text-right font-normal">{t("Costo")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {data.models.map((m) => (
+                <tr key={`${m.provider}/${m.model}`}>
+                  <td className="px-4 py-2 text-dim">{m.provider === 'unknown' ? t('sin indicar') : m.provider}</td>
+                  <td className="max-w-[260px] truncate px-2 py-2 font-mono text-ink" title={m.model}>{m.model}</td>
+                  <td className="px-2 py-2 text-right text-ink">{fmtInt(m.calls)}</td>
+                  <td className={`px-2 py-2 text-right ${m.errors ? 'text-bad' : 'text-faint'}`}>{fmtPct(m.error_rate)}</td>
+                  <td className="px-2 py-2 text-right">{fmtMs(m.p50_ms)}</td>
+                  <td className="px-2 py-2 text-right">{fmtMs(m.p95_ms)}</td>
+                  <td className="px-2 py-2 text-right text-dim">{m.tokens_input == null ? '–' : `${fmtInt(m.tokens_input)} / ${fmtInt(m.tokens_output)}`}</td>
+                  <td className="px-4 py-2 text-right">{fmtUsd(m.cost_usd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function Providers() {
   const { hours, env } = useFilters();
   const [data, setData] = useState<ProvidersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [scores, setScores] = useState<EvaluationsByModel | null>(null);
+  const [models, setModels] = useState<ProviderModelsResponse | null>(null);
 
   const load = useCallback(() => {
     api.getProviders(hours, env || undefined).then((d) => { setData(d); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : t('Error desconocido')));
+    api.getProviderModels(hours, env || undefined).then(setModels).catch(() => setModels(null));
   }, [hours, env]);
 
   useEffect(() => {
@@ -71,6 +111,21 @@ function Providers() {
   const totalFailed = failing.reduce((a, p) => a + p.rate_limited + p.timeout + p.error, 0);
   const depthTotal = data.fallback_depth.reduce((a, d) => a + d.count, 0) || 1;
   const fellBack = data.fallback_depth.filter((d) => d.depth > 0).reduce((a, d) => a + d.count, 0);
+
+  // The fallback chain is integration telemetry (llm.chain spans and a provider snapshot); an
+  // application that does not report it gets the generic provider/model view only.
+  if (!snap && data.turns === 0) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">{t("Proveedores de LLM")}</h1>
+          <p className="text-xs text-faint">{t("Llamadas a modelos de cualquier aplicación instrumentada")}</p>
+        </div>
+        <ProviderModels data={models} />
+        <p className="text-xs text-faint">{t("La cadena de respaldo (orden de proveedores, cuotas, intentos fallidos) aparece cuando una integración la reporta, como Manitos con spans llm.chain.")}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -289,6 +344,7 @@ function Providers() {
         
         {t("¿Un turno concreto? Abre su")} <Link to="/traces" className="text-accent hover:underline">{t("traza")}</Link>  {t("y selecciona el span")} <span className="font-mono">{t("llm.chain")}</span>  {t("para ver su cadena.")}
       </p>
+      <ProviderModels data={models} />
     </div>
   );
 }

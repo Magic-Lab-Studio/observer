@@ -474,4 +474,11 @@ export const EN: Record<string, string> = {
   'Trazas más lentas': 'Slowest traces',
   'Manitos · primer token': 'Manitos · first token',
   'Manitos · vía alterna': 'Manitos · fallback path',
+  'Llamadas por proveedor y modelo': 'Calls per provider and model',
+  'De los spans de LLM de cualquier aplicación (atributos gen_ai.*) · {n} llamadas': 'From any application\'s LLM spans (gen_ai.* attributes) · {n} calls',
+  'Sin llamadas a modelos en este rango': 'No model calls in this range',
+  'Llamadas': 'Calls',
+  'sin indicar': 'not reported',
+  'Llamadas a modelos de cualquier aplicación instrumentada': 'Model calls from any instrumented application',
+  'La cadena de respaldo (orden de proveedores, cuotas, intentos fallidos) aparece cuando una integración la reporta, como Manitos con spans llm.chain.': 'The fallback chain (provider order, quotas, failed attempts) appears when an integration reports it, such as Manitos with llm.chain spans.',
 };

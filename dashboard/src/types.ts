@@ -148,6 +148,16 @@ export interface ProvidersResponse {
   paths: { path: string; count: number }[];
 }
 
+export interface ProviderModelRow {
+  provider: string; model: string; calls: number; errors: number; error_rate: number;
+  p50_ms: number | null; p95_ms: number | null; tokens_input: number | null; tokens_output: number | null;
+  cost_usd: number | null; priced_calls: number; last_seen: string | null;
+}
+export interface ProviderModelsResponse {
+  hours: number; project_id: string | null; environment: string | null; calls: number;
+  models: ProviderModelRow[]; truncated: boolean;
+}
+
 export interface ScoreGroup {
   key: string; count: number; avg_score: number | null; avg_health: number | null;
   pass_rate: number | null; correctness_known: number;

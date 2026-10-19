@@ -34,6 +34,29 @@ def _utc(value: datetime | None) -> datetime | None:
     return value
 
 
+_IDENTITY = (
+    ("project_id", ("service.name",), 128),
+    ("environment", ("deployment.environment.name", "deployment.environment"), 64),
+    ("session_id", ("session.id", "gen_ai.conversation.id"), 255),
+)
+
+
+def fill_trace_identity(trace: Trace, attribute_sets: list[dict | None]) -> None:
+    """Project, environment and session of a generic trace from OpenTelemetry attributes
+    (``service.name``, ``deployment.environment.name``, ``session.id``) its spans carry. Only
+    empty fields are filled: a trace's project never changes once set (capture mode and ownership
+    follow it)."""
+    for column, keys, limit in _IDENTITY:
+        if getattr(trace, column):
+            continue
+        for attrs in attribute_sets:
+            found = [attrs.get(k) for k in keys] if isinstance(attrs, dict) else []
+            value = next((v for v in found if isinstance(v, str)), None)
+            if value and value.strip() and not any(ord(c) < 32 for c in value):
+                setattr(trace, column, value.strip()[:limit])
+                break
+
+
 async def refresh_trace_summary(session: AsyncSession, trace: Trace) -> None:
     await session.flush()
     rows = (

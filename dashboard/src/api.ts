@@ -3,6 +3,7 @@
  */
 
 import type {
+  ProviderModelsResponse,
   Trace,
   Span,
   TraceListResponse,
@@ -130,6 +131,11 @@ export const api = {
     return request(`/v1/providers/?${qs.toString()}`);
   },
 
+  async getProviderModels(hours = 24, environment?: string): Promise<ProviderModelsResponse> {
+    const q = new URLSearchParams({ hours: String(hours) });
+    if (environment) q.set('environment', environment);
+    return request(`/v1/providers/models?${q}`);
+  },
   async getEvaluationsByModel(hours = 168): Promise<EvaluationsByModel> {
     return request(`/v1/evaluations/by-model?hours=${hours}`);
   },
