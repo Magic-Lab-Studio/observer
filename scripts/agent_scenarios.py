@@ -160,7 +160,9 @@ def _get(endpoint: str, path: str, api_key: str | None):
 
 def _check(endpoint: str, api_key: str | None, slow: float) -> list[tuple[str, bool, str]]:
     listed = _get(endpoint, "/v1/traces/?search=scenario.&limit=100", api_key)["traces"]
-    by_name = {t["name"]: t for t in listed}
+    by_name: dict = {}
+    for t in listed:  # newest first: a rerun on the same database checks its own traces
+        by_name.setdefault(t["name"], t)
     results: list[tuple[str, bool, str]] = []
 
     def check(label: str, ok: bool, detail: str) -> None:
