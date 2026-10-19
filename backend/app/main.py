@@ -57,6 +57,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         retention.cancel()
         alerting.cancel()
         scoring.cancel()
+        import asyncio as _asyncio
+
+        # a pass mid-commit used to race engine.dispose()
+        await _asyncio.gather(retention, alerting, scoring, return_exceptions=True)
         await engine.dispose()
 
 
@@ -65,6 +69,11 @@ app = FastAPI(
     description="Open-source observability and telemetry platform for LLMs",
     version="0.1.1",
     lifespan=lifespan,
+    # With a key configured the schema (delete, import and enforce routes) stayed public (audit
+    # 2026-10-17).
+    docs_url=None if API_KEY else "/docs",
+    redoc_url=None if API_KEY else "/redoc",
+    openapi_url=None if API_KEY else "/openapi.json",
 )
 
 # Rate limiter
@@ -177,6 +186,11 @@ async def health_check() -> dict:
     except Exception:
         db_status = "error"
 
+    if db_status != "ok":
+        # 200 "healthy" with db=error hid a broken database from systemd and monitors (audit
+        # 2026-10-17)
+        degraded = {"status": "degraded", "db": db_status, "version": "0.1.1"}
+        return JSONResponse(status_code=503, content=degraded)
     return {"status": "healthy", "db": db_status, "version": "0.1.1"}
 
 

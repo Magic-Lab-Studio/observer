@@ -408,19 +408,19 @@ class TestEvaluateCommand:
 class TestStatusCommand:
     def test_status_server_down(self, runner: CliRunner) -> None:
         r = runner.invoke(cli, ["status", "--endpoint", "http://127.0.0.1:19999"])
-        assert r.exit_code == 0
+        assert r.exit_code == 1  # a status check that cannot reach the server fails (audit 2026-10-17)
         assert "not responding" in r.output
 
 
 class TestAPIKeyOption:
     def test_api_key_from_option(self, runner: CliRunner) -> None:
         r = runner.invoke(cli, ["--api-key", "test-key", "status", "--endpoint", "http://127.0.0.1:19999"])
-        assert r.exit_code == 0
+        assert r.exit_code == 1
         assert "not responding" in r.output
 
     def test_api_key_none_by_default(self, runner: CliRunner) -> None:
         r = runner.invoke(cli, ["status", "--endpoint", "http://127.0.0.1:19999"])
-        assert r.exit_code == 0
+        assert r.exit_code == 1
 
 
 class TestImportCommand:

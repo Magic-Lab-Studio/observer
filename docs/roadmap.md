@@ -197,3 +197,13 @@ spool and a circuit breaker.
 - 2026-10-16: decision on reply text: Manitos keeps exporting metadata only, so phrase checks stay
   `unknown` (the operator chose privacy over text evaluation). The ingestion card sets projects
   silent for over a week apart. Compose files verified on podman and image names fully qualified.
+
+## Later
+
+Not scheduled; recorded here because the text above refers to this section.
+
+- Encrypt the SDK spool on disk and give it a maximum age.
+- Drop counters reported by the sender (what never reached the Observer).
+- Reply-text phrase checks stay  by operator decision (metadata-only export).
+- OTLP over gRPC.
+- The SQLite foreign keys and WAL are enabled per connection since 2026-10-17; the LLM judge should become an explicit opt-in.
