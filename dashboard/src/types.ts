@@ -56,12 +56,22 @@ export interface SummaryData {
   error_rate: number;
   total_evaluations: number;
   avg_evaluation_score: number;
+  completed_traces?: number;
+  running_traces?: number;
+  trace_error_rate?: number | null;
+  span_error_count?: number;
+  llm_span_count?: number;
+  tool_span_count?: number;
+  priced_span_count?: number;
+  p50_trace_duration_ms?: number | null;
+  p95_trace_duration_ms?: number | null;
 }
 
 export interface TimelinePoint {
   timestamp: string;
   count: number;
   cost_usd: number;
+  error_count?: number;
 }
 
 export interface CostByModel {
@@ -93,8 +103,8 @@ export interface ManitOSQualitySummary {
   fallback_rate: number;
   tts_error_count: number;
   tts_error_rate: number;
-  avg_duration_ms: number;
-  avg_ttft_ms: number;
+  avg_duration_ms: number | null;
+  avg_ttft_ms: number | null;
   models: QualityBreakdown[];
   languages: QualityBreakdown[];
 }

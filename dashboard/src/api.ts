@@ -29,15 +29,25 @@ import type {
   IngestHealth,
 } from './types';
 
+import { ApiError, classifyStatus, detailFromBody } from './helpers/errors';
+
 const BASE_URL = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+  } catch {
+    throw new ApiError('network', null, null);
+  }
   if (!response.ok) {
-    throw new Error(`API error: ${response.status} ${response.statusText}`);
+    const body = await response.json().catch(() => null);
+    // The dev proxy and nginx answer 502/504 when the backend itself is down.
+    const kind = response.status === 502 || response.status === 504 ? 'network' : classifyStatus(response.status);
+    throw new ApiError(kind, response.status, detailFromBody(body));
   }
   return response.json();
 }

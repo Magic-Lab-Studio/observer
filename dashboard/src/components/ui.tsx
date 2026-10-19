@@ -161,7 +161,6 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       <Icon name="warn" className="size-5 text-bad shrink-0 mt-0.5" />
       <div className="min-w-0">
         <p className="text-sm text-bad font-medium">{t("No se pudo cargar: {m}", { m: message })}</p>
-        <p className="text-xs text-faint mt-1">{t("Verifica que el backend del Observer esté corriendo.")}</p>
         {onRetry && (
           <button type="button" onClick={onRetry}
             className="mt-2 rounded-md border border-line-strong px-2.5 py-1 text-xs text-ink hover:bg-raised">
