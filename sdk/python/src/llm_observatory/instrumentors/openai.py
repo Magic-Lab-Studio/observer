@@ -82,6 +82,13 @@ class OpenAIInstrumentor:
                     span.set_output(output)
 
             span.set_attribute("response_id", getattr(result, "id", None))
+            reasons = [
+                c.finish_reason
+                for c in (getattr(result, "choices", None) or [])
+                if isinstance(getattr(c, "finish_reason", None), str)
+            ]
+            if reasons:
+                span.set_attribute("gen_ai.response.finish_reasons", reasons)
             response_model = getattr(result, "model", None)
             if isinstance(response_model, str):
                 span.set_attribute("gen_ai.response.model", response_model)

@@ -80,6 +80,9 @@ class AnthropicInstrumentor:
                 span.set_output({"content": content_blocks})
 
             span.set_attribute("response_id", getattr(result, "id", None))
+            stop_reason = getattr(result, "stop_reason", None)
+            if isinstance(stop_reason, str):
+                span.set_attribute("gen_ai.response.finish_reasons", [stop_reason])
             response_model = getattr(result, "model", None)
             if isinstance(response_model, str):
                 span.set_attribute("gen_ai.response.model", response_model)

@@ -162,7 +162,11 @@ def test_anthropic_sync_call_works_and_leaves_a_finished_span(capture, anthropic
     )
     assert result.content[0].text == "hola"
     tracer.flush()
-    _assert_finished_ok(_only_llm_span(sink), 12, 3)
+    span = _only_llm_span(sink)
+    _assert_finished_ok(span, 12, 3)
+    assert span["attributes"]["gen_ai.response.finish_reasons"] == ["end_turn"]
+    assert span["attributes"]["gen_ai.response.model"] == "claude-sonnet-4-5-20250929"
+    assert span["attributes"]["gen_ai.usage.input_tokens"] == 12
 
 
 def test_anthropic_async_call_works_and_leaves_a_finished_span(capture, anthropic_instrumented):
