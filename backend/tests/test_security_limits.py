@@ -110,9 +110,16 @@ def test_rate_limit_identity_does_not_trust_unvalidated_tokens(monkeypatch):
     assert rl._rate_limit_key(request("wrong")) != "apikey:valid"
 
 
-@pytest.mark.parametrize("name", ["docker-compose.yml", "podman-compose.yml"])
-def test_compose_defaults_are_loopback_only_with_no_known_credentials(name):
-    text = (ROOT / name).read_text()
+def test_one_compose_file_for_docker_and_podman():
+    # podman-compose merges every default file it finds (compose.yaml, podman-compose.yml,
+    # docker-compose.yml...), so two copies duplicated the healthcheck and broke `up`.
+    defaults = ["compose.yaml", "compose.yml", "podman-compose.yaml", "podman-compose.yml",
+                "docker-compose.yml", "docker-compose.yaml", "container-compose.yml"]
+    assert [n for n in defaults if (ROOT / n).exists()] == ["compose.yaml"]
+
+
+def test_compose_defaults_are_loopback_only_with_no_known_credentials():
+    text = (ROOT / "compose.yaml").read_text()
     data = yaml.safe_load(text)
     services = data["services"]
     assert "ports" not in services["postgres"]  # the database is not published
