@@ -29,7 +29,7 @@ services:
     ports:
       # Loopback by default. Set OBSERVER_BIND=0.0.0.0 only together with OBSERVATORY_API_KEY and
       # a firewall or TLS-terminating proxy in front.
-      - "${OBSERVER_BIND:-127.0.0.1}:8000:8000"
+      - "${OBSERVER_BIND:-127.0.0.1}:${OBSERVER_API_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,7 +40,7 @@ services:
       dockerfile: Containerfile
     container_name: llm-observatory-dashboard
     ports:
-      - "${OBSERVER_BIND:-127.0.0.1}:5173:5173"
+      - "${OBSERVER_BIND:-127.0.0.1}:${OBSERVER_DASHBOARD_PORT:-5173}:5173"
     depends_on:
       - backend
 

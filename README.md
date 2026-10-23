@@ -146,7 +146,9 @@ docker compose up -d
 | Dashboard  | http://127.0.0.1:5173     |
 | PostgreSQL | not published: only the backend reaches it on the compose network (see the comment in `docker-compose.yml` to publish it on loopback) |
 
-Both published ports bind to loopback. `docker compose down` keeps the data (the
+If 8000 or 5173 is already taken, pick other host ports in the same `.env`
+(`OBSERVER_API_PORT=18000`, `OBSERVER_DASHBOARD_PORT=15173`); the containers keep listening on
+8000 and 5173 inside the compose network. Both published ports bind to loopback. `docker compose down` keeps the data (the
 `postgres_data` volume); `docker compose down -v` deletes it.
 
 To check an installation end to end, run the six agent scenarios against it (Python SDK and
