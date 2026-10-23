@@ -5,7 +5,7 @@ in front of it.
 
 ## Defaults
 
-* **Network:** `docker-compose.yml` and `podman-compose.yml` publish the backend (8000) and the
+* **Network:** `compose.yaml` publishes the backend (8000) and the
   dashboard (5173) on `127.0.0.1` only (`OBSERVER_BIND`, default `127.0.0.1`). PostgreSQL is **not**
   published at all. The preview/dev dashboard servers listen on `127.0.0.1` too
   (`OBSERVER_DASHBOARD_HOST`).

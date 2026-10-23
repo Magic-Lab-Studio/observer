@@ -130,7 +130,7 @@ checked-in values are development examples, not production credentials.
 ### Docker Compose (recommended)
 
 Compose has no default database password and refuses to start without one. Set it first (keep
-it in a `.env` file next to `docker-compose.yml` so restarts reuse it and the data stays
+it in a `.env` file next to `compose.yaml` so restarts reuse it and the data stays
 readable):
 
 ```bash
@@ -144,7 +144,7 @@ docker compose up -d
 |------------|---------------------------|
 | Backend    | http://127.0.0.1:8000     |
 | Dashboard  | http://127.0.0.1:5173     |
-| PostgreSQL | not published: only the backend reaches it on the compose network (see the comment in `docker-compose.yml` to publish it on loopback) |
+| PostgreSQL | not published: only the backend reaches it on the compose network (see the comment in `compose.yaml` to publish it on loopback) |
 
 If 8000 or 5173 is already taken, pick other host ports in the same `.env`
 (`OBSERVER_API_PORT=18000`, `OBSERVER_DASHBOARD_PORT=15173`); the containers keep listening on
@@ -159,6 +159,8 @@ python scripts/agent_scenarios.py --endpoint http://127.0.0.1:8000 --slow-second
 ```
 
 ### Podman Compose
+
+The same `compose.yaml` works with `podman-compose`, which reads it by default:
 
 ```bash
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
@@ -213,8 +215,7 @@ observer/
 │   ├── python/               # magic-lab-observer PyPI package
 │   └── typescript/           # @magic-lab-studio/observer npm package
 ├── cli/                      # llm-observatory CLI
-├── docker-compose.yml
-├── podman-compose.yml
+├── compose.yaml
 └── .github/workflows/ci.yml
 ```
 
