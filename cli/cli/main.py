@@ -13,7 +13,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="0.1.1", prog_name="llm-observatory")
+@click.version_option(version="0.2.0", prog_name="llm-observatory")
 @click.option("--api-key", envvar="OBSERVATORY_API_KEY", default=None, help="API key for backend authentication")
 @click.pass_context
 def cli(ctx: click.Context, api_key: str | None) -> None:
@@ -374,7 +374,7 @@ def export(db: str, output_format: str, output: str | None, status: str | None, 
 
     export_data = {
         "format": "llm-observatory-export",
-        "version": "0.1.1",
+        "version": "0.2.0",
         "trace_count": len(traces_data),
         "traces": traces_data,
     }

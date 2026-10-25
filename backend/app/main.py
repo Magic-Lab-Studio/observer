@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title="LLM Observatory",
     description="Open-source observability and telemetry platform for LLMs",
-    version="0.1.1",
+    version="0.2.0",
     lifespan=lifespan,
     # With a key configured the schema (delete, import and enforce routes) stayed public (audit
     # 2026-10-17).
@@ -189,9 +189,9 @@ async def health_check() -> dict:
     if db_status != "ok":
         # 200 "healthy" with db=error hid a broken database from systemd and monitors (audit
         # 2026-10-17)
-        degraded = {"status": "degraded", "db": db_status, "version": "0.1.1"}
+        degraded = {"status": "degraded", "db": db_status, "version": "0.2.0"}
         return JSONResponse(status_code=503, content=degraded)
-    return {"status": "healthy", "db": db_status, "version": "0.1.1"}
+    return {"status": "healthy", "db": db_status, "version": "0.2.0"}
 
 
 @app.get("/")
@@ -199,7 +199,7 @@ async def root() -> dict[str, str]:
     """Root endpoint."""
     return {
         "name": "LLM Observatory",
-        "version": "0.1.1",
+        "version": "0.2.0",
         "docs": "/docs",
     }
 
