@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "magic-lab-observer-backend"
-version = "0.1.1"
+version = "0.2.0"
 description = "Backend API for LLM Observatory"
 readme = "README.md"
 license = "Apache-2.0"

@@ -450,7 +450,7 @@ a parent) once all of its spans have arrived; invalid input is a 422 with the re
 ## Python SDK
 
 ```bash
-pip install magic-lab-observer==0.1.1
+pip install magic-lab-observer==0.2.0
 ```
 
 For editable SDK development from a checkout:
@@ -523,7 +523,7 @@ tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
 ## CLI
 
 ```bash
-pip install magic-lab-observer-cli==0.1.1
+pip install magic-lab-observer-cli==0.2.0
 ```
 
 For editable CLI development from a checkout:
