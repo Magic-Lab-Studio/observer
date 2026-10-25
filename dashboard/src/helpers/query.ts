@@ -63,10 +63,11 @@ export interface QueryBody {
   filters: { field: string; op: string; value: string }[];
   hours: number;
   granularity?: string;
+  project_id?: string;
   row_limit: number;
 }
 
-export function buildRequest(s: ExploreState, opts: { hours: number; environment?: string }): QueryBody {
+export function buildRequest(s: ExploreState, opts: { hours: number; environment?: string; project?: string }): QueryBody {
   const body: QueryBody = {
     view: s.view,
     metrics: [{ measure: s.measure, aggregation: s.aggregation }],
@@ -76,6 +77,7 @@ export function buildRequest(s: ExploreState, opts: { hours: number; environment
     row_limit: 1000,
   };
   if (s.granularity) body.granularity = s.granularity;
+  if (opts.project) body.project_id = opts.project;
   return body;
 }
 

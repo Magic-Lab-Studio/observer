@@ -48,6 +48,10 @@ the default follows the browser language).
 
 ![Explore: p95 turn duration by provider over time](docs/assets/ui-explore.png)
 
+Explore, Alerts and Evaluations work for any project, not only Manitos: the **Project** selector in
+the header (next to the environment and time range) picks it. It defaults to the project with the most
+recent trace and remembers the choice (`?project=` in the URL and the browser's storage).
+
 - **Trace detail** — a hierarchical waterfall, a per-stage time bar and, for `llm.chain` spans, the
   provider-by-provider attempts of that turn.
 
@@ -242,6 +246,7 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost breakdown by model          |
 | `GET`    | `/v1/analytics/sessions`          | Unique sessions with stats       |
 | `GET`    | `/v1/analytics/manitos-quality`   | Integration quality and latency   |
+| `GET`    | `/v1/analytics/projects`          | Projects with traces, newest first |
 | `GET`    | `/v1/providers/`                  | LLM provider chain statistics     |
 | `POST`   | `/v1/providers/snapshot`          | Provider configuration snapshot   |
 | `GET`    | `/v1/alerts/metrics`              | Metrics an alert rule can watch   |
@@ -313,6 +318,12 @@ Scores of the previous rubric are replaced when the turn is re-scored. A backgro
 `OBSERVATORY_AUTO_EVAL_DAYS`, default 7) scores recent turns that have no evaluation yet and also
 backfills history. Evaluations are idempotent (the id derives from the trace and the rubric). The
 Evaluations page shows health by model, both axes, the grade and the per-criterion breakdown.
+
+Traces of any other project (Python SDK, OTLP) are scored by `generic_turn@1` from what every trace
+has: reliability (trace error; a failed span in a trace that recovered scores half), completeness (an
+LLM finish reason `length` or `max_tokens`) and latency, with the same steps, cap and pass rule. A
+trace is scored 30 s after it ends, so spans exported later are in. Their model comes from the LLM
+spans' `gen_ai.response.model` (or `gen_ai.request.model`), so Explore can group them by model.
 
 ### Capture privacy per project
 

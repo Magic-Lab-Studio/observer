@@ -267,12 +267,18 @@ async def list_evaluations(
     evaluator_type: str | None = Query(None),
     min_score: float | None = Query(None, ge=0, le=1),
     max_score: float | None = Query(None, ge=0, le=1),
+    project_id: str | None = Query(None, min_length=1, max_length=128),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     session: AsyncSession = DbSession,
 ) -> dict:
-    """List evaluations with optional filtering."""
+    """List evaluations with optional filtering (``project_id``: of that project's traces)."""
     base_query = select(Evaluation)
+
+    if project_id:
+        base_query = base_query.join(Trace, Trace.id == Evaluation.trace_id).where(
+            Trace.project_id == project_id
+        )
 
     if trace_id:
         base_query = base_query.where(Evaluation.trace_id == trace_id)
@@ -307,7 +313,7 @@ def summarize_scores(rows: list[tuple[Any, Any]]) -> dict[str, Any]:
     """Average score and pass rate overall, per model, per provider and per grade.
 
     ``rows`` are ``(score, result)`` of rule-based turn evaluations; ``result`` carries the
-    model, provider, grade and pass flag written by ``app.evaluators.manitos_turn``.
+    model, provider, grade and pass flag written by ``manitos_turn`` or ``generic_turn``.
     """
 
     def block(values: list[tuple[float, bool, float | None, bool]]) -> dict[str, Any]:

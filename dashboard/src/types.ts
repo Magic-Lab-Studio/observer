@@ -238,3 +238,4 @@ export interface RepeatedCalls {
   arguments_known: boolean; same_output: boolean; span_ids: string[]; window_ms: number | null; severity: 'warning';
 }
 export interface TraceDiagnostics { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }
+export interface ProjectInfo { project_id: string; trace_count: number; last_trace_at: string | null }

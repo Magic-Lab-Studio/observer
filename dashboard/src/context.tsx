@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from './api';
 import { useWebSocket } from './hooks/useWebSocket';
 import { parseApiDate } from './dates';
+import { PROJECT_KEY, PROJECT_PARAM, cleanProject, pickProject } from './helpers/projects';
 import { t } from './i18n';
-import type { Trace } from './types';
+import type { ProjectInfo, Trace } from './types';
 
 export const SAMPLE_LIMIT = 1000;
 
@@ -13,6 +15,10 @@ interface Ctx {
   env: string;
   setEnv: (e: string) => void;
   environments: string[];
+  /** Project of Explore, Alerts and Evaluations; "" until the project list has loaded. */
+  project: string;
+  setProject: (p: string) => void;
+  projects: ProjectInfo[];
   sample: Trace[];
   windowTraces: Trace[];
   windowStart: number;
@@ -35,9 +41,29 @@ export function useFilters(): Ctx {
   return v;
 }
 
+function readStoredProject(): string {
+  try {
+    return cleanProject(localStorage.getItem(PROJECT_KEY));
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredProject(p: string): void {
+  try {
+    localStorage.setItem(PROJECT_KEY, p);
+  } catch {
+    /* storage may be blocked: the choice then lives only in the URL */
+  }
+}
+
 export function FilterProvider({ children }: { children: ReactNode }) {
   const [hours, setHours] = useState(24);
   const [env, setEnv] = useState('');
+  const [params, setParams] = useSearchParams();
+  const urlProject = cleanProject(params.get(PROJECT_PARAM));
+  const [storedProject, setStoredProject] = useState(readStoredProject);
+  const [projects, setProjects] = useState<ProjectInfo[] | null>(null);
   const [sample, setSample] = useState<Trace[]>([]);
   const [totalTraces, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -48,7 +74,12 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   const known = useRef<Set<string>>(new Set());
   const timer = useRef<ReturnType<typeof setTimeout>>();
 
+  const loadProjects = useCallback(() => {
+    api.listProjects().then(setProjects).catch(() => setProjects((prev) => prev ?? []));
+  }, []);
+
   const load = useCallback(async () => {
+    loadProjects();
     try {
       const data = await api.listTraces({ limit: SAMPLE_LIMIT });
       const fresh = new Set<string>();
@@ -64,9 +95,30 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadProjects]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // A project named in the URL (a shared link) becomes the remembered choice too.
+  useEffect(() => {
+    if (urlProject && urlProject !== storedProject) {
+      writeStoredProject(urlProject);
+      setStoredProject(urlProject);
+    }
+  }, [urlProject, storedProject]);
+
+  const project = projects === null ? '' : pickProject(projects, urlProject, storedProject);
+  const setProject = useCallback((p: string) => {
+    const next = cleanProject(p);
+    if (!next) return;
+    writeStoredProject(next);
+    setStoredProject(next);
+    setParams((prev) => {
+      const q = new URLSearchParams(prev);
+      q.set(PROJECT_PARAM, next);
+      return q;
+    }, { replace: true });
+  }, [setParams]);
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 30_000);
     return () => clearInterval(id);
@@ -95,13 +147,13 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     const windowStart = truncated ? Math.max(requested, oldest) : requested;
     const windowTraces = scoped.filter((t) => parseApiDate(t.start_time).getTime() >= windowStart);
     return {
-      hours, setHours, env, setEnv, environments, sample: scoped, windowTraces, windowStart, windowEnd: now,
+      hours, setHours, env, setEnv, environments, project, setProject, projects: projects ?? [], sample: scoped, windowTraces, windowStart, windowEnd: now,
       sampleTruncated: truncated && oldest > requested, totalTraces, loading, error,
       connected: isConnected, lastUpdated, newIds, refresh: () => void load(),
     };
     // tick re-evaluates "now" so the window slides
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hours, env, sample, environments, totalTraces, loading, error, isConnected, lastUpdated, newIds, load, tick]);
+  }, [hours, env, project, setProject, projects, sample, environments, totalTraces, loading, error, isConnected, lastUpdated, newIds, load, tick]);
 
   return <C.Provider value={value}>{children}</C.Provider>;
 }

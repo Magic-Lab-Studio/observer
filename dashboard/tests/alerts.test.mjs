@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  describeRule, formatMetricValue, fromInputValue, notificationBody, severityRank, toInputValue, windowLabel,
+  describeRule, formatMetricValue, fromInputValue, notificationBody, rubricLabel, severityRank, toInputValue, windowLabel,
 } from '../src/helpers/alerts.ts';
+import { setLang } from '../src/i18n.ts';
 
 test('thresholds are typed in percent / seconds and stored as ratio / ms', () => {
   assert.equal(fromInputValue('ratio', 25), 0.25);
@@ -44,4 +45,13 @@ test('severity orders critical first and notifications show value against thresh
       { unit: 'ratio' }),
     '31.0 % > 25.0 %',
   );
+});
+
+test('rubrics read as names in both languages', () => {
+  assert.equal(rubricLabel('generic_turn@1'), 'Salud operativa genérica (v1)');
+  assert.equal(rubricLabel('manitos_turn@2'), 'Turno de Manitos (v2)');
+  assert.equal(rubricLabel('custom'), 'custom');
+  setLang('en');
+  assert.equal(rubricLabel('generic_turn@1'), 'Generic operational health (v1)');
+  setLang('es');
 });

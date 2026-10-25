@@ -8,6 +8,7 @@ import { LANGS } from './i18n';
 import { SEVERITY_LABEL, severityRank } from './helpers/alerts';
 import { Icon, Segmented } from './components/ui';
 import { clockTime } from './helpers/format';
+import { projectOptions } from './helpers/projects';
 import { t } from './i18n';
 
 const Overview = lazy(() => import('./pages/Overview'));
@@ -38,6 +39,9 @@ const RANGES = [
   { label: '7 d', value: 168 },
   { label: '30 d', value: 720 },
 ];
+
+// Pages that read one project (the others keep their own scope).
+const PROJECT_PAGES = new Set(['/explore', '/alerts', '/evaluations']);
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
@@ -78,7 +82,7 @@ function LiveBadge() {
 }
 
 function Header({ onMenu }: { onMenu: () => void }) {
-  const { hours, setHours, env, setEnv, environments, refresh, loading } = useFilters();
+  const { hours, setHours, env, setEnv, environments, project, setProject, projects, refresh, loading } = useFilters();
   const { lang, setLang } = useLocale();
   const { pathname } = useLocation();
   const showFilters = pathname === '/' || pathname === '/providers' || pathname === '/evaluations' || pathname === '/explore';
@@ -89,6 +93,12 @@ function Header({ onMenu }: { onMenu: () => void }) {
         <Icon name="menu" className="size-5" />
       </button>
       <div className="flex-1 max-sm:hidden" />
+      {PROJECT_PAGES.has(pathname) && project && (
+        <select aria-label={t('Proyecto')} title={t('Proyecto')} value={project} onChange={(e) => setProject(e.target.value)}
+          className="max-w-48 rounded-lg border border-line bg-panel px-2.5 py-1.5 font-mono text-xs text-ink">
+          {projectOptions(projects, project).map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+      )}
       {showFilters && (
         <>
           {environments.length > 0 && (

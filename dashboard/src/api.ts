@@ -29,6 +29,7 @@ import type {
   CaptureMode,
   PrivacyOverview,
   IngestHealth,
+  ProjectInfo,
 } from './types';
 
 import { ApiError, classifyStatus, detailFromBody } from './helpers/errors';
@@ -98,6 +99,7 @@ export const api = {
     evaluator_type?: string;
     min_score?: number;
     max_score?: number;
+    project_id?: string;
   } = {}): Promise<EvaluationListResponse> {
     const qs = new URLSearchParams();
     if (params.limit) qs.set('limit', String(params.limit));
@@ -106,6 +108,7 @@ export const api = {
     if (params.evaluator_type) qs.set('evaluator_type', params.evaluator_type);
     if (params.min_score !== undefined) qs.set('min_score', String(params.min_score));
     if (params.max_score !== undefined) qs.set('max_score', String(params.max_score));
+    if (params.project_id) qs.set('project_id', params.project_id);
     const query = qs.toString();
     return request(`/v1/evaluations/${query ? `?${query}` : ''}`);
   },
@@ -140,8 +143,15 @@ export const api = {
     if (environment) q.set('environment', environment);
     return request(`/v1/providers/models?${q}`);
   },
-  async getEvaluationsByModel(hours = 168): Promise<EvaluationsByModel> {
-    return request(`/v1/evaluations/by-model?hours=${hours}`);
+  async getEvaluationsByModel(hours = 168, projectId?: string): Promise<EvaluationsByModel> {
+    const qs = new URLSearchParams({ hours: String(hours) });
+    if (projectId) qs.set('project_id', projectId);
+    return request(`/v1/evaluations/by-model?${qs.toString()}`);
+  },
+
+  // Projects with traces, the most recent first (the header's project selector)
+  async listProjects(): Promise<ProjectInfo[]> {
+    return request('/v1/analytics/projects');
   },
 
   async getQuerySchema(): Promise<QuerySchema> {
@@ -206,8 +216,8 @@ export const api = {
   async getAlertMetrics(): Promise<AlertMetric[]> {
     return request('/v1/alerts/metrics');
   },
-  async listAlertRules(): Promise<AlertRule[]> {
-    return request('/v1/alerts/rules');
+  async listAlertRules(projectId?: string): Promise<AlertRule[]> {
+    return request(`/v1/alerts/rules${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`);
   },
   async createAlertRule(rule: Partial<AlertRule>): Promise<AlertRule> {
     return request('/v1/alerts/rules', { method: 'POST', body: JSON.stringify(rule) });
@@ -218,9 +228,10 @@ export const api = {
   async deleteAlertRule(id: string): Promise<void> {
     await request(`/v1/alerts/rules/${id}`, { method: 'DELETE' });
   },
-  async listAlertEvents(state?: 'open' | 'resolved', limit = 100): Promise<{ events: AlertEvent[]; open_count: number }> {
+  async listAlertEvents(state?: 'open' | 'resolved', limit = 100, projectId?: string): Promise<{ events: AlertEvent[]; open_count: number }> {
     const qs = new URLSearchParams({ limit: String(limit) });
     if (state) qs.set('state', state);
+    if (projectId) qs.set('project_id', projectId);
     return request(`/v1/alerts/events?${qs.toString()}`);
   },
   async ackAlertEvent(id: string): Promise<AlertEvent> {

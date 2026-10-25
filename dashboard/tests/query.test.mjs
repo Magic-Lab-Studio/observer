@@ -26,6 +26,8 @@ test('the request carries the range, the environment filter and only what was ch
   assert.equal(body.granularity, undefined);
   assert.equal(buildRequest(DEFAULT_EXPLORE, { hours: 6 }).granularity, 'auto');
   assert.equal(buildRequest(DEFAULT_EXPLORE, { hours: 6 }).filters.length, 0);
+  assert.equal(buildRequest(DEFAULT_EXPLORE, { hours: 6 }).project_id, undefined);
+  assert.equal(buildRequest(DEFAULT_EXPLORE, { hours: 6, project: 'my-agent' }).project_id, 'my-agent');
 });
 
 test('values read like a person would say them', () => {

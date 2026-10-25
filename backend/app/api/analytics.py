@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import DbSession
-from app.metrics_core import percentile
+from app.metrics_core import aware, percentile
 from app.metrics_query import QueryError, QueryRequest, run_query
 from app.metrics_query import schema as query_schema
 from app.models.evaluation import Evaluation
@@ -446,6 +446,32 @@ async def list_sessions(
             "last_activity": row.last_activity.isoformat() if row.last_activity else None,
         }
         for row in rows
+    ]
+
+
+@router.get("/projects")
+async def list_projects(
+    limit: int = Query(100, ge=1, le=500), session: AsyncSession = DbSession
+) -> list[dict]:
+    """Projects that have traces, the one with the most recent trace first (the dashboard's
+    project selector defaults to it)."""
+    last = func.max(Trace.created_at)
+    rows = (
+        await session.execute(
+            select(Trace.project_id, func.count(Trace.id), last)
+            .where(Trace.project_id.is_not(None))
+            .group_by(Trace.project_id)
+            .order_by(last.desc(), Trace.project_id)
+            .limit(limit)
+        )
+    ).all()
+    return [
+        {
+            "project_id": str(project_id),
+            "trace_count": int(count),
+            "last_trace_at": aware(last_at).isoformat() if last_at else None,
+        }
+        for project_id, count, last_at in rows
     ]
 
 
