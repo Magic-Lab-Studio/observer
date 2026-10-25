@@ -12,6 +12,7 @@ import {
   pivotSeries, searchToState, stateToSearch,
 } from '../helpers/query';
 import type { ExploreState, SavedView } from '../helpers/query';
+import { PROJECT_PARAM } from '../helpers/projects';
 import { bucketLabel } from '../helpers/stats';
 import { fmtInt } from '../helpers/format';
 import { parseApiDate } from '../dates';
@@ -43,9 +44,16 @@ function writeSaved(views: SavedView[]): void {
 }
 
 function Explore() {
-  const { hours, env } = useFilters();
-  const [params, setParams] = useSearchParams();
+  const { hours, env, project } = useFilters();
+  const [params, setRawParams] = useSearchParams();
   const state = useMemo(() => searchToState(params.toString()), [params]);
+  // The query owns the URL except the global project selector's parameter, which is kept.
+  const setParams = useCallback((search: string, opts: { replace: boolean }) => {
+    const next = new URLSearchParams(search);
+    const kept = params.get(PROJECT_PARAM);
+    if (kept) next.set(PROJECT_PARAM, kept);
+    setRawParams(next, opts);
+  }, [params, setRawParams]);
   const [schema, setSchema] = useState<QuerySchema | null>(null);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,15 +81,15 @@ function Explore() {
   }, [state, schema, setParams]);
 
   useEffect(() => {
-    if (!schema) return;
+    if (!schema || !project) return;
     let live = true;
     setLoading(true);
-    api.queryMetrics(buildRequest(state, { hours, environment: env || undefined }))
+    api.queryMetrics(buildRequest(state, { hours, environment: env || undefined, project }))
       .then((r) => { if (live) { setResult(r); setError(null); } })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : t('Error desconocido')); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [schema, state, hours, env]);
+  }, [schema, state, hours, env, project]);
 
   const key = metricKey(state.measure, state.aggregation);
   const measureLabel = state.measure === 'count'

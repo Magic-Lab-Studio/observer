@@ -5,6 +5,9 @@ A Manitos turn is one trace. Its quality signals live in span attributes: the li
 tool-error flags, ``llm.chain`` carries the provider attempts, ``model_routing`` the intent and
 the local-fallback flag. Everything is aggregated in Python over a bounded window, like
 ``/v1/analytics/manitos-quality`` does, so it behaves the same on SQLite and PostgreSQL.
+
+Any other trace (the Python SDK, OTLP) is a turn too: its duration and status come from the trace,
+the model from its LLM spans' GenAI attributes and truncation from their finish reasons.
 """
 
 from __future__ import annotations
@@ -69,6 +72,11 @@ class TurnSignals:
     seen_spans: set[str] = field(default_factory=set)
     environment: str = ""
     session_id: str = ""
+    provider: str = ""  # gen_ai.system of the LLM span the model was taken from
+    span_error: bool = False
+    # (start, model, provider) of the latest LLM span; used only when no Manitos span names a model
+    llm_pick: tuple[datetime, str, str] | None = field(default=None, repr=False, compare=False)
+    llm_truncated: bool = False
 
 
 def aware(value: datetime | None) -> datetime | None:
@@ -203,16 +211,20 @@ async def _signals_from_rows(session: AsyncSession, rows: list) -> list[TurnSign
     ids = list(turns)
     for i in range(0, len(ids), _CHUNK):
         span_rows = await session.execute(
-            select(Span.trace_id, Span.name, Span.attributes).where(
+            select(Span.trace_id, Span.name, Span.attributes, Span.status, Span.start_time).where(
                 Span.trace_id.in_(ids[i : i + _CHUNK])
             )
         )
-        for trace_id, name, attrs in span_rows.all():
+        for trace_id, name, attrs, status, start in span_rows.all():
             signals = turns.get(str(trace_id))
             if signals is None:
                 continue
             signals.seen_spans.add(str(name))
-            _apply_span(signals, str(name), attrs if isinstance(attrs, dict) else {})
+            attrs = attrs if isinstance(attrs, dict) else {}
+            _apply_span(signals, str(name), attrs)
+            _apply_genai_span(signals, attrs, str(status or ""), aware(start))
+    for signals in turns.values():
+        _finish(signals)
     return list(turns.values())
 
 
@@ -241,6 +253,41 @@ def _apply_span(signals: TurnSignals, name: str, attrs: dict[str, Any]) -> None:
     language = str(attrs.get("language") or "").strip()[:160]
     if language and not signals.language:
         signals.language = language
+
+
+_TRUNCATED_FINISH = {"length", "max_tokens"}
+_EPOCH = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _apply_genai_span(
+    signals: TurnSignals, attrs: dict[str, Any], status: str, start: datetime | None
+) -> None:
+    """Signals every instrumented trace has: span errors and the GenAI attributes of LLM spans."""
+    if status == "error":
+        signals.span_error = True
+    reasons = attrs.get("gen_ai.response.finish_reasons")
+    if isinstance(reasons, str):
+        reasons = [reasons]
+    if isinstance(reasons, list) and any(str(r).lower() in _TRUNCATED_FINISH for r in reasons):
+        signals.llm_truncated = True
+    model = str(
+        attrs.get("gen_ai.response.model") or attrs.get("gen_ai.request.model") or ""
+    ).strip()[:160]
+    if not model:
+        return
+    provider = str(attrs.get("gen_ai.system") or attrs.get("gen_ai.provider.name") or "")
+    when = start or _EPOCH
+    if signals.llm_pick is None or when >= signals.llm_pick[0]:
+        signals.llm_pick = (when, model, provider.strip().lower()[:80])
+
+
+def _finish(signals: TurnSignals) -> None:
+    # Manitos spans keep priority: the GenAI model fills in only when none of them named one, and
+    # truncation is the lifecycle span's own flag whenever that span exists.
+    if not signals.model and signals.llm_pick is not None:
+        _, signals.model, signals.provider = signals.llm_pick
+    if "manitos.turn.lifecycle" not in signals.seen_spans and signals.llm_truncated:
+        signals.truncated = True
 
 
 def compute_metric(

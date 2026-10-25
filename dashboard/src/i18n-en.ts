@@ -485,4 +485,11 @@ export const EN: Record<string, string> = {
   'siempre con la misma respuesta': 'always with the same answer',
   '{n} con error': '{n} with errors',
   'sin argumentos registrados: se agrupan por nombre': 'no arguments recorded: grouped by name',
+  // Global project selector (Explore, Alerts, Evaluations)
+  'Vigila el proyecto «{p}»': 'Watches project "{p}"',
+  'Del proyecto «{p}»': 'Of project "{p}"',
+  'proyecto «{p}»': 'project "{p}"',
+  Rúbrica: 'Rubric',
+  'Turno de Manitos': 'Manitos turn',
+  'Salud operativa genérica': 'Generic operational health',
 };

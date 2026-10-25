@@ -61,9 +61,14 @@ async def list_metrics() -> list[dict[str, Any]]:
 
 
 @router.get("/rules")
-async def list_rules(session: AsyncSession = DbSession) -> list[dict[str, Any]]:
-    rules = (await session.execute(select(AlertRule).order_by(AlertRule.created_at))).scalars()
-    return [rule_to_dict(r) for r in rules]
+async def list_rules(
+    project_id: str | None = Query(None, min_length=1, max_length=128),
+    session: AsyncSession = DbSession,
+) -> list[dict[str, Any]]:
+    query = select(AlertRule).order_by(AlertRule.created_at)
+    if project_id:
+        query = query.where(AlertRule.project_id == project_id)
+    return [rule_to_dict(r) for r in (await session.execute(query)).scalars()]
 
 
 @router.post("/rules")
@@ -103,15 +108,19 @@ async def delete_rule(rule_id: str, session: AsyncSession = DbSession) -> dict[s
 async def list_events(
     state: Literal["open", "resolved"] | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
+    project_id: str | None = Query(None, min_length=1, max_length=128),
     session: AsyncSession = DbSession,
 ) -> dict[str, Any]:
     query = select(AlertEvent).order_by(AlertEvent.fired_at.desc()).limit(limit)
+    count = select(AlertEvent.id).where(AlertEvent.state == "open")
     if state:
         query = query.where(AlertEvent.state == state)
+    if project_id:
+        rules = select(AlertRule.id).where(AlertRule.project_id == project_id)
+        query = query.where(AlertEvent.rule_id.in_(rules))
+        count = count.where(AlertEvent.rule_id.in_(rules))
     events = (await session.execute(query)).scalars()
-    open_count = len(
-        (await session.execute(select(AlertEvent.id).where(AlertEvent.state == "open"))).all()
-    )
+    open_count = len((await session.execute(count)).all())
     return {"events": [event_to_dict(e) for e in events], "open_count": open_count}
 
 

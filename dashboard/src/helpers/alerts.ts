@@ -15,6 +15,19 @@ export const CRITERION_LABEL: Record<string, string> = {
   ttft: 'Primer token',
 };
 
+/** Labels (Spanish keys) of the rule-based rubrics, by id without the "@version" suffix. */
+export const RUBRIC_LABEL: Record<string, string> = {
+  manitos_turn: 'Turno de Manitos',
+  generic_turn: 'Salud operativa genérica',
+};
+
+/** "generic_turn@1" -> "Salud operativa genérica (v1)"; an unknown rubric keeps its id. */
+export function rubricLabel(rubric: string): string {
+  const [id, version] = rubric.split('@');
+  const label = RUBRIC_LABEL[id] ? t(RUBRIC_LABEL[id]) : id;
+  return version ? `${label} (v${version})` : label;
+}
+
 export type Severity = 'info' | 'warning' | 'critical';
 
 export const SEVERITY_LABEL: Record<Severity, string> = {

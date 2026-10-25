@@ -204,7 +204,9 @@ def turn_records(turns: list[TurnSignals]) -> list[dict[str, Any]]:
                 "time": s.created_at,
                 "environment": s.environment,
                 "model": answered,
-                "provider": _provider_of(answered),
+                "provider": s.provider
+                if s.provider and not s.answered_by
+                else _provider_of(answered),
                 "language": s.language,
                 "intent": s.intent,
                 "status": s.status,

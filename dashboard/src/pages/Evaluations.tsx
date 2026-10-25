@@ -5,7 +5,7 @@ import { api } from '../api';
 import type { Evaluation, EvaluationsByModel, TurnCriterion } from '../types';
 import { useFilters } from '../context';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { CRITERION_LABEL } from '../helpers/alerts';
+import { CRITERION_LABEL, rubricLabel } from '../helpers/alerts';
 import { Card, Chip, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, Segmented, Skeleton } from '../components/ui';
 import { fmtInt, fmtPct, timeAgo } from '../helpers/format';
 import { t } from '../i18n';
@@ -30,12 +30,12 @@ function criteriaText(e: Evaluation): string {
   return e.criteria ? Object.keys(e.criteria).join(', ') : '–';
 }
 
-interface TurnAxes { grade?: string; passed?: boolean; health?: { score: number; grade: string }; correctnessKnown: boolean; items: TurnCriterion[] }
+interface TurnAxes { rubric?: string; grade?: string; passed?: boolean; health?: { score: number; grade: string }; correctnessKnown: boolean; items: TurnCriterion[] }
 
 function turnCriteria(e: Evaluation): TurnAxes | null {
-  const r = e.result as { criteria?: unknown; grade?: string; passed?: boolean; health?: { score: number; grade: string }; correctness?: { status?: string } } | null;
+  const r = e.result as { rubric?: string; criteria?: unknown; grade?: string; passed?: boolean; health?: { score: number; grade: string }; correctness?: { status?: string } } | null;
   if (!r || !Array.isArray(r.criteria) || r.criteria.length === 0 || typeof (r.criteria[0] as TurnCriterion)?.weight !== 'number') return null;
-  return { grade: r.grade, passed: r.passed, health: r.health, correctnessKnown: !!r.correctness && r.correctness.status !== 'unknown', items: r.criteria as TurnCriterion[] };
+  return { rubric: r.rubric, grade: r.grade, passed: r.passed, health: r.health, correctnessKnown: !!r.correctness && r.correctness.status !== 'unknown', items: r.criteria as TurnCriterion[] };
 }
 
 function Evaluations() {
@@ -46,13 +46,14 @@ function Evaluations() {
   const [total, setTotal] = useState(0);
   const [type, setType] = useState('');
   const [selected, setSelected] = useState<Evaluation | null>(null);
-  const { hours } = useFilters();
+  const { hours, project } = useFilters();
   const [byModel, setByModel] = useState<EvaluationsByModel | null>(null);
 
   const fetchEvaluations = useCallback(async (offset: number) => {
+    if (!project) return;
     setLoading(true);
     try {
-      const data = await api.listEvaluations({ limit: LIMIT, offset, evaluator_type: type || undefined });
+      const data = await api.listEvaluations({ limit: LIMIT, offset, evaluator_type: type || undefined, project_id: project });
       setEvaluations(data.evaluations);
       setTotal(data.total);
       setError(null);
@@ -61,11 +62,12 @@ function Evaluations() {
     } finally {
       setLoading(false);
     }
-  }, [type]);
+  }, [type, project]);
 
   const loadByModel = useCallback(() => {
-    api.getEvaluationsByModel(hours).then(setByModel).catch(() => setByModel(null));
-  }, [hours]);
+    if (!project) return;
+    api.getEvaluationsByModel(hours, project).then(setByModel).catch(() => setByModel(null));
+  }, [hours, project]);
 
   useEffect(() => { loadByModel(); }, [loadByModel]);
 
@@ -100,7 +102,7 @@ function Evaluations() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">{t("Evaluaciones")}</h1>
-          <p className="text-xs text-faint">{fmtInt(total)}  {t("en total")}</p>
+          <p className="text-xs text-faint">{fmtInt(total)}  {t("en total")}{project && ` · ${t('proyecto «{p}»', { p: project })}`}</p>
         </div>
         <Segmented label={t("Tipo de evaluador")} options={TYPES.map((o) => ({ ...o, label: t(o.label) }))} value={type} onChange={setType} />
       </div>
@@ -215,7 +217,10 @@ function Evaluations() {
                 <p className="mb-3 text-xs text-dim">{t("Puntaje:")} <span className="font-medium text-ink">{selected.score != null ? selected.score.toFixed(4) : 'N/D'}</span></p>
                 {turnCriteria(selected) && (
                   <div className="mb-4">
-                    <div className="mb-2 flex items-center gap-2 text-xs">
+                    {turnCriteria(selected)?.rubric && (
+                      <p className="mb-2 text-xs text-dim">{t('Rúbrica')}: <span className="text-ink">{rubricLabel(turnCriteria(selected)?.rubric ?? '')}</span></p>
+                    )}
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
                       <Chip tone="accent">{t('Nota')} {turnCriteria(selected)?.grade}</Chip>
                       {turnCriteria(selected)?.health && <Chip tone="accent">{t('Salud operativa')} {turnCriteria(selected)?.health?.grade} · {turnCriteria(selected)?.health?.score.toFixed(2)}</Chip>}
                       <Chip tone="warn">{t('Corrección')}: {turnCriteria(selected)?.correctnessKnown ? t('medida') : t('desconocida')}</Chip>

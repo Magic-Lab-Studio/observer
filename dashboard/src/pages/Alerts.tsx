@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { useAlerts } from '../alerts-context';
+import { useFilters } from '../context';
 import type { AlertEvent, AlertMetric, AlertRule } from '../types';
 import { Card, Chip, EmptyState, ErrorState, Skeleton } from '../components/ui';
 import {
@@ -29,6 +30,7 @@ const emptyDraft = (metric: AlertMetric | undefined): Draft => ({
 
 function Alerts() {
   const { metrics, refresh: refreshOpen, notifySupported, notifyEnabled, setNotifyEnabled } = useAlerts();
+  const { project } = useFilters();
   const [rules, setRules] = useState<AlertRule[] | null>(null);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,11 +40,12 @@ function Alerts() {
   const byMetric = useMemo(() => new Map(metrics.map((m) => [m.id, m])), [metrics]);
 
   const load = useCallback(() => {
-    Promise.all([api.listAlertRules(), api.listAlertEvents(undefined, 100)])
+    if (!project) return;
+    Promise.all([api.listAlertRules(project), api.listAlertEvents(undefined, 100, project)])
       .then(([r, e]) => { setRules(r); setEvents(e.events); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : t('Error desconocido')));
     refreshOpen();
-  }, [refreshOpen]);
+  }, [refreshOpen, project]);
 
   useEffect(() => {
     load();
@@ -74,7 +77,7 @@ function Alerts() {
     setBusy(true);
     try {
       if (draft.id) await api.updateAlertRule(draft.id, body);
-      else await api.createAlertRule({ ...body, metric: draft.metric });
+      else await api.createAlertRule({ ...body, metric: draft.metric, project_id: project });
       setDraft(null);
       setNote(null);
       load();
@@ -163,7 +166,8 @@ function Alerts() {
       </Card>
 
       {draft && (
-        <Card title={draft.id ? t('Editar regla') : t('Nueva regla')}>
+        <Card title={draft.id ? t('Editar regla') : t('Nueva regla')}
+          subtitle={t('Vigila el proyecto «{p}»', { p: draft.id ? rules.find((r) => r.id === draft.id)?.project_id ?? project : project })}>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="text-xs text-dim sm:col-span-2">{t("Nombre")}
               <input className={`${inputCls} mt-1 w-full`} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
@@ -215,7 +219,7 @@ function Alerts() {
         </Card>
       )}
 
-      <Card title={t("Reglas")} bodyClass="p-0 pt-2">
+      <Card title={t("Reglas")} subtitle={t('Del proyecto «{p}»', { p: project })} bodyClass="p-0 pt-2">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-xs">
             <thead>
