@@ -157,4 +157,4 @@ jobs:
       - name: Publish with npm trusted publishing
         run: |
           npm install --global npm@12.0.2
-          npm publish dist/*.tgz --access public --provenance
+          npm publish ./dist/*.tgz --access public --provenance
