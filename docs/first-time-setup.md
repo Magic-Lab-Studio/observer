@@ -21,6 +21,7 @@ deployment, pin the commit or the next release that contains this guide:
 git clone https://github.com/Magic-Lab-Studio/observer.git
 cd observer
 git checkout main
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
 docker compose up -d
 ```
 
@@ -30,9 +31,10 @@ Wait for the backend and verify it:
 curl http://localhost:8000/health
 ```
 
-The default Compose configuration is intended for local evaluation. It starts
-the API on port `8000`, the dashboard container on port `5173`, and PostgreSQL
-on port `5432`.
+The default Compose configuration is intended for local evaluation. Compose
+refuses to start without `POSTGRES_PASSWORD` (keep it in `.env` so restarts reuse
+it). It publishes the API on `127.0.0.1:8000` and the dashboard on
+`127.0.0.1:5173`; PostgreSQL is not published.
 
 For a lightweight API-only installation, use SQLite:
 
@@ -71,7 +73,7 @@ and restart it after successful validation.
 ## 2. Send the first trace
 
 The generic ingestion endpoint accepts batches of spans and groups them by
-`trace_id`. Timestamps are Unix seconds.
+`trace_id`. Timestamps are Unix epoch seconds or ISO 8601 with a time zone.
 
 ```bash
 curl -X POST http://localhost:8000/v1/traces/batch \

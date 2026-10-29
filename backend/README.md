@@ -5,7 +5,7 @@ FastAPI backend for LLM Observatory - Open-source LLM observability.
 ## Installation
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,sqlite]"
 ```
 
 ## Running
@@ -26,6 +26,8 @@ uvicorn app.main:app --reload
 Once running, visit:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+
+Both are disabled when `OBSERVATORY_API_KEY` is set.
 
 ## License
 

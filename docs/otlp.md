@@ -4,7 +4,7 @@ Observer accepts traces from any stock OpenTelemetry exporter, so an app can be 
 without the Observer SDK.
 
 ```bash
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:8100/v1/otlp   # the exporter appends /v1/traces
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:8000/v1/otlp   # the exporter appends /v1/traces
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <key>"      # only when OBSERVATORY_API_KEY is set
 ```
 
@@ -26,7 +26,7 @@ deflate-compressed, and answers with an `ExportTraceServiceResponse` in the same
 | `parentSpanId` | parent span (linked also when the parent arrived in an earlier batch) |
 | span `name` | span name; for tool spans the tool's name (`gen_ai.tool.name`) |
 | `startTimeUnixNano`, `endTimeUnixNano` | start and end time |
-| status `ERROR` / `OK` / unset | `error` / `ok` / `unset`; a trace is `error` if any span is |
+| status `ERROR` / `OK` / unset | `error` / `ok` / `unset`; the root span's status decides the trace, and a child error the root survived stays a span error |
 | root span (no parent) | names the trace; the trace spans the earliest start to the latest end |
 | `gen_ai.usage.input_tokens` (or `prompt_tokens`) / `output_tokens` (or `completion_tokens`) | `tokens_input` / `tokens_output` |
 | `gen_ai.response.model` / `gen_ai.request.model` | attribute `model` |
@@ -56,13 +56,12 @@ what is stored for it; without one, `OBSERVATORY_OTLP_CAPTURE` (`metadata` by de
 
 The filter looks at attribute **names**, not values, so a name that does not look like content can
 still carry content. Treat `metadata` as a safety net, not a guarantee, and keep prompts out of
-span attributes you do not want stored. Per-project capture modes are planned (roadmap step 7).
+span attributes you do not want stored. Per-project capture modes override this default (see [privacy.md](privacy.md)).
 
 ## Limits and behaviour
 
 * Body limit 16 MB after decompression; `RATE_LIMIT_OTLP` (default `600/minute`) rate-limits it.
 * Up to 500 spans per trace per request are processed in chunks; a trace owned by another project
   is rejected and counted in `rejectedSpans`; a rejected trace leaves no partial data behind.
-* A child that arrives before its parent is stored unlinked; it is linked only if its parent had
-  already been stored when the child arrived (an earlier parent is found, a later one is not
-  re-linked).
+* A child that arrives before its parent keeps its parent reference and is shown under it once the
+  parent arrives; a parent that never arrives leaves the child shown as an orphan.

@@ -17,9 +17,9 @@ Context for coding agents (including Google Jules) working in this repository.
 ## Layout
 
 - `backend/` — FastAPI backend, package `magic-lab-observer-backend`.
-  - `app/api/` — route handlers (`traces`, `evaluations`, `analytics`, `manitos_ingest`, `providers`, `alerts`).
+  - `app/api/` — route handlers (`traces`, `evaluations`, `analytics`, `manitos_ingest`, `providers`, `alerts`, `datasets`, `dataset_runs`, `ingest_health`, `otlp`, `privacy`).
   - `app/metrics_core.py` — turn signals and statistics shared by alerts; `app/alerts.py` — alert evaluator loop; `app/auto_eval.py` + `app/evaluators/manitos_turn.py` — automatic rule-based turn evaluations; `app/metrics_query.py` — the allow-listed metrics query behind `/v1/analytics/query`.
-  - `app/evaluators/` — rubric/LMM-as-Judge engine.
+  - `app/evaluators/` — rubric/LLM-as-Judge engine.
   - `app/models/` — SQLAlchemy models.
   - `app/ops/` — e.g. `manitos_passive_gate.py`.
   - `alembic/` — database migrations (SQLite + PostgreSQL).
@@ -27,8 +27,8 @@ Context for coding agents (including Google Jules) working in this repository.
 - `sdk/typescript/` — TypeScript SDK, package `@magic-lab-studio/observer`.
 - `cli/` — CLI package `magic-lab-observer-cli`, binary `llm-observatory`.
 - `dashboard/` — React + Vite dashboard.
-- `docs/` — `first-time-setup.md`, `manitos-integration.md`, `releasing.md`.
-- `.github/workflows/` — `ci.yml`, `dependency-audit.yml`, `publish.yml`.
+- `docs/` — `first-time-setup.md`, `manitos-integration.md`, `otlp.md`, `mcp.md`, `privacy.md`, `security.md`, `releasing.md`, `roadmap.md`, `engineering/` (findings matrix, stabilization plan, migration notes).
+- `.github/workflows/` — `ci.yml`, `dependency-audit.yml`, `publish.yml`, `quickstart-smoke.yml`.
 - `.observer-state/` — runtime logs/state, not documentation. Do not edit.
 
 ## Canonical commands
