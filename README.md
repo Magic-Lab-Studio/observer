@@ -23,12 +23,16 @@ environment filter, live updates, and charts that use the whole screen. The inte
 English and Spanish: pick the language with the ES/EN switch in the header (the choice is remembered;
 the default follows the browser language).
 
-- **Overview** — turns, error rate, p50/p95 latency, time to first token, fallback rate and cost
-  (always shown, even at $0), an activity/latency chart, latency histogram, per-stage time and model
-  share. The series and latency KPIs come from the metrics query, so 7 d and 30 d ranges use every turn.
-- **Providers** — your LLM fallback chain in the order it is tried, with per-provider success rate,
-  429/timeout/error counts, p50/p95 latency, how often each one answered, fallback depth, common routes
-  and the average turn score. It flags providers that are configured but never reached.
+- **Overview** — traces, trace and span error rates, p50/p95 trace duration, LLM and tool span counts
+  and cost ("–" when no span reported one) for any instrumented application, an activity/latency
+  chart, latency histogram and model share. Agent-runtime views (turns, time to first token, fallback
+  rate, per-stage time) appear only when that telemetry exists. The KPIs come from server aggregates;
+  the histogram and the recent/slowest lists still use a sample of the latest 1,000 traces.
+- **Providers** — a per-model table (calls, errors, latency, tokens, cost) for any instrumented
+  application. With fallback-chain telemetry (`llm.chain`) it also shows the chain in the order it is
+  tried, per-provider success rate, 429/timeout/error counts, how often each one answered, fallback
+  depth, common routes and the average turn score, and flags providers that are configured but never
+  reached.
 
 ![Providers: fallback chain, per-provider table, fallback depth, latency and routes](docs/assets/ui-providers.png)
 
@@ -52,12 +56,12 @@ Explore, Alerts and Evaluations work for any project, not only Manitos: the **Pr
 the header (next to the environment and time range) picks it. It defaults to the project with the most
 recent trace and remembers the choice (`?project=` in the URL and the browser's storage).
 
-- **Trace detail** — a hierarchical waterfall, a per-stage time bar and, for `llm.chain` spans, the
-  provider-by-provider attempts of that turn.
+- **Trace detail** — a hierarchical waterfall, a per-stage time bar, a warning when the same tool call
+  repeats (possible loop) and, for `llm.chain` spans, the provider-by-provider attempts of that turn.
 
 ![Trace detail with the llm.chain attempts of one turn](docs/assets/ui-trace-detail.png)
 
-The Providers page reads `llm.chain` spans and an optional metadata-only provider snapshot
+The Providers chain views read `llm.chain` spans and an optional metadata-only provider snapshot
 (`POST /v1/providers/snapshot`, never keys); see
 [docs/manitos-integration.md](docs/manitos-integration.md#llm-provider-chain-proveedores-page).
 _These screenshots were rendered from synthetic telemetry._
@@ -229,16 +233,24 @@ Base URL: `http://localhost:8000`
 
 | Method   | Endpoint                          | Description                      |
 |----------|-----------------------------------|----------------------------------|
-| `GET`    | `/health`                         | Health check (db status, version)|
+| `GET`    | `/`                               | Service name and version         |
+| `GET`    | `/health`                         | Health check (db status, version; 503 when degraded) |
 | `POST`   | `/v1/traces/batch`                | Ingest traces                    |
+| `POST`   | `/v1/traces`                      | Create one trace                 |
+| `POST`   | `/v1/traces/import`               | Import traces exported as JSON   |
 | `POST`   | `/v1/ingest/manitos/traces`       | Versioned integration ingestion   |
 | `GET`    | `/v1/traces`                      | List traces (paginated)          |
 | `GET`    | `/v1/traces/{id}`                 | Get trace detail                 |
+| `GET`    | `/v1/traces/{id}/spans`           | Spans of a trace                 |
+| `GET`    | `/v1/traces/{id}/diagnostics`     | Repeated-tool-call (loop) warnings |
 | `DELETE` | `/v1/traces/{id}`                 | Delete trace                     |
 | `POST`   | `/v1/traces/batch-delete`         | Bulk delete traces               |
 | `GET`    | `/v1/traces/{id}/evaluations`     | Evaluations for a trace          |
 | `GET`    | `/v1/traces/export`               | Export traces as JSON            |
+| `GET`    | `/v1/evaluations`                 | List evaluations                 |
 | `POST`   | `/v1/evaluations`                 | Create evaluation                |
+| `GET`    | `/v1/evaluations/{id}`            | Get an evaluation                |
+| `DELETE` | `/v1/evaluations/{id}`            | Delete an evaluation             |
 | `POST`   | `/v1/evaluations/run`             | Run evaluator on a trace         |
 | `GET`    | `/v1/evaluations/summary`         | Aggregated eval stats            |
 | `GET`    | `/v1/analytics/summary`           | Trace analytics                  |
@@ -248,6 +260,7 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/manitos-quality`   | Integration quality and latency   |
 | `GET`    | `/v1/analytics/projects`          | Projects with traces, newest first |
 | `GET`    | `/v1/providers/`                  | LLM provider chain statistics     |
+| `GET`    | `/v1/providers/models`            | Per-model calls, errors, latency, tokens, cost |
 | `POST`   | `/v1/providers/snapshot`          | Provider configuration snapshot   |
 | `GET`    | `/v1/alerts/metrics`              | Metrics an alert rule can watch   |
 | `GET`    | `/v1/alerts/rules`                | List alert rules                  |
@@ -279,6 +292,9 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/evaluations/by-model`        | Turn health by model and provider |
 | `POST`   | `/v1/analytics/query`             | Flexible metrics query            |
 | `GET`    | `/v1/analytics/query/schema`      | Views, measures and dimensions    |
+| `WS`     | `/ws/live`                        | Live updates for the dashboard    |
+
+When `OBSERVATORY_API_KEY` is set, `/docs`, `/redoc` and `/openapi.json` are disabled.
 
 The integration endpoint uses the versioned `manitos.telemetry.v1` envelope, accepts
 opaque session identifiers, and safely deduplicates exporter retries. See
@@ -339,7 +355,7 @@ pattern-based: it does not detect names or addresses. Details: [docs/privacy.md]
 
 ### Standard OpenTelemetry (OTLP) ingestion
 
-Point any stock OpenTelemetry exporter at `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:8100/v1/otlp`
+Point any stock OpenTelemetry exporter at `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:8000/v1/otlp`
 (protobuf or JSON, optionally gzipped) and its traces appear without the Observer SDK. GenAI
 conventions map to Observer span types, tokens and tools. Content-like attributes are dropped by
 default (`OBSERVATORY_OTLP_CAPTURE=metadata`). Mapping, privacy and limits: [docs/otlp.md](docs/otlp.md).
@@ -571,41 +587,61 @@ llm-observatory status
 
 ## Evaluation System
 
-The LLM-as-Judge evaluator uses a YAML rubric with 7 criteria:
+The default rubric (`backend/app/evaluators/rubrics/default.yaml`) combines deterministic criteria
+with criteria an LLM judge scores:
 
-| Criterion        | Weight | Scale |
-|------------------|--------|-------|
-| Relevance        | 1.5    | 0-5   |
-| Accuracy         | 1.5    | 0-5   |
-| Completeness     | 1.0    | 0-5   |
-| Coherence        | 1.0    | 0-5   |
-| Conciseness      | 0.8    | 0-5   |
-| Safety           | 1.2    | 0-5   |
-| Hallucination    | 1.5    | 0-5 (inverted) |
+| Criterion             | Weight | Scored by |
+|-----------------------|--------|-----------|
+| Latency               | 1.0    | threshold |
+| Cost Efficiency       | 1.0    | threshold |
+| Error Rate            | 1.5    | threshold |
+| Token Usage           | 0.8    | threshold |
+| Output Quality        | 2.0    | LLM judge |
+| Instruction Following | 1.5    | LLM judge |
+| Safety                | 2.5    | LLM judge |
 
-Configure the judge model:
+There is no PASS without evidence: when a criterion cannot be judged (no judge configured, the judge
+failed or answered an invalid level), the evaluation is `incomplete` with `passed: null`, lists the
+skipped criteria with the reason, and is counted apart in the summary.
+
+Configure the judge (off until configured; deterministic criteria never need it):
 
 ```bash
-export OPENAI_API_KEY=sk-...
-export OBSERVATORY_JUDGE_MODEL=gpt-4o  # default
+export OBSERVATORY_JUDGE_PROVIDER=openai   # openai | openai-compatible | anthropic
+export OPENAI_API_KEY=sk-...               # or OBSERVATORY_JUDGE_API_KEY
+export OBSERVATORY_JUDGE_MODEL=gpt-4o      # default for openai
+# openai-compatible (e.g. a local server, key optional):
+# export OBSERVATORY_JUDGE_BASE_URL=http://127.0.0.1:11434/v1
 ```
+
+A cloud judge reads the trace content it grades, so that content goes to the provider.
+
+Automatic operational-health evaluations (`manitos_turn@2` for the agent-runtime integration,
+`generic_turn@1` for any other project) need no judge: they score how a trace ran, and answer
+correctness stays `unknown`.
 
 ## Development
 
 ### Run tests
 
 ```bash
-# Backend (170 tests)
+# Backend
 cd backend && pytest
 
-# Python SDK (37 tests)
+# Python SDK (install the openai and anthropic extras so the real-client tests run)
 cd sdk/python && pytest
 
-# TypeScript SDK (30 tests)
+# TypeScript SDK
 cd sdk/typescript && npx vitest run
 
-# CLI (63 tests)
+# CLI
 cd cli && pytest
+
+# Dashboard (official Node 22.12+ build; some distribution builds lack TypeScript stripping)
+cd dashboard && npm test
+
+# End-to-end scenarios against a running backend
+python scripts/agent_scenarios.py --endpoint http://127.0.0.1:8000
 ```
 
 ### Lint & typecheck

@@ -22,14 +22,14 @@ and write down what was learned or changed. Keep entries short.
 
 | # | Step | State | PR |
 |---|------|-------|----|
-| 1 | Separate operational health from quality | done | this PR |
-| 2 | Datasets from traces | done | this PR |
-| 3 | Compare runs by version | done | this PR |
-| 4 | Regression command for CI | done | this PR |
+| 1 | Separate operational health from quality | done | #51 |
+| 2 | Datasets from traces | done | #52 |
+| 3 | Compare runs by version | done | #53 |
+| 4 | Regression command for CI | done | #54 |
 | 5 | Standard OTLP ingestion | done | #56 |
 | 6 | Read-only MCP server | done | #57 |
 | 7 | Configurable capture privacy | done | #58 |
-| 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | this PR |
+| 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
 
 ## Step 1: health vs quality
 
@@ -197,6 +197,15 @@ spool and a circuit breaker.
 - 2026-10-16: decision on reply text: Manitos keeps exporting metadata only, so phrase checks stay
   `unknown` (the operator chose privacy over text evaluation). The ingestion card sets projects
   silent for over a week apart. Compose files verified on podman and image names fully qualified.
+- 2026-10-19: the 2026-10-17 audit (#62) and the 2026-10-18 external evaluation (#64, 33
+  findings) merged: spans exported when they end, opaque IDs mapped to UUIDs, trace status and
+  interval derived from all spans, `parent_span_id` without a foreign key (migration
+  `20261019_parent_ref`, rehearsed on a copy of a production database), generic Overview and
+  Providers, provider-neutral judge with `incomplete` evaluations, loop diagnostics, writes
+  committed before the response. Open: B5 (partial), D6. See `docs/engineering/`.
+- 2026-10-22 to 2026-10-26: one `compose.yaml` for Docker and Podman with configurable host ports
+  (#68, #70), vite 8.3.5 (#69), release 0.2.0 (#74, see `CHANGELOG.md`), Explore, Alerts and
+  Evaluations for any project with the `generic_turn@1` rubric (#75), publish fixes (#76, #77).
 
 ## Later
 
@@ -204,6 +213,6 @@ Not scheduled; recorded here because the text above refers to this section.
 
 - Encrypt the SDK spool on disk and give it a maximum age.
 - Drop counters reported by the sender (what never reached the Observer).
-- Reply-text phrase checks stay  by operator decision (metadata-only export).
+- Reply-text phrase checks stay `unknown` by operator decision (metadata-only export).
 - OTLP over gRPC.
 - The SQLite foreign keys and WAL are enabled per connection since 2026-10-17; the LLM judge should become an explicit opt-in.

@@ -6,7 +6,8 @@ Findings, root causes and tests per finding: [observer-findings-matrix.md](obser
 
 * **Start:** `6e176d3` on `audit-2026-10-17` (evaluated commit `f1d25a5` + 4 audit commits; C1
   was already fixed there). Branch `fix/observer-stabilization-2026-10`.
-* **End:** the last commit of this branch. Migration notes:
+* **End:** merged to `main` as `e433331` (#64) and `b3a5669` (#62) on 2026-10-19, released in
+  0.2.0 (see `CHANGELOG.md`). Migration notes:
   [migration-20261019-parent-ref.md](migration-20261019-parent-ref.md).
 * **Milestones in the order run:** 0 baseline → 1 SDK (C1, C2) → 2 ingestion integrity (A1–A5,
   M1–M6, B1, plus the parent foreign-key defect) → 3 generic analytics and dashboard (C3, M7,
@@ -38,8 +39,9 @@ Findings, root causes and tests per finding: [observer-findings-matrix.md](obser
 ### Major risks
 
 * The ID mapping and the parent-reference migration change stored representations. Existing
-  rows stay readable (raw IDs looked up as a fallback), but **run the migration on a copy of a
-  production database first**. Not exercised on a large real database.
+  rows stay readable (raw IDs looked up as a fallback). The migration was rehearsed on a copy of a
+  production database (2,447 traces) and then applied to that instance; run it on a copy of
+  yours first as well.
 * Behaviour changes visible to clients: invalid input now returns 422 instead of being stored
   or failing with 500; a trace that is still running is `unset` (it used to be `error`); the
   judge default model is `gpt-4o` as documented (code said `gpt-4`).
@@ -88,16 +90,14 @@ Node 22 build that CI uses.
 | Target | Readiness | Reasons and blockers |
 |---|---|---|
 | Local development | Ready | All suites green; end-to-end scenarios pass |
-| External beta | Ready after review | Needs review and merge of this branch and `audit-2026-10-17`, a CI run on GitHub, and a Compose Quick Start run |
-| Self-hosted production | Not yet | Migration not rehearsed on a large real database; no automated UI tests; B5 sampling; authentication is optional by default |
-| Package release | Not yet | Versions still 0.1.1; the Python SDK behaviour change (export at end) needs a changelog entry and a minor version; follow `docs/releasing.md` |
+| External beta | Released (0.2.0) | Merged with CI green; the Compose Quick Start was run with Podman, not Docker |
+| Self-hosted production | Not yet | No automated UI tests; B5 sampling; authentication is optional by default |
+| Package release | Done | 0.2.0 with `CHANGELOG.md` |
 
 ## F. Next five actions
 
-1. **Review and merge** `audit-2026-10-17` then this branch into `main` (depends on: the user's
-   review). Acceptance: GitHub CI green including the new `agent-scenarios` job.
-2. **Rehearse the migration on a copy of the live Observer database** (depends on 1).
-   Acceptance: upgrade and downgrade on the copy, trace counts and parent links unchanged.
+1. ~~Review and merge~~ — done 2026-10-19 (#64, #62).
+2. ~~Rehearse the migration on a copy of a live database~~ — done 2026-10-19, then applied.
 3. **Run the Compose Quick Start on a clean machine** (depends on 1). Acceptance: README steps
    only, one successful and one failed trace visible with correct status and duration.
 4. **Aggregated endpoints for the histogram and top-N lists** to finish B5 (independent).

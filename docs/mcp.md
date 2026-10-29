@@ -12,7 +12,7 @@ claude mcp add observer \
 ```
 
 Any other client: run `observer-mcp` (or `python -m app.ops.mcp_server`) as a stdio server with
-`OBSERVER_URL` (default `http://127.0.0.1:8100`) and, when the backend requires one,
+`OBSERVER_URL` (default `http://127.0.0.1:8100`; use `http://127.0.0.1:8000` for the Compose stack) and, when the backend requires one,
 `OBSERVATORY_API_KEY`.
 
 ## What it can do

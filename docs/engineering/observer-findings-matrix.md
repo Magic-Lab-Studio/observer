@@ -8,7 +8,8 @@ row is built from the finding list of the stabilization assignment and checked a
 not the evaluator's script. Report identifiers are kept; nothing was reclassified.
 
 Baseline: branch `fix/observer-stabilization-2026-10` from `audit-2026-10-17` at `6e176d3`
-(4 commits after the evaluated `f1d25a5`, not on `main`). End: see the plan document.
+(4 commits after the evaluated `f1d25a5`). Merged to `main` in #64 and #62 (2026-10-19) and released
+in 0.2.0. End: see the plan document.
 
 Statuses: `TESTED` = a regression test fails on the old code (evaluated commit or baseline) and
 passes now; `FIXED` = changed and covered by tests that do not reproduce the old failure, or
