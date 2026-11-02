@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.capture import apply_capture, capture_mode
+from app.cost import fill_span_cost
 from app.db import DbSession
 from app.models.ingestion import IngestionReceipt
 from app.models.trace import Span, Trace
@@ -240,7 +241,7 @@ def _span_values(span: ManitOSSpan, mode: str = "full") -> dict[str, Any]:
     inp, out, attributes, meta = apply_capture(
         mode, inp=span.input, out=span.output, attributes=span.attributes, meta=span.metadata
     )
-    return {
+    return fill_span_cost({
         "name": span.name,
         "span_type": span.span_type,
         "start_time": _as_datetime(span.start_time),
@@ -253,7 +254,7 @@ def _span_values(span: ManitOSSpan, mode: str = "full") -> dict[str, Any]:
         "cost_usd": span.cost_usd,
         "meta": meta,
         "attributes": attributes,
-    }
+    })
 
 
 def _span_matches(existing: Span, values: dict[str, Any]) -> bool:

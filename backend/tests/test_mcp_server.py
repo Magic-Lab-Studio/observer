@@ -82,6 +82,8 @@ async def test_every_tool_is_declared_read_only(client):
         "get_trace",
         "compare_runs",
         "query_metrics",
+        "list_denials",
+        "list_decisions",
     } <= names
     assert all(t.annotations and t.annotations.readOnlyHint for t in tools)
     assert not any(re.search(r"delete|create|update|write|save|ack|remove", n) for n in names)
@@ -295,3 +297,25 @@ async def test_trace_and_dataset_text_is_withheld_unless_content_is_enabled(
     async with create_connected_server_and_client_session(server._mcp_server) as session:
         opened = await _call(session, "get_dataset", dataset_id=ds)
     assert opened["items"][0]["notes"] == "PRIVATE NOTE"
+
+
+@pytest.mark.anyio
+async def test_denials_and_decisions_are_readable_single_line_and_contract_only(client):
+    from test_governance_api import governed_turn, ingest
+
+    denied = governed_turn(denied=True, extra_attr=True)
+    for span in denied["spans"]:
+        if span["span_type"] == "security":
+            span["attributes"]["security.tool"] = "file_master\nrm -rf /"
+    await ingest(client, denied)
+    server, _ = await _session(client)
+    async with create_connected_server_and_client_session(server._mcp_server) as session:
+        denials = await _call(session, "list_denials")
+        decisions = await _call(session, "list_decisions", kind="intent")
+    (item,) = denials["items"]
+    assert item["attributes"]["security.reason"] == "local_data_egress"
+    assert item["attributes"]["security.capabilities"] == ["write"]
+    assert "\n" not in item["attributes"]["security.tool"]
+    (decision,) = decisions["items"]
+    assert decision["attributes"]["decision.choice"] == "tool"
+    assert "prompt" not in decision["attributes"]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import relationship
 
 from app.models import Base
@@ -42,6 +42,8 @@ class Span(Base):
     """Represents a single span within a trace."""
 
     __tablename__ = "spans"
+    # Governance views list spans of one type over a time window (migration 20261102_span_type).
+    __table_args__ = (Index("ix_spans_span_type_start_time", "span_type", "start_time"),)
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     trace_id = Column(

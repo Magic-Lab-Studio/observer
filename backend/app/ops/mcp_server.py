@@ -248,6 +248,26 @@ def evaluation_view(ev: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def governance_view(listing: Mapping[str, Any]) -> dict[str, Any]:
+    """A /v1/governance listing with every string single-line and bounded (the API already keeps
+    only the contract's attribute keys and never returns input/output)."""
+
+    def clean(value: Any) -> Any:
+        if isinstance(value, list):
+            return [v for v in (_safe_scalar(x) for x in value[:24]) if v is not _DROP]
+        scalar = _safe_scalar(value)
+        return None if scalar is _DROP else scalar
+
+    items = []
+    for item in listing.get("items") or []:
+        row = {k: clean(v) for k, v in item.items() if k != "attributes"}
+        row["attributes"] = {
+            safe_text(k, 80): clean(v) for k, v in (item.get("attributes") or {}).items()
+        }
+        items.append(row)
+    return {**{k: v for k, v in listing.items() if k != "items"}, "items": items}
+
+
 def trace_detail(
     trace: Mapping[str, Any],
     spans: list[Mapping[str, Any]],
@@ -363,6 +383,28 @@ def build_server(reader: ObserverReader) -> FastMCP:
     async def list_alerts(state: str | None = None) -> dict[str, Any]:
         """Alert events (state: open | resolved) and how many are open."""
         return await reader.get("/v1/alerts/events", state=state, limit=50)
+
+    @tool
+    async def list_denials(
+        hours: int = 24, outcome: str = "denied", tool_name: str | None = None
+    ) -> dict[str, Any]:
+        """Security checks that stopped (outcome="denied") or paused (outcome="asked") an action:
+        the tool, the reason code and the capability classes involved."""
+        listing = await reader.get(
+            "/v1/governance/denials", hours=hours, outcome=outcome, tool=tool_name, limit=MAX_ROWS
+        )
+        return governance_view(listing)
+
+    @tool
+    async def list_decisions(
+        hours: int = 24, kind: str | None = None, final_by: str | None = None
+    ) -> dict[str, Any]:
+        """Decisions (kind: intent | tool_select | escalate | gate) with the options, the choice or
+        an abstention, the confidence, the backend and model, and who settled it (final_by)."""
+        listing = await reader.get(
+            "/v1/governance/decisions", hours=hours, kind=kind, final_by=final_by, limit=MAX_ROWS
+        )
+        return governance_view(listing)
 
     @tool
     async def list_datasets() -> dict[str, Any]:

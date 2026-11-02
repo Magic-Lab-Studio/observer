@@ -54,3 +54,29 @@ def test_haiku_5_5_long_prompt_tier():
 
 def test_zero_tokens_is_a_known_zero_not_unknown():
     assert calculate_cost("claude-opus-5-5", 0, 0) == 0.0
+
+
+def test_prices_change_on_their_start_date():
+    from datetime import date
+
+    assert calculate_cost("gemini-3.8-flash", 1_000_000, 0, date(2026, 12, 31)) == 0.75
+    assert calculate_cost("gemini-3.8-flash", 1_000_000, 0, date(2027, 1, 1)) == 1.50
+    assert calculate_cost("gemini-3.8-flash", 0, 1_000_000, date(2027, 1, 1)) == 7.50
+
+
+def test_manitos_cloud_models_are_priced_or_named_unpriced():
+    from llm_observatory.pricing import UNPRICED
+
+    for model in (
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-3.8-flash",
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-20b",
+        "qwen3.8-27b-groq",
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    ):
+        pricing = get_model_pricing(model)
+        assert pricing is not None and pricing.checked and pricing.provider, model
+    for model in ("command-a-03-2025", "google/gemma-4-31b-it"):
+        assert get_model_pricing(model) is None and UNPRICED[model]

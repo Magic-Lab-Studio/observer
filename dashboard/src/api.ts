@@ -30,6 +30,10 @@ import type {
   PrivacyOverview,
   IngestHealth,
   ProjectInfo,
+  GovernanceKind,
+  GovernanceListing,
+  GovernanceSummary,
+  GovernanceTurn,
 } from './types';
 
 import { ApiError, classifyStatus, detailFromBody } from './helpers/errors';
@@ -205,6 +209,19 @@ export const api = {
   },
   async enforceCaptureMode(project: string): Promise<{ spans_scanned: number; spans_changed: number }> {
     return request(`/v1/privacy/projects/${encodeURIComponent(project)}/enforce`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+  },
+
+  // Governance: decisions, denials, approvals and skills (read-only)
+  async getGovernance(kind: GovernanceKind, hours: number, projectId: string, filters: Record<string, string> = {}): Promise<GovernanceListing> {
+    const qs = new URLSearchParams({ hours: String(hours), project_id: projectId, ...filters });
+    return request(`/v1/governance/${kind}?${qs.toString()}`);
+  },
+  async getGovernanceSummary(hours: number, projectId: string): Promise<GovernanceSummary> {
+    const qs = new URLSearchParams({ hours: String(hours), project_id: projectId });
+    return request(`/v1/governance/summary?${qs.toString()}`);
+  },
+  async getGovernanceTurn(traceId: string): Promise<GovernanceTurn> {
+    return request(`/v1/governance/turns/${encodeURIComponent(traceId)}`);
   },
 
   // Is telemetry arriving?

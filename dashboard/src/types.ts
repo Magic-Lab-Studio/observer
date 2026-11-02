@@ -239,3 +239,25 @@ export interface RepeatedCalls {
 }
 export interface TraceDiagnostics { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }
 export interface ProjectInfo { project_id: string; trace_count: number; last_trace_at: string | null }
+
+// Governance views (/v1/governance): decision, security, approval and skill spans.
+export type GovernanceKind = 'decisions' | 'denials' | 'approvals' | 'skills';
+export type GovernanceAttrValue = string | number | boolean | null | (string | number | boolean | null)[];
+export interface GovernanceItem {
+  span_id: string; trace_id: string; session_id: string | null; turn_id: string | null;
+  name: string; span_type: string; status: string; start_time: string | null; duration_ms: number | null;
+  attributes: Record<string, GovernanceAttrValue>;
+}
+export interface GovernanceListing {
+  span_type: string; project_id: string; hours: number; total: number; truncated_scan: boolean;
+  items: GovernanceItem[];
+}
+export interface GovernanceSummary {
+  project_id: string; hours: number;
+  counts: Record<'decision' | 'security' | 'approval' | 'skill', { total: number; by: Record<string, number> }>;
+}
+export interface GovernanceStep extends GovernanceItem { outcome: string | null }
+export interface GovernanceTurn {
+  trace_id: string; session_id: string | null; turn_id: string | null; status: string;
+  steps: GovernanceStep[]; unanswered_asks: string[]; complete: boolean;
+}
