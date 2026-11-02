@@ -70,7 +70,7 @@ _These screenshots were rendered from synthetic telemetry._
 
 - **Multi-framework tracing** — Auto-instrument OpenAI, Anthropic, LangChain
 - **Agent runtime integration** — Versioned adapters for metadata-only telemetry
-- **Cost tracking** — Per-model pricing for 20+ models (GPT-4o, Claude 4, Gemini 2.0, etc.)
+- **Cost tracking** — One price table shared by the SDK and the backend (`sdk/python/src/llm_observatory/pricing.json`, each price with its source and check date); the backend completes a span's missing cost and reports the paid-price equivalent of free tiers (see [Cost](#cost))
 - **Evaluation engine** — LLM-as-Judge with YAML rubric, rule-based metrics, human feedback
 - **Real-time dashboard** — Live trace streaming via WebSocket, time-range filtering
 - **CLI tools** — Query, export, import, and evaluate traces from the terminal
@@ -255,7 +255,10 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/evaluations/summary`         | Aggregated eval stats            |
 | `GET`    | `/v1/analytics/summary`           | Trace analytics                  |
 | `GET`    | `/v1/analytics/timeline`          | Trace counts over time           |
-| `GET`    | `/v1/analytics/cost-by-model`     | Cost breakdown by model          |
+| `GET`    | `/v1/analytics/cost-by-model`     | Cost by model: paid, paid-price equivalent, tokens, price status |
+| `GET`    | `/v1/governance/{decisions,denials,approvals,skills}` | Governance spans of an agent (contract attributes only) |
+| `GET`    | `/v1/governance/summary`          | Governance span counts by outcome |
+| `GET`    | `/v1/governance/turns/{trace_id}` | One turn's path: decision, permission, answer, tool, skill |
 | `GET`    | `/v1/analytics/sessions`          | Unique sessions with stats       |
 | `GET`    | `/v1/analytics/manitos-quality`   | Integration quality and latency   |
 | `GET`    | `/v1/analytics/projects`          | Projects with traces, newest first |
@@ -372,6 +375,23 @@ unvalidated tokens. Read [docs/security.md](docs/security.md) before exposing Ob
 failed traces with reasons, one trace's spans, tools and provider chain, alerts, datasets, version
 comparisons and metric queries. Read-only; trace input/output and any attribute outside an
 allow-list are never returned unless `OBSERVER_MCP_CONTENT=1`. Setup and tools: [docs/mcp.md](docs/mcp.md).
+
+### Cost
+
+A span sent with a model (`model`, `gen_ai.response.model` or `gen_ai.request.model`) and token
+counts but no `cost_usd` is priced from `backend/app/pricing.json`, a copy of the SDK's table
+(`backend/tests/test_cost.py` fails when they differ). A model the table does not know keeps an
+empty cost: unknown is never reported as free. Providers used on their free tier go in
+`OBSERVATORY_FREE_TIER_PROVIDERS` (for example `groq,google,cloudflare`): their spans cost 0 and
+carry the paid list price as `cost.equivalent_usd`, which `/v1/analytics/cost-by-model` sums as
+`equivalent_cost_usd`. Local models (`ollama`, `llamacpp`, `.gguf`) cost 0.
+
+### Governance
+
+`/v1/governance` lists the `decision`, `security`, `approval` and `skill` spans an agent sends
+(ManitOS contract `manitos.telemetry.v1`), keeping only the contract's attribute keys and never
+input or output, and rebuilds one turn's path. The dashboard's **Gobernanza** page and the MCP
+tools `list_denials` and `list_decisions` read it.
 
 ### Ingestion reliability
 

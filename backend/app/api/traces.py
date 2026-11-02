@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.capture import apply_capture, capture_mode
+from app.cost import fill_span_cost
 from app.db import DbSession
 from app.ingest_validation import (
     OpaqueId,
@@ -233,7 +234,7 @@ class SpanResponse(BaseModel):
                 "output": values.out,
                 "tokens_input": values.tokens_input,
                 "tokens_output": values.tokens_output,
-                "cost_usd": float(values.cost_usd) if values.cost_usd else None,
+                "cost_usd": float(values.cost_usd) if values.cost_usd is not None else None,
                 "metadata": values.meta,
                 "attributes": values.attributes,
             }
@@ -282,9 +283,8 @@ async def create_trace(
             out=captured[1],
             tokens_input=span_data.tokens_input,
             tokens_output=span_data.tokens_output,
-            cost_usd=span_data.cost_usd,
+            **_priced(span_data, captured[2], to_datetime(span_data.start_time)),
             meta=captured[3],
-            attributes=captured[2],
         )
         session.add(span)
 
@@ -304,6 +304,18 @@ async def create_trace(
     return trace
 
 
+def _priced(span_data: Any, attributes: dict | None, start: datetime | None) -> dict[str, Any]:
+    """``cost_usd`` and ``attributes`` for a new span, the cost completed from the price table."""
+    values = fill_span_cost({
+        "cost_usd": span_data.cost_usd,
+        "attributes": attributes,
+        "tokens_input": span_data.tokens_input,
+        "tokens_output": span_data.tokens_output,
+        "start_time": start,
+    })
+    return {"cost_usd": values["cost_usd"], "attributes": values["attributes"]}
+
+
 def _span_values(span_data: SpanCreate, mode: str) -> dict[str, Any]:
     inp, out, attributes, meta = apply_capture(
         mode,
@@ -312,7 +324,7 @@ def _span_values(span_data: SpanCreate, mode: str) -> dict[str, Any]:
         attributes=span_data.attributes,
         meta=span_data.metadata,
     )
-    return {
+    return fill_span_cost({
         "parent_span_id": span_data.parent_id,
         "name": span_data.name,
         "span_type": span_data.span_type,
@@ -326,7 +338,7 @@ def _span_values(span_data: SpanCreate, mode: str) -> dict[str, Any]:
         "cost_usd": span_data.cost_usd,
         "meta": meta,
         "attributes": attributes,
-    }
+    })
 
 
 def _same_instant(left: datetime | None, right: datetime | None) -> bool:
@@ -604,7 +616,7 @@ async def export_traces(
                 output=s.out,
                 tokens_input=s.tokens_input,
                 tokens_output=s.tokens_output,
-                cost_usd=float(s.cost_usd) if s.cost_usd else None,
+                cost_usd=float(s.cost_usd) if s.cost_usd is not None else None,
                 metadata=s.meta,
                 attributes=s.attributes,
             )
@@ -902,9 +914,8 @@ async def import_traces(
                 out=captured[1],
                 tokens_input=span_data.tokens_input,
                 tokens_output=span_data.tokens_output,
-                cost_usd=span_data.cost_usd,
+                **_priced(span_data, captured[2], span_start),
                 meta=captured[3],
-                attributes=captured[2],
             )
             session.add(span)
 

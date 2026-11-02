@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cost import EQUIVALENT_KEY, classify, estimate
 from app.db import DbSession
 from app.metrics_core import aware, percentile
 from app.metrics_query import QueryError, QueryRequest, run_query
@@ -52,11 +53,23 @@ class AnalyticsSummary(BaseModel):
 
 
 class CostByModel(BaseModel):
-    """Cost breakdown by model."""
+    """Cost breakdown by model.
+
+    ``cost_usd`` is what was paid (0 on a free tier); ``equivalent_cost_usd`` what the same tokens
+    cost at the paid list price (``app/cost.py``). ``price_status`` says whether the model is in
+    the price table (priced), a free variant (free), runs locally (local) or has no published
+    price (unpriced, with ``price_note``).
+    """
 
     model: str
     cost_usd: float
     span_count: int
+    equivalent_cost_usd: float = 0.0
+    tokens_input: int = 0
+    tokens_output: int = 0
+    price_status: str = "unpriced"
+    pricing_key: str | None = None
+    price_note: str | None = None
 
 
 class TraceTimeline(BaseModel):
@@ -199,7 +212,9 @@ async def get_cost_by_model(
     # Aggregate this bounded time-window result in Python for identical
     # semantics on both supported databases.
     query = (
-        select(Span.attributes, Span.cost_usd)
+        select(
+            Span.attributes, Span.cost_usd, Span.tokens_input, Span.tokens_output, Span.start_time
+        )
         .join(Trace, Span.trace_id == Trace.id)
         .where(Trace.created_at >= cutoff)
     )
@@ -216,9 +231,36 @@ async def get_cost_by_model(
         ).strip()
         if not model:
             continue
-        bucket = by_model.setdefault(model, {"model": model, "cost_usd": 0.0, "span_count": 0})
+        bucket = by_model.get(model)
+        if bucket is None:
+            info = classify(model)
+            bucket = by_model[model] = {
+                "model": model,
+                "cost_usd": 0.0,
+                "span_count": 0,
+                "equivalent_cost_usd": 0.0,
+                "tokens_input": 0,
+                "tokens_output": 0,
+                "price_status": info["status"],
+                "pricing_key": info["key"],
+                "price_note": info["reason"],
+            }
         bucket["cost_usd"] = float(bucket["cost_usd"]) + float(row.cost_usd or 0)
         bucket["span_count"] = int(bucket["span_count"]) + 1
+        bucket["tokens_input"] = int(bucket["tokens_input"]) + int(row.tokens_input or 0)
+        bucket["tokens_output"] = int(bucket["tokens_output"]) + int(row.tokens_output or 0)
+        equivalent = attributes.get(EQUIVALENT_KEY)
+        if not isinstance(equivalent, (int, float)) or isinstance(equivalent, bool):
+            if row.cost_usd:
+                # A paid cost the sender computed is its own equivalent.
+                equivalent = float(row.cost_usd)
+            else:
+                # Stored before the table, or sent as 0 (free tier): price the tokens now.
+                _cost, equivalent = estimate(
+                    model, row.tokens_input, row.tokens_output, row.start_time
+                )
+                equivalent = equivalent or 0.0
+        bucket["equivalent_cost_usd"] = float(bucket["equivalent_cost_usd"]) + float(equivalent)
     return sorted(by_model.values(), key=lambda item: float(item["cost_usd"]), reverse=True)
 
 

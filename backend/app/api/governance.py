@@ -40,7 +40,8 @@ CONTRACT_KEYS: dict[str, frozenset[str]] = {
         )
     ),
     "security": frozenset(
-        f"security.{k}" for k in ("outcome", "reason", "capabilities", "tool", "policy", "target_kind")
+        f"security.{k}"
+        for k in ("outcome", "reason", "capabilities", "tool", "policy", "target_kind")
     ),
     "approval": frozenset(
         f"approval.{k}" for k in ("request_id", "subject", "result", "by", "reason_code")
@@ -104,7 +105,9 @@ async def _scan(
     query = (
         select(Span, Trace)
         .join(Trace, Trace.id == Span.trace_id)
-        .where(Span.span_type == span_type, Span.start_time >= cutoff, Trace.project_id == project_id)
+        .where(
+            Span.span_type == span_type, Span.start_time >= cutoff, Trace.project_id == project_id
+        )
         .order_by(Span.start_time.desc())
         .limit(MAX_SCAN)
     )
@@ -136,7 +139,9 @@ async def _listing(
     session_id: str | None,
     limit: int,
 ) -> dict[str, Any]:
-    pairs = await _scan(session, span_type, hours=hours, project_id=project_id, session_id=session_id)
+    pairs = await _scan(
+        session, span_type, hours=hours, project_id=project_id, session_id=session_id
+    )
     rows = [_row(span, trace) for span, trace in pairs]
     rows = [row for row in rows if _matches(row["attributes"], filters)]
     return {
@@ -171,7 +176,6 @@ def _value() -> Any:
     return Query(None, max_length=80)
 
 
-
 @router.get("/decisions")
 async def list_decisions(
     hours: int = _hours(),
@@ -186,8 +190,13 @@ async def list_decisions(
     """Decisions taken by a model, a rule or a person (intent, tool selection, escalation)."""
     filters = {"decision.kind": kind, "decision.choice": choice, "decision.final_by": final_by}
     return await _listing(
-        session, "decision", filters, hours=hours, project_id=project_id,
-        session_id=session_id, limit=limit,
+        session,
+        "decision",
+        filters,
+        hours=hours,
+        project_id=project_id,
+        session_id=session_id,
+        limit=limit,
     )
 
 
@@ -211,8 +220,13 @@ async def list_denials(
         "security.capabilities": capability,
     }
     return await _listing(
-        session, "security", filters, hours=hours, project_id=project_id,
-        session_id=session_id, limit=limit,
+        session,
+        "security",
+        filters,
+        hours=hours,
+        project_id=project_id,
+        session_id=session_id,
+        limit=limit,
     )
 
 
@@ -229,8 +243,13 @@ async def list_approvals(
     """Answers to permission requests: who answered and how."""
     filters = {"approval.result": result, "approval.by": by}
     return await _listing(
-        session, "approval", filters, hours=hours, project_id=project_id,
-        session_id=session_id, limit=limit,
+        session,
+        "approval",
+        filters,
+        hours=hours,
+        project_id=project_id,
+        session_id=session_id,
+        limit=limit,
     )
 
 
@@ -246,7 +265,13 @@ async def list_skills(
     """Skill imports and loads, with their hash, declared capabilities and validation."""
     filters = {"skill.source": source, "skill.validation": validation}
     return await _listing(
-        session, "skill", filters, hours=hours, project_id=project_id, session_id=None, limit=limit,
+        session,
+        "skill",
+        filters,
+        hours=hours,
+        project_id=project_id,
+        session_id=None,
+        limit=limit,
     )
 
 
@@ -287,13 +312,17 @@ async def turn_path(trace_id: str, session: AsyncSession = DbSession) -> dict[st
     if trace is None:
         raise HTTPException(status_code=404, detail="Trace not found")
     spans = (
-        await session.execute(
-            select(Span)
-            .where(Span.trace_id == stored, Span.span_type.in_(PATH_TYPES))
-            .order_by(Span.start_time, Span.id)
-            .limit(MAX_PATH_SPANS)
+        (
+            await session.execute(
+                select(Span)
+                .where(Span.trace_id == stored, Span.span_type.in_(PATH_TYPES))
+                .order_by(Span.start_time, Span.id)
+                .limit(MAX_PATH_SPANS)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     steps = []
     for span in spans:
         row = _row(span, trace)

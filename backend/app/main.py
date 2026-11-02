@@ -15,8 +15,8 @@ from slowapi.errors import RateLimitExceeded
 from app.api import alerts as alerts_api
 from app.api import analytics, evaluations, manitos_ingest, providers, traces
 from app.api import dataset_runs as dataset_runs_api
-from app.api import governance as governance_api
 from app.api import datasets as datasets_api
+from app.api import governance as governance_api
 from app.api import ingest_health as ingest_health_api
 from app.api import otlp as otlp_api
 from app.api import privacy as privacy_api

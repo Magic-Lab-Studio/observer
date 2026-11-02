@@ -131,7 +131,7 @@ async def run_evaluation(
                 "span_type": s.span_type,
                 "tokens_input": s.tokens_input,
                 "tokens_output": s.tokens_output,
-                "cost_usd": float(s.cost_usd) if s.cost_usd else None,
+                "cost_usd": float(s.cost_usd) if s.cost_usd is not None else None,
             }
             for s in spans
         ],

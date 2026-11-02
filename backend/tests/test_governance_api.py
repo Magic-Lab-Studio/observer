@@ -17,7 +17,9 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 def governed_turn(*, session_id="session_gov", denied=False, answered=True, extra_attr=False):
     """The contract fixture moved to now, with fresh IDs, optionally varied."""
-    data = json.loads((Path(__file__).parent / "fixtures/manitos_v1_governance_spans.json").read_text())
+    data = json.loads(
+        (Path(__file__).parent / "fixtures/manitos_v1_governance_spans.json").read_text()
+    )
     data = copy.deepcopy(data)
     shift = time.time() - data["trace"]["start_time"] - 5
     data["idempotency_key"] = str(uuid.uuid4())
@@ -52,7 +54,13 @@ async def ingest(client, data):
 async def test_turn_path_rebuilds_decision_permission_tool_result(client):
     trace_id = await ingest(client, governed_turn())
     body = (await client.get(f"/v1/governance/turns/{trace_id}")).json()
-    assert [s["span_type"] for s in body["steps"]] == ["decision", "security", "approval", "tool", "skill"]
+    assert [s["span_type"] for s in body["steps"]] == [
+        "decision",
+        "security",
+        "approval",
+        "tool",
+        "skill",
+    ]
     assert [s["outcome"] for s in body["steps"]] == ["tool", "asked", "granted", "ok", "ok"]
     assert body["complete"] is True
     assert body["unanswered_asks"] == []
@@ -127,9 +135,9 @@ async def test_old_spans_and_other_projects_are_left_out(client):
     await ingest(client, other)
     assert (await client.get("/v1/governance/decisions")).json()["total"] == 0
     assert (await client.get("/v1/governance/decisions", params={"hours": 72})).json()["total"] == 1
-    assert (
-        await client.get("/v1/governance/decisions", params={"project_id": "another"})
-    ).json()["total"] == 1
+    assert (await client.get("/v1/governance/decisions", params={"project_id": "another"})).json()[
+        "total"
+    ] == 1
 
 
 @pytest.mark.anyio
@@ -145,7 +153,9 @@ async def test_summary_counts_each_type_by_outcome(client):
 
 @pytest.mark.anyio
 async def test_bad_filter_values_are_rejected(client):
-    assert (await client.get("/v1/governance/denials", params={"outcome": "maybe"})).status_code == 422
+    assert (
+        await client.get("/v1/governance/denials", params={"outcome": "maybe"})
+    ).status_code == 422
     assert (await client.get("/v1/governance/approvals", params={"by": "robot"})).status_code == 422
 
 
@@ -155,7 +165,10 @@ def test_migration_adds_and_removes_the_span_type_index(tmp_path):
 
     def alembic(*args):
         subprocess.run(
-            [sys.executable, "-m", "alembic", *args], cwd=BACKEND, env=env, check=True,
+            [sys.executable, "-m", "alembic", *args],
+            cwd=BACKEND,
+            env=env,
+            check=True,
             capture_output=True,
         )
 

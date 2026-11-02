@@ -1,6 +1,7 @@
 """Governance span types ride manitos.telemetry.v1 unchanged (ManitOS plan 2026-11-02, phase zero).
 
-The contract lives in ManitOS (manitos/contracts/telemetry.py, docs/wiki/data/observer_event_contract.md):
+The contract lives in ManitOS (manitos/contracts/telemetry.py,
+docs/wiki/data/observer_event_contract.md):
 decision, security, approval and skill spans use the open span_type and attributes fields, so the
 envelope keeps its version. If this test fails, the ingest stopped accepting that contract.
 """
@@ -12,7 +13,8 @@ import pytest
 
 
 def payload():
-    return json.loads((Path(__file__).parent / "fixtures/manitos_v1_governance_spans.json").read_text())
+    fixture = Path(__file__).parent / "fixtures/manitos_v1_governance_spans.json"
+    return json.loads(fixture.read_text())
 
 
 @pytest.mark.anyio

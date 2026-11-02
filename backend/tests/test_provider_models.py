@@ -36,9 +36,13 @@ async def test_calls_grouped_by_provider_and_model_from_gen_ai_attributes(client
     assert data["calls"] == 4
     sonnet = by[("anthropic", "claude-sonnet-4-5")]
     assert sonnet["calls"] == 2 and sonnet["errors"] == 1 and sonnet["error_rate"] == 0.5
-    assert sonnet["cost_usd"] == pytest.approx(0.002) and sonnet["priced_calls"] == 1
+    # The sent cost is kept; the call sent without one is priced from the table (B3, 2026-11-02):
+    # claude-sonnet-4-5 at $3/$15 per 1M tokens, 10 in and 5 out.
+    assert sonnet["cost_usd"] == pytest.approx(0.002 + 0.000105) and sonnet["priced_calls"] == 2
     assert sonnet["tokens_input"] == 20
-    assert by[("openai", "gpt-4o-mini")]["cost_usd"] is None  # unknown, not $0
+    # $0.0000045, stored at the column's 6 decimals.
+    assert by[("openai", "gpt-4o-mini")]["cost_usd"] == pytest.approx(0.0000045, abs=1e-6)
+    assert by[("unknown", "llama3")]["cost_usd"] is None  # unknown, not $0
     assert ("unknown", "llama3") in by  # provider not named: not guessed
 
 

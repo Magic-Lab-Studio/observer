@@ -98,7 +98,10 @@ async def test_cost_by_model_reads_gen_ai_model_attributes(client):
     await _agent_run(client, fails=False, duration=1.0)
     rows = (await client.get("/v1/analytics/cost-by-model")).json()
     expected = {"model": "claude-sonnet-4-5", "cost_usd": pytest.approx(0.001), "span_count": 1}
-    assert rows == [expected]
+    assert [{k: row[k] for k in expected} for row in rows] == [expected]
+    # A cost the sender computed is also the paid-price equivalent (B3).
+    assert rows[0]["equivalent_cost_usd"] == pytest.approx(0.001)
+    assert rows[0]["price_status"] == "priced"
 
 
 @pytest.mark.anyio
