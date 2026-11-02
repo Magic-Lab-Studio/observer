@@ -1,0 +1,97 @@
+{
+  "schema_version": "manitos.telemetry.v1",
+  "idempotency_key": "44444444-4444-4444-8444-444444444444",
+  "project_id": "manitos",
+  "environment": "test",
+  "service_instance_id": "desktop-test-01",
+  "session_id": "session_20261102_contract",
+  "turn_id": "turn_000001",
+  "actor_id_hash": "hmac-sha256:anonymous-test",
+  "trace": {
+    "id": "55555555-5555-4555-8555-555555555555",
+    "name": "manitos.turn",
+    "start_time": 1793635200.0,
+    "end_time": 1793635202.0,
+    "status": "ok",
+    "metadata": {"privacy_mode": "metadata_only"}
+  },
+  "spans": [
+    {
+      "id": "66666666-6666-4666-8666-666666666601",
+      "name": "planner.intent",
+      "span_type": "decision",
+      "start_time": 1793635200.1,
+      "end_time": 1793635200.3,
+      "status": "ok",
+      "attributes": {
+        "decision.kind": "intent",
+        "decision.backend": "ollama",
+        "decision.model": "qwen3.5:0.8b-q4km-local",
+        "decision.options": ["chat", "plan", "tool"],
+        "decision.scores": [0.1, null, 0.9],
+        "decision.choice": "tool",
+        "decision.confidence": 0.9,
+        "decision.latency_ms": 180.0,
+        "decision.final_by": "model"
+      }
+    },
+    {
+      "id": "66666666-6666-4666-8666-666666666602",
+      "name": "governed_executor.check",
+      "span_type": "security",
+      "start_time": 1793635200.3,
+      "end_time": 1793635200.31,
+      "status": "ok",
+      "attributes": {
+        "security.outcome": "asked",
+        "security.reason": "consent_required",
+        "security.capabilities": ["write"],
+        "security.tool": "file_master",
+        "security.target_kind": "file"
+      }
+    },
+    {
+      "id": "66666666-6666-4666-8666-666666666603",
+      "name": "consent.answer",
+      "span_type": "approval",
+      "start_time": 1793635200.31,
+      "end_time": 1793635201.0,
+      "status": "ok",
+      "attributes": {
+        "approval.request_id": "req_0001",
+        "approval.subject": "file_master",
+        "approval.result": "granted",
+        "approval.by": "user"
+      }
+    },
+    {
+      "id": "66666666-6666-4666-8666-666666666604",
+      "name": "tool.file_master",
+      "span_type": "tool",
+      "start_time": 1793635201.0,
+      "end_time": 1793635201.5,
+      "status": "ok",
+      "attributes": {
+        "tool.call_id": "call_0001",
+        "tool.args_digest": "sha256:0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
+      }
+    },
+    {
+      "id": "66666666-6666-4666-8666-666666666605",
+      "name": "skill.import",
+      "span_type": "skill",
+      "start_time": 1793635201.5,
+      "end_time": 1793635201.6,
+      "status": "ok",
+      "attributes": {
+        "skill.id": "example-skill",
+        "skill.version": "1.0.0",
+        "skill.source": "import",
+        "skill.sha256": "sha256:aa",
+        "skill.capabilities": ["read"],
+        "skill.scripts": 0,
+        "skill.validation": "ok"
+      }
+    }
+  ]
+}
