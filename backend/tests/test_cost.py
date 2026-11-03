@@ -182,3 +182,21 @@ async def test_cost_by_model_shows_paid_equivalent_and_price_status(client, monk
     assert rows["gemini · gemini-2.5-flash"]["equivalent_cost_usd"] == pytest.approx(2.5)
     cohere = rows["cohere · command-a-03-2025"]
     assert cohere["price_status"] == "unpriced" and "Cohere" in cohere["price_note"]
+
+
+def test_a_call_to_a_local_provider_costs_zero_whatever_the_model_is_called():
+    day = datetime(2026, 11, 2)
+    assert estimate("llama3.2:3b", 100, 50, day) == (None, None)
+    assert estimate("llama3.2:3b", 100, 50, day, "ollama") == (0.0, 0.0)
+    filled = cost.fill_span_cost({
+        "tokens_input": 100, "tokens_output": 50, "start_time": day,
+        "attributes": {"gen_ai.request.model": "llama3.2:3b", "gen_ai.provider.name": "ollama"},
+    })
+    assert filled["cost_usd"] == 0.0
+
+
+def test_muse_spark_is_priced_from_metas_page():
+    cost_usd, _ = estimate("muse-spark-1.3", 1_000_000, 1_000_000, datetime(2026, 11, 2), "meta")
+    assert cost_usd == pytest.approx(1.25 + 4.25)
+    cheap, _ = estimate("muse-spark-1.3-contributor", 1_000_000, 1_000_000, datetime(2026, 11, 2))
+    assert cheap == pytest.approx(0.10 + 0.20)

@@ -115,14 +115,31 @@ def model_of(attributes: dict[str, Any] | None) -> str | None:
     return None
 
 
+def provider_of(attributes: dict[str, Any] | None) -> str | None:
+    """The provider a span reports: ``gen_ai.provider.name`` or the older ``gen_ai.system``."""
+    for key in ("gen_ai.provider.name", "gen_ai.system"):
+        value = (attributes or {}).get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return None
+
+
 def estimate(
-    model: str | None, tokens_in: int | None, tokens_out: int | None, when: datetime | None
+    model: str | None,
+    tokens_in: int | None,
+    tokens_out: int | None,
+    when: datetime | None,
+    provider: str | None = None,
 ) -> tuple[float | None, float | None]:
-    """(cost_usd, equivalent_usd) for one call; (None, None) when it cannot be priced."""
+    """(cost_usd, equivalent_usd) for one call; (None, None) when it cannot be priced.
+
+    A call the span says reached a local provider (``ollama``, ``llamacpp``) costs 0 whatever the
+    model is called (``llama3.2:3b`` carries no prefix that says it ran locally).
+    """
     if not model or tokens_in is None and tokens_out is None:
         return None, None
     info = classify(model)
-    if info["status"] == "local":
+    if info["status"] == "local" or PROVIDER_PREFIXES.get(provider or "") == "local":
         return 0.0, 0.0
     tin, tout = int(tokens_in or 0), int(tokens_out or 0)
     day = (when or datetime.now()).date()
@@ -150,6 +167,7 @@ def fill_span_cost(values: dict[str, Any]) -> dict[str, Any]:
         values.get("tokens_input"),
         values.get("tokens_output"),
         values.get("start_time"),
+        provider_of(attributes),
     )
     if cost is None:
         return values

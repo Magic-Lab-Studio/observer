@@ -101,17 +101,23 @@ def _async_anthropic(body=ANTHROPIC_OK, status=200):
     )
 
 
-def _openai(body=OPENAI_OK, status=200):
+def _openai(body=OPENAI_OK, status=200, base_url=None):
     transport = httpx.MockTransport(_responder(body, status))
     return openai.OpenAI(
-        api_key="test", max_retries=0, http_client=httpx.Client(transport=transport)
+        api_key="test",
+        max_retries=0,
+        base_url=base_url,
+        http_client=httpx.Client(transport=transport),
     )
 
 
-def _async_openai(body=OPENAI_OK, status=200):
+def _async_openai(body=OPENAI_OK, status=200, base_url=None):
     transport = httpx.MockTransport(_async_responder(body, status))
     return openai.AsyncOpenAI(
-        api_key="test", max_retries=0, http_client=httpx.AsyncClient(transport=transport)
+        api_key="test",
+        max_retries=0,
+        base_url=base_url,
+        http_client=httpx.AsyncClient(transport=transport),
     )
 
 
@@ -217,6 +223,36 @@ def test_openai_sync_and_async_calls_work(capture, openai_instrumented):
     for span in spans:
         _assert_finished_ok(span, 7, 2)
         assert span["cost_usd"] is not None
+
+
+@pytest.mark.parametrize(
+    ("base_url", "provider", "server"),
+    [
+        (None, "openai", "api.openai.com"),
+        ("https://api.meta.ai/v1", "meta", "api.meta.ai"),
+        ("http://127.0.0.1:11434/v1", "ollama", "127.0.0.1"),
+        ("http://gpu-box:8000/v1", "openai", "gpu-box"),
+    ],
+)
+def test_openai_client_calls_are_attributed_to_the_provider_they_reach(
+    capture, openai_instrumented, base_url, provider, server
+):
+    tracer, sink = capture
+    _openai(base_url=base_url).chat.completions.create(model="muse-spark-1.1", messages=MESSAGES)
+
+    async def call():
+        client = _async_openai(base_url=base_url)
+        return await client.chat.completions.create(model="llama3.2:3b", messages=MESSAGES)
+
+    asyncio.run(call())
+    tracer.flush()
+    spans = [s for s in sink.spans if s["span_type"] == "llm"]
+    assert len(spans) == 2
+    for span in spans:
+        _assert_finished_ok(span, 7, 2)
+        assert span["attributes"]["gen_ai.provider.name"] == provider
+        assert span["attributes"]["gen_ai.system"] == provider
+        assert span["attributes"]["server.address"] == server
 
 
 def test_openai_error_propagates_and_the_span_is_an_error(capture, openai_instrumented):

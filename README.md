@@ -424,7 +424,8 @@ Observer does not execute the agent. Whoever ran the cases (a developer, CI) rep
 `POST /v1/datasets/{id}/runs` with the version (`commit`, `model`, a small `config` map; the rubric
 version is added by Observer) and the trace each case produced. Observer checks every case against
 its trace: health conditions are verified; tool expectations are verified only when the trace has
-tool spans, and text phrases only when reply text is available. Anything it cannot decide is
+tool spans, and text phrases only when the trace stored its reply (the root span's output; it is
+read for the check and not copied). Anything it cannot decide is
 **unknown**, never a silent pass, and a run's pass rate counts decided cases only. The Cases page
 lists the runs of a dataset and compares two of them case by case (regressed, improved, same, no
 data, missing), with the difference in health score, duration and configuration.
@@ -535,6 +536,8 @@ tracer.add_exporter(OTLPExporter(endpoint="http://localhost:8000"))
 | Provider   | Auto-instrument | Manual trace |
 |------------|-----------------|--------------|
 | OpenAI     | Yes             | Yes          |
+| Meta (Muse Spark, Meta Model API) | Yes, with the OpenAI client | Yes |
+| Llama and other local models via Ollama | Yes, with the OpenAI client | Yes |
 | Anthropic  | Yes             | Yes          |
 | LangChain  | Yes             | Yes          |
 | Gemini     | Manual only     | Yes          |
@@ -627,14 +630,15 @@ skipped criteria with the reason, and is counted apart in the summary.
 Configure the judge (off until configured; deterministic criteria never need it):
 
 ```bash
-export OBSERVATORY_JUDGE_PROVIDER=openai   # openai | openai-compatible | anthropic
+export OBSERVATORY_JUDGE_PROVIDER=openai   # openai | openai-compatible | meta | anthropic
 export OPENAI_API_KEY=sk-...               # or OBSERVATORY_JUDGE_API_KEY
 export OBSERVATORY_JUDGE_MODEL=gpt-4o      # default for openai
 # openai-compatible (e.g. a local server, key optional):
 # export OBSERVATORY_JUDGE_BASE_URL=http://127.0.0.1:11434/v1
 ```
 
-A cloud judge reads the trace content it grades, so that content goes to the provider.
+A cloud judge reads the trace content it grades, so that content goes to the provider. Muse Spark
+through the Meta Model API: [docs/meta.md](docs/meta.md).
 
 Automatic operational-health evaluations (`manitos_turn@2` for the agent-runtime integration,
 `generic_turn@1` for any other project) need no judge: they score how a trace ran, and answer

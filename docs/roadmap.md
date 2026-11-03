@@ -30,6 +30,7 @@ and write down what was learned or changed. Keep entries short.
 | 6 | Read-only MCP server | done | #57 |
 | 7 | Configurable capture privacy | done | #58 |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
+| 9 | Groundedness: catch unsupported claims (hallucinations) | planned | |
 
 ## Step 1: health vs quality
 
@@ -147,6 +148,29 @@ spool and a circuit breaker.
   SDK exposes `stats()` locally).
 
 
+## Step 9: groundedness (hallucination check)
+
+Problem: Observer does not measure hallucinations. The judge's `output_quality` includes
+"accuracy", but it sees only the prompt and the reply, with no source to check them against: it
+catches an error it happens to know, not a plausible invented fact. Test cases catch a known wrong
+answer (`must_contain` / `must_not_contain`, a human label), not an unknown one.
+
+- A `groundedness` criterion in the rubric, scored by the judge: every factual claim of the reply
+  is checked against the context the agent had in that trace (the output of its tool spans:
+  retrieval, search, file reads, API results, plus the system and user input). Levels from
+  "every claim supported" to "contradicts the context"; the unsupported claims are listed in the
+  evaluation detail, short, as evidence.
+- No context in the trace (no tool spans, or a capture mode that kept no content): the criterion
+  is `unknown` with the reason, never a pass. A trace whose reply needs no source (a poem, a
+  greeting) can be marked not applicable by the rubric, not scored as grounded.
+- The context goes to the judge, so a cloud judge receives it; bounded size (truncate per tool
+  output, say how much was dropped) and the project's capture mode decide what can be sent.
+- Shown per model on Evaluations next to quality, and usable as a case expectation
+  (`groundedness >= level`) so a run can fail on it.
+- Done when: a trace whose reply invents a number absent from its tool output scores low with that
+  claim listed; the same reply with the number present in the tool output scores high; a trace
+  without context stays `unknown`; tests cover the three, plus one real run with a Meta judge.
+
 ## Reference comparison (documentation only)
 
 | Product | Worth learning from |
@@ -206,6 +230,12 @@ spool and a circuit breaker.
 - 2026-10-22 to 2026-10-26: one `compose.yaml` for Docker and Podman with configurable host ports
   (#68, #70), vite 8.3.5 (#69), release 0.2.0 (#74, see `CHANGELOG.md`), Explore, Alerts and
   Evaluations for any project with the `generic_turn@1` rubric (#75), publish fixes (#76, #77).
+- 2026-11-02/03: Meta models (#85, built during the Meta Global AI Developer Hackathon): calls
+  attributed to `meta` / `ollama` from the client's base URL, Muse Spark as judge with Meta's
+  prices, the judge now reads the span input and output it grades (it was grading empty text),
+  case text checks decided from the stored reply, Cases follows the project selector. Learned:
+  Muse Spark's reasoning tokens count against the cap, so the judge asks for minimal effort. Next:
+  step 9, since "accuracy" without a source cannot catch hallucinations.
 
 ## Later
 
@@ -213,6 +243,7 @@ Not scheduled; recorded here because the text above refers to this section.
 
 - Encrypt the SDK spool on disk and give it a maximum age.
 - Drop counters reported by the sender (what never reached the Observer).
-- Reply-text phrase checks stay `unknown` by operator decision (metadata-only export).
+- Reply-text phrase checks are decided when a trace stored its reply (#85); for Manitos they stay
+  `unknown` by operator decision (metadata-only export).
 - OTLP over gRPC.
 - The SQLite foreign keys and WAL are enabled per connection since 2026-10-17; the LLM judge should become an explicit opt-in.

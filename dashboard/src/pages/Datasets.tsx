@@ -6,17 +6,20 @@ import { Card, Chip, EmptyState, ErrorState, Skeleton } from '../components/ui';
 import RunsPanel from '../components/RunsPanel';
 import { timeAgo } from '../helpers/format';
 import { t } from '../i18n';
+import { useFilters } from '../context';
 
 const CHECK_LABEL: Record<string, string> = { tools: 'Herramientas', health: 'Salud', text: 'Texto' };
 
 function Datasets() {
+  const { project } = useFilters();
   const [datasets, setDatasets] = useState<DatasetSummary[] | null>(null);
   const [open, setOpen] = useState<DatasetDetail | null>(null);
   const [error, setError] = useState(false);
 
   const load = useCallback(() => {
-    api.listDatasets().then((d) => { setDatasets(d); setError(false); }).catch(() => setError(true));
-  }, []);
+    if (!project) return;
+    api.listDatasets(project).then((d) => { setDatasets(d); setOpen(null); setError(false); }).catch(() => setError(true));
+  }, [project]);
   useEffect(() => { load(); }, [load]);
 
   const show = (id: string) => api.getDataset(id).then(setOpen).catch(() => setOpen(null));

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Meta models
+- Added: Muse Spark (Meta Model API) as an LLM judge provider, `OBSERVATORY_JUDGE_PROVIDER=meta`,
+  with `reasoning_effort` `minimal` by default; an answer lost to reasoning is `judge_truncated`.
+- Added: Muse Spark prices (standard and contributor) from Meta's price page.
+- Fixed (Python SDK): calls made with the OpenAI client to the Meta Model API or to Ollama are
+  attributed to `meta` / `ollama` (from the base URL), not to `openai`; `server.address` is set.
+- Fixed: a call to a local provider (Ollama) costs 0 whatever the model is called.
+- Added: `examples/meta/compare.py` and [docs/meta.md](docs/meta.md).
+
+### Evaluations and test cases
+- Fixed: `POST /v1/evaluations/run` passed no span input or output to the judge, so quality and
+  instruction following were graded on empty text.
+- Added: text expectations of a case are checked against the trace's stored reply (previously
+  always unknown).
+- Added (Python SDK): `current_span()`.
+
 ## 0.2.0 — 2026-10-25
 
 First release since 0.1.1 (37 merged changes). Upgrading the SDKs is recommended: the 0.1.1

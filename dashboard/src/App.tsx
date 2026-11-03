@@ -43,7 +43,7 @@ const RANGES = [
 ];
 
 // Pages that read one project (the others keep their own scope).
-const PROJECT_PAGES = new Set(['/explore', '/alerts', '/evaluations']);
+const PROJECT_PAGES = new Set(['/explore', '/alerts', '/evaluations', '/datasets']);
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${

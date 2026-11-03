@@ -6,6 +6,10 @@
   ``OPENAI_API_KEY``.
 * ``openai-compatible``: any endpoint that speaks the OpenAI chat API, local ones included
   (``OBSERVATORY_JUDGE_BASE_URL=http://127.0.0.1:11434/v1`` for Ollama); the key is optional.
+* ``meta``: Muse Spark through the Meta Model API (OpenAI-compatible, ``https://api.meta.ai/v1``);
+  key ``OBSERVATORY_JUDGE_API_KEY``, ``META_API_KEY`` or ``MODEL_API_KEY``. Muse Spark reasons
+  before it answers and those tokens count against the cap, so the judge asks for
+  ``reasoning_effort`` ``minimal`` (``OBSERVATORY_JUDGE_REASONING_EFFORT`` changes it).
 * ``anthropic``: the official ``anthropic`` package (optional, ``pip install anthropic``);
   credentials as the SDK resolves them (``OBSERVATORY_JUDGE_API_KEY``, ``ANTHROPIC_API_KEY`` or a
   local profile).
@@ -21,8 +25,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-PROVIDERS = ("openai", "openai-compatible", "anthropic")
-_DEFAULT_MODEL = {"openai": "gpt-4o", "anthropic": "claude-opus-5-5"}
+PROVIDERS = ("openai", "openai-compatible", "meta", "anthropic")
+_DEFAULT_MODEL = {"openai": "gpt-4o", "meta": "muse-spark-1.3", "anthropic": "claude-opus-5-5"}
+_DEFAULT_BASE_URL = {"openai": "https://api.openai.com/v1", "meta": "https://api.meta.ai/v1"}
+# The judge answers with one line of JSON; this caps a runaway answer, not a normal one.
+_MAX_COMPLETION_TOKENS = 1024
+_META_REASONING = ("minimal", "low", "medium", "high", "xhigh")
 # Models that accept the server-side refusal fallback (Claude API).
 _FALLBACK_MODELS = {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
 
@@ -49,6 +57,8 @@ class JudgeConfig:
         key = api_key or os.getenv("OBSERVATORY_JUDGE_API_KEY") or None
         if provider == "openai":
             key = key or os.getenv("OPENAI_API_KEY") or None
+        elif provider == "meta":
+            key = key or os.getenv("META_API_KEY") or os.getenv("MODEL_API_KEY") or None
         elif provider == "anthropic":
             key = key or os.getenv("ANTHROPIC_API_KEY") or None
         return cls(
@@ -64,7 +74,7 @@ class JudgeConfig:
             return f"judge_provider_unknown:{self.provider[:40]}"
         if not self.model:
             return "judge_model_not_set"
-        if self.provider == "openai" and not self.api_key:
+        if self.provider in ("openai", "meta") and not self.api_key:
             return "judge_not_configured"
         if self.provider == "openai-compatible" and not self.base_url:
             return "judge_base_url_not_set"
@@ -78,7 +88,7 @@ def _status_retryable(status: int) -> bool:
 async def _openai_chat(config: JudgeConfig, system: str, user: str) -> str:
     import httpx
 
-    base = (config.base_url or "https://api.openai.com/v1").rstrip("/")
+    base = (config.base_url or _DEFAULT_BASE_URL.get(config.provider, "")).rstrip("/")
     headers = {"Content-Type": "application/json"}
     if config.api_key:
         headers["Authorization"] = f"Bearer {config.api_key}"
@@ -88,6 +98,10 @@ async def _openai_chat(config: JudgeConfig, system: str, user: str) -> str:
         "temperature": 0.0,
         "response_format": {"type": "json_object"},
     }
+    if config.provider == "meta":
+        body["max_completion_tokens"] = _MAX_COMPLETION_TOKENS
+        effort = (os.getenv("OBSERVATORY_JUDGE_REASONING_EFFORT") or "minimal").strip().lower()
+        body["reasoning_effort"] = effort if effort in _META_REASONING else "minimal"
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(f"{base}/chat/completions", headers=headers, json=body)
@@ -101,9 +115,17 @@ async def _openai_chat(config: JudgeConfig, system: str, user: str) -> str:
             f"judge_http_{response.status_code}", retryable=_status_retryable(response.status_code)
         )
     try:
-        return str(response.json()["choices"][0]["message"]["content"])
+        choice = response.json()["choices"][0]
+        content = choice["message"]["content"]
     except (ValueError, KeyError, IndexError, TypeError) as exc:
         raise JudgeUnavailableError("judge_malformed_response", retryable=False) from exc
+    if not content:
+        # a reasoning model can spend the whole cap thinking and return no answer
+        truncated = choice.get("finish_reason") == "length"
+        raise JudgeUnavailableError(
+            "judge_truncated" if truncated else "judge_empty_response", retryable=True
+        )
+    return str(content)
 
 
 async def _anthropic_message(config: JudgeConfig, system: str, user: str) -> str:

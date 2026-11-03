@@ -1,8 +1,9 @@
 """Check a test case's expectations against what a trace shows (pure, no I/O).
 
 Each check is ``pass``, ``fail`` or ``unknown``. ``unknown`` means the data to decide is not there
-(never silently a pass): Manitos does not export tool-call spans or reply text yet, so tool and
-text expectations stay unknown until it does.
+(never silently a pass): tool expectations need tool spans, and text expectations need the reply
+text, which the caller passes only when the trace stored it (Manitos exports neither yet). The reply
+is read to decide pass or fail and is never copied into a check.
 """
 
 from __future__ import annotations
@@ -14,8 +15,13 @@ def _check(kind: str, name: str, status: str, detail: str = "") -> dict[str, str
     return {"kind": kind, "name": name, "status": status, "detail": detail}
 
 
-def check_case(expect: dict[str, Any], observed: dict[str, Any]) -> dict[str, Any]:
-    """``{status, checks, unverified}`` for one case against one trace's observed metadata."""
+def check_case(
+    expect: dict[str, Any], observed: dict[str, Any], reply: str | None = None
+) -> dict[str, Any]:
+    """``{status, checks, unverified}`` for one case against one trace's observed metadata.
+
+    ``reply`` is the trace's final answer when it was stored; phrases match case-insensitively.
+    """
     checks: list[dict[str, str]] = []
     health = expect.get("health") or {}
     failed_run = observed.get("status") == "error" or observed.get("tool_error") is True
@@ -52,9 +58,15 @@ def check_case(expect: dict[str, Any], observed: dict[str, Any]) -> dict[str, An
             checks.append(_check("tools", f"forbidden:{name}", "fail" if name in seen else "pass"))
 
     text = expect.get("text") or {}
+    folded = reply.casefold() if isinstance(reply, str) else None
     for key in ("must_contain", "must_not_contain"):
         for phrase in text.get(key) or []:
-            checks.append(_check("text", f"{key}:{phrase}", "unknown", "reply text not exported"))
+            if folded is None:
+                checks.append(_check("text", f"{key}:{phrase}", "unknown", "no reply text"))
+                continue
+            found = phrase.casefold() in folded
+            ok = found if key == "must_contain" else not found
+            checks.append(_check("text", f"{key}:{phrase}", "pass" if ok else "fail"))
 
     statuses = [c["status"] for c in checks]
     if "fail" in statuses:

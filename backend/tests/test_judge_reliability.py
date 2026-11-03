@@ -39,7 +39,8 @@ def judge_http(monkeypatch):
 
 def _judge(monkeypatch, provider="openai", **env):
     for key in ("OBSERVATORY_JUDGE_PROVIDER", "OBSERVATORY_JUDGE_BASE_URL",
-                "OBSERVATORY_JUDGE_API_KEY", "OBSERVATORY_JUDGE_MODEL", "OPENAI_API_KEY"):
+                "OBSERVATORY_JUDGE_API_KEY", "OBSERVATORY_JUDGE_MODEL", "OPENAI_API_KEY",
+                "META_API_KEY", "MODEL_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("OBSERVATORY_JUDGE_PROVIDER", provider)
     for key, value in env.items():
@@ -111,6 +112,42 @@ async def test_openai_compatible_local_endpoint_needs_no_key(monkeypatch, judge_
     assert "authorization" not in seen[0].headers
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("key_var", ["META_API_KEY", "MODEL_API_KEY", "OBSERVATORY_JUDGE_API_KEY"])
+async def test_muse_spark_judges_through_the_meta_model_api(monkeypatch, judge_http, key_var):
+    state, seen = judge_http
+    state["handler"] = _answer("excellent")
+    result = await _judge(monkeypatch, "meta", **{key_var: "meta-key"}).evaluate("t", TRACE, [])
+    assert result.passed is True
+    assert result.details["judge"] == {"provider": "meta", "model": "muse-spark-1.3"}
+    assert str(seen[0].url) == "https://api.meta.ai/v1/chat/completions"
+    assert seen[0].headers["authorization"] == "Bearer meta-key"
+    body = json.loads(seen[0].content)
+    assert body["model"] == "muse-spark-1.3"
+    assert body["max_completion_tokens"] == 1024 and "max_tokens" not in body
+    assert body["reasoning_effort"] == "minimal"
+
+
+@pytest.mark.anyio
+async def test_an_answer_lost_to_reasoning_is_truncated_not_scored(monkeypatch, judge_http):
+    state, _ = judge_http
+    body = {"choices": [{"message": {"content": None}, "finish_reason": "length"}]}
+    state["handler"] = lambda request: httpx.Response(200, json=body)
+    result = await _judge(monkeypatch, "meta", META_API_KEY="k").evaluate("t", TRACE, [])
+    assert result.passed is None
+    assert {s["reason"] for s in result.details["skipped_criteria"]} == {"judge_truncated"}
+    assert all(s["retryable"] for s in result.details["skipped_criteria"])
+
+
+@pytest.mark.anyio
+async def test_meta_judge_without_a_key_is_not_configured(monkeypatch, judge_http):
+    _, seen = judge_http
+    result = await _judge(monkeypatch, "meta").evaluate("t", TRACE, [])
+    assert result.passed is None
+    assert {s["reason"] for s in result.details["skipped_criteria"]} == {"judge_not_configured"}
+    assert seen == []
+
+
 def test_configuration_problems_are_named(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert JudgeConfig("openai", "gpt-4o", None, None).problem() == "judge_not_configured"
@@ -136,6 +173,27 @@ async def test_summary_does_not_count_incomplete_evaluations_as_passed(client, m
     assert run.status_code == 200, run.text
     summary = (await client.get("/v1/evaluations/summary")).json()
     assert summary["incomplete"] == 1 and summary["passed"] == 0
+
+
+@pytest.mark.anyio
+async def test_the_judge_reads_the_stored_input_and_output_of_the_trace(
+    client, monkeypatch, judge_http
+):
+    state, seen = judge_http
+    state["handler"] = _answer("excellent")
+    _judge(monkeypatch, "meta", META_API_KEY="meta-key")
+    span = {"name": "llm", "span_type": "llm", "start_time": 1700000000.0,
+            "end_time": 1700000000.3, "status": "ok",
+            "input": {"messages": [{"role": "user", "content": "What is 17 times 23?"}]},
+            "output": {"content": "17 times 23 is 391."}}
+    trace = await client.post("/v1/traces/", json={
+        "name": "t", "start_time": 1700000000.0, "status": "ok", "spans": [span]})
+    body = {"trace_id": trace.json()["id"], "evaluator_type": "llm_judge", "criteria": []}
+    run = await client.post("/v1/evaluations/run", json=body)
+    assert run.status_code == 200, run.text
+    prompts = [json.loads(r.content)["messages"][1]["content"] for r in seen]
+    assert prompts, "the judge was not called"
+    assert any("What is 17 times 23?" in p and "391" in p for p in prompts)
 
 
 @pytest.mark.anyio
