@@ -89,10 +89,10 @@ def dataset(api: httpx.Client) -> tuple[str, list[str]]:
         if found["name"] == DATASET:
             items = api.get(f"/v1/datasets/{found['id']}").json()["items"]
             by_intent = {i["intent"]: i["id"] for i in items}
-            return found["id"], [by_intent[f"poema-{n}"] for n in range(len(CASES))]
+            return found["id"], [by_intent[f"poema-{n}"] for n in range(ARGS.cases)]
     ds = api.post("/v1/datasets", json={"name": DATASET, "project_id": PROJECT}).json()["id"]
     ids = []
-    for n, (_, _, word) in enumerate(CASES):
+    for n, (_, _, word) in enumerate(CASES[: ARGS.cases]):
         item = api.post(f"/v1/datasets/{ds}/items", json={
             "intent": f"poema-{n}",
             "expect": {"health": {"no_error": True}, "text": {"must_contain": [word]}},
@@ -118,19 +118,19 @@ def main() -> None:
             client, cap = client_for(model)
             traces[model] = []
             book.write(f"\n\n######## {model} ########\n")
-            for title, prompt, word in CASES:
+            for title, prompt, word in CASES[: ARGS.cases]:
                 started = time.monotonic()
                 trace_id, poem = poet(client, model, cap, prompt, word)
                 took = time.monotonic() - started
                 has_word = word.casefold() in poem.casefold()
-                print(f"{model:>16}  {took:5.1f}s  {'ok ' if has_word else 'BAD'}  {title}")
+                print(f"{model:<16} {took:5.1f}s  {'ok ' if has_word else 'BAD'}  {title}")
                 book.write(f"\n--- {title} · «{word}» · {took:.1f} s · traza {trace_id[:8]} ---\n")
                 book.write(poem + "\n")
                 book.flush()
                 traces[model].append(trace_id)
     tracer.shutdown()
     time.sleep(1)  # the backend stores the last batch
-    print(f"poemario: {out}")
+    print(f"poems written to {out}")
 
     ds, items = dataset(api)
     for model, trace_ids in traces.items():
@@ -140,15 +140,16 @@ def main() -> None:
             "results": [{"item_id": i, "trace_id": t} for i, t in zip(items, trace_ids)],
         })
         run.raise_for_status()
-        print(f"run {model}: pass rate {run.json()['summary'].get('pass_rate')}")
+        print(f"run {model:<16} pass rate {run.json()['summary'].get('pass_rate')}")
         if ARGS.judge:
             for trace_id in trace_ids:
                 graded = api.post("/v1/evaluations/run", json={
                     "trace_id": trace_id, "evaluator_type": "llm_judge", "criteria": []})
                 graded.raise_for_status()
                 details = graded.json()["result"]["details"]
-                print(f"  judge {trace_id[:8]}: score {graded.json()['score']} "
-                      f"{details.get('judge')} {details['evaluation_status']}")
+                judge = details.get("judge") or {}
+                print(f"  judged by {judge.get('model')}: {graded.json()['score']:.2f} "
+                      f"({details['evaluation_status']})")
 
 
 if __name__ == "__main__":
@@ -157,6 +158,7 @@ if __name__ == "__main__":
     parser.add_argument("--models", nargs="+", default=["llama3.2:3b", "muse-spark-1.3"])
     parser.add_argument("--max-tokens", type=int, default=400)
     parser.add_argument("--out", default="poemario.txt")
+    parser.add_argument("--cases", type=int, default=len(CASES), choices=range(1, len(CASES) + 1))
     parser.add_argument("--judge", action="store_true")
     ARGS = parser.parse_args()
     main()
