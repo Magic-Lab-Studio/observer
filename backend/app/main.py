@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
+from app.api import agent as agent_api
 from app.api import alerts as alerts_api
 from app.api import analytics, evaluations, manitos_ingest, providers, traces
 from app.api import dataset_runs as dataset_runs_api
@@ -171,6 +172,7 @@ app.include_router(
     tags=["governance"],
     dependencies=[_app_auth],
 )
+app.include_router(agent_api.router, prefix="/v1/agent", tags=["agent"], dependencies=[_app_auth])
 app.include_router(
     manitos_ingest.router,
     prefix="/v1/ingest/manitos",

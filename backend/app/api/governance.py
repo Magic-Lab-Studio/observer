@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import agent_contract
 from app.api.traces import _resolve_trace_id
 from app.db import DbSession
 from app.metrics_core import aware
@@ -53,9 +54,28 @@ CONTRACT_KEYS: dict[str, frozenset[str]] = {
     # ``status`` and ``latency_ms`` are what tool spans carried before the contract.
     "tool": frozenset({"tool.call_id", "tool.args_digest", "status", "latency_ms"}),
 }
+# The agent contract (observer.agent.v1) adds its keys to every type; ManitOS keys are unchanged.
+for _kind, _keys in agent_contract.KEYS.items():
+    CONTRACT_KEYS[_kind] = CONTRACT_KEYS.get(_kind, frozenset()) | _keys
+for _kind in list(CONTRACT_KEYS):
+    CONTRACT_KEYS[_kind] = CONTRACT_KEYS[_kind] | agent_contract.TURN_KEYS
+CONTRACT_KEYS["retriever"] = CONTRACT_KEYS["retrieval"]
 GOVERNANCE_TYPES = ("decision", "security", "approval", "skill")
 # Span types that make up a turn's governed path, in the order they normally happen.
-PATH_TYPES = ("decision", "security", "approval", "tool", "skill")
+PATH_TYPES = (
+    "decision",
+    "security",
+    "approval",
+    "tool",
+    "skill",
+    # agent contract steps (observer.agent.v1)
+    "retrieval",
+    "retriever",
+    "gate",
+    "verification",
+    "replan",
+    "close",
+)
 
 # Rows are filtered on their attributes in Python (JSON operators differ between SQLite and
 # Postgres); the scan per request is bounded so a long window cannot load the whole table.
@@ -315,9 +335,9 @@ async def turn_path(trace_id: str, session: AsyncSession = DbSession) -> dict[st
         (
             await session.execute(
                 select(Span)
-                .where(Span.trace_id == stored, Span.span_type.in_(PATH_TYPES))
+                .where(Span.trace_id == stored)
                 .order_by(Span.start_time, Span.id)
-                .limit(MAX_PATH_SPANS)
+                .limit(MAX_PATH_SPANS * 4)
             )
         )
         .scalars()
@@ -325,9 +345,17 @@ async def turn_path(trace_id: str, session: AsyncSession = DbSession) -> dict[st
     )
     steps = []
     for span in spans:
+        # a span can declare its contract type in observer.span.type, whatever was stored
+        kind = agent_contract.contract_type(span.span_type, span.attributes) or span.span_type
+        if kind not in PATH_TYPES:
+            continue
         row = _row(span, trace)
-        row["outcome"] = _outcome(span.span_type, row["attributes"], span.status)
+        row["span_type"] = kind
+        row["attributes"] = contract_attributes(kind, span.attributes)
+        row["outcome"] = _outcome(kind, row["attributes"], span.status)
         steps.append(row)
+        if len(steps) >= MAX_PATH_SPANS:
+            break
     asked = {
         s["attributes"].get("security.tool")
         for s in steps
@@ -356,4 +384,19 @@ def _outcome(span_type: str, attrs: dict[str, Any], status: str) -> str | None:
         return attrs.get("approval.result")
     if span_type == "skill":
         return attrs.get("skill.validation")
+    if span_type == "gate":
+        return attrs.get("gate.status")
+    if span_type == "close":
+        return attrs.get("close.kind")
+    if span_type in ("retrieval", "retriever"):
+        passages = attrs.get("retrieval.passages")
+        return None if passages is None else f"{passages} passages"
+    if span_type == "verification":
+        return "{}/{}/{}".format(
+            attrs.get("verification.claims_accepted", 0),
+            attrs.get("verification.claims_rejected", 0),
+            attrs.get("verification.claims_pruned", 0),
+        )
+    if span_type == "replan":
+        return attrs.get("replan.reason")
     return status

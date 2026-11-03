@@ -20,7 +20,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent_contract import OUTCOMES, UNKNOWN, codes, contract_type
 from app.models.trace import Span, Trace
+from app.outcomes import derive_outcome
 
 ROW_LIMIT = 20000
 _CHUNK = 500
@@ -48,6 +50,29 @@ METRICS: dict[str, dict[str, Any]] = {
         "label": "Proveedores sin cuota",
         "unit": "count",
         "kind": "quota",
+    },
+    # Outcomes of the agent contract (observer.agent.v1); every turn counts in the denominator,
+    # so the rates add up to 1 with outcome_unknown_rate. abstained_with_evidence_rate is a share
+    # of the abstentions.
+    "outcome_answered_rate": {"label": "Turnos respondidos", "unit": "ratio", "kind": "turns"},
+    "outcome_degraded_rate": {"label": "Turnos degradados", "unit": "ratio", "kind": "turns"},
+    "outcome_abstained_rate": {"label": "Turnos abstenidos", "unit": "ratio", "kind": "turns"},
+    "outcome_clarification_rate": {
+        "label": "Turnos que pidieron aclaración",
+        "unit": "ratio",
+        "kind": "turns",
+    },
+    "outcome_refused_rate": {"label": "Turnos rechazados", "unit": "ratio", "kind": "turns"},
+    "outcome_failed_rate": {"label": "Turnos fallidos", "unit": "ratio", "kind": "turns"},
+    "outcome_unknown_rate": {
+        "label": "Turnos sin resultado conocido",
+        "unit": "ratio",
+        "kind": "turns",
+    },
+    "abstained_with_evidence_rate": {
+        "label": "Abstenciones que tenían evidencia",
+        "unit": "ratio",
+        "kind": "turns",
     },
 }
 
@@ -77,6 +102,24 @@ class TurnSignals:
     # (start, model, provider) of the latest LLM span; used only when no Manitos span names a model
     llm_pick: tuple[datetime, str, str] | None = field(default=None, repr=False, compare=False)
     llm_truncated: bool = False
+    # Agent contract (observer.agent.v1): how the turn ended and why
+    outcome: str = UNKNOWN
+    outcome_source: str = "none"
+    outcome_reason: str = ""
+    retrieval_passages: int = 0
+    abstained_with_evidence: bool = False
+    gates: list[dict[str, Any]] = field(default_factory=list)
+    task: str = ""
+    # (is_root, end, outcome, reason) of the best span declaring observer.outcome
+    declared_outcome: tuple[bool, datetime, str, str] | None = field(
+        default=None, repr=False, compare=False
+    )
+    close_kind: str = ""
+    close_reason: str = ""
+    # (is_root, end) of the close span chosen so far
+    close_pick: tuple[bool, datetime] | None = field(default=None, repr=False, compare=False)
+    # (end, finish_reasons) of the LLM span that ended last
+    llm_last: tuple[datetime, list[str]] | None = field(default=None, repr=False, compare=False)
 
 
 def aware(value: datetime | None) -> datetime | None:
@@ -210,12 +253,8 @@ async def _signals_from_rows(session: AsyncSession, rows: list) -> list[TurnSign
         turns[signals.trace_id] = signals
     ids = list(turns)
     for i in range(0, len(ids), _CHUNK):
-        span_rows = await session.execute(
-            select(Span.trace_id, Span.name, Span.attributes, Span.status, Span.start_time).where(
-                Span.trace_id.in_(ids[i : i + _CHUNK])
-            )
-        )
-        for trace_id, name, attrs, status, start in span_rows.all():
+        span_rows = await session.execute(span_signal_query(ids[i : i + _CHUNK]))
+        for trace_id, name, attrs, status, start, parent, span_type, end in span_rows.all():
             signals = turns.get(str(trace_id))
             if signals is None:
                 continue
@@ -223,9 +262,91 @@ async def _signals_from_rows(session: AsyncSession, rows: list) -> list[TurnSign
             attrs = attrs if isinstance(attrs, dict) else {}
             _apply_span(signals, str(name), attrs)
             _apply_genai_span(signals, attrs, str(status or ""), aware(start))
+            _apply_agent_span(
+                signals,
+                attrs,
+                span_type=str(span_type or ""),
+                is_root=parent is None,
+                start=aware(start),
+                end=aware(end),
+            )
     for signals in turns.values():
         _finish(signals)
     return list(turns.values())
+
+
+def span_signal_query(trace_ids: list[str]):
+    """The span columns turn signals read: scalars only, never a span's input or output."""
+    return select(
+        Span.trace_id,
+        Span.name,
+        Span.attributes,
+        Span.status,
+        Span.start_time,
+        Span.parent_span_id,
+        Span.span_type,
+        Span.end_time,
+    ).where(Span.trace_id.in_(trace_ids))
+
+
+def _int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def _apply_agent_span(
+    signals: TurnSignals,
+    attrs: dict[str, Any],
+    *,
+    span_type: str,
+    is_root: bool,
+    start: datetime | None,
+    end: datetime | None,
+) -> None:
+    """The agent contract's attributes (``app.agent_contract``)."""
+    when = end or start or _EPOCH
+    declared = str(attrs.get("observer.outcome") or "").strip().lower()
+    if declared in OUTCOMES:
+        candidate = (is_root, when, declared, str(attrs.get("observer.outcome.reason") or "")[:160])
+        best = signals.declared_outcome
+        if best is None or (candidate[0], candidate[1]) >= (best[0], best[1]):
+            signals.declared_outcome = candidate
+    task = str(attrs.get("observer.task") or "").strip()[:80]
+    if task and (is_root or not signals.task):
+        signals.task = task
+    reasons = attrs.get("gen_ai.response.finish_reasons")
+    if isinstance(reasons, str):
+        reasons = [reasons]
+    if isinstance(reasons, list) and (
+        signals.llm_last is None or when >= signals.llm_last[0]
+    ):
+        signals.llm_last = (when, [str(r).lower() for r in reasons])
+    kind = contract_type(span_type, attrs)
+    if kind == "retrieval":
+        signals.retrieval_passages += max(0, _int(attrs.get("retrieval.passages")) or 0)
+    elif kind == "gate":
+        signals.gates.append(
+            {
+                "name": str(attrs.get("gate.name") or "")[:80],
+                "stage": str(attrs.get("gate.stage") or "")[:80],
+                "status": str(attrs.get("gate.status") or "").lower()[:10],
+                "reason_codes": codes(attrs.get("gate.reason_codes")),
+                "order": start.timestamp() if start else 0.0,
+            }
+        )
+    elif kind == "close":
+        pick = (is_root, when)
+        if signals.close_pick is None or pick >= signals.close_pick:
+            signals.close_pick = pick
+            signals.close_kind = str(attrs.get("close.kind") or "").strip().lower()
+            signals.close_reason = str(attrs.get("close.reason_code") or "")[:160]
 
 
 def _apply_span(signals: TurnSignals, name: str, attrs: dict[str, Any]) -> None:
@@ -288,6 +409,13 @@ def _finish(signals: TurnSignals) -> None:
         _, signals.model, signals.provider = signals.llm_pick
     if "manitos.turn.lifecycle" not in signals.seen_spans and signals.llm_truncated:
         signals.truncated = True
+    signals.outcome, signals.outcome_source, signals.outcome_reason = derive_outcome(signals)
+    signals.abstained_with_evidence = (
+        signals.outcome == "abstained" and signals.retrieval_passages > 0
+    )
+
+
+_OUTCOME_METRICS = {f"outcome_{o}_rate": o for o in (*OUTCOMES, UNKNOWN)}
 
 
 def compute_metric(
@@ -305,6 +433,18 @@ def compute_metric(
             "truncated_rate": sum(1 for s in signals if s.truncated),
         }[metric]
         return count / total, total
+    if metric in _OUTCOME_METRICS:
+        if not total:
+            return None, 0
+        wanted = _OUTCOME_METRICS[metric]
+        return sum(1 for s in signals if s.outcome == wanted) / total, total
+    if metric == "abstained_with_evidence_rate":
+        abstained = [s for s in signals if s.outcome == "abstained"]
+        if not abstained:
+            return None, 0
+        return sum(1 for s in abstained if s.abstained_with_evidence) / len(abstained), len(
+            abstained
+        )
     if metric in {"p50_latency_ms", "p95_latency_ms"}:
         durations = [s.duration_ms for s in signals if s.duration_ms is not None]
         p = 0.5 if metric == "p50_latency_ms" else 0.95
