@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -31,6 +32,18 @@ def test_check_case_with_only_unverifiable_expectations_is_unknown():
     res = check_case({"text": {"must_contain": ["x"]}}, {"status": "ok"})
     assert res["status"] == "unknown"
     assert check_case({}, {"status": "ok"})["status"] == "unknown"
+
+
+def test_text_expectations_are_checked_against_the_reply_when_there_is_one():
+    expect = {"text": {"must_contain": ["391"], "must_not_contain": ["sorry"]}}
+    res = check_case(expect, {"status": "ok"}, "17 times 23 is 391.")
+    assert {c["name"]: c["status"] for c in res["checks"]} == {
+        "must_contain:391": "pass", "must_not_contain:sorry": "pass"}
+    assert res["status"] == "pass" and res["unverified"] == 0
+    res = check_case(expect, {"status": "ok"}, "Sorry, I think it is 381.")
+    assert {c["name"]: c["status"] for c in res["checks"]} == {
+        "must_contain:391": "fail", "must_not_contain:sorry": "fail"}
+    assert all("381" not in c["detail"] for c in res["checks"])
 
 
 def test_forbidden_tool_present_fails_and_absent_passes_when_tools_are_known():
@@ -145,6 +158,38 @@ async def test_runs_are_checked_stored_and_compared(client, db_session):
     assert diff["summary"]["regressed"] == 1 and diff["cases"][0]["change"] == "regressed"
     assert diff["base"]["version"]["commit"] == "abc123"
     assert (await client.get(f"/v1/datasets/runs/{r1['id']}")).json()["results"][0]["trace_id"]
+
+
+@pytest.mark.anyio
+async def test_a_run_checks_the_reply_text_without_storing_it(client, db_session):
+    ds = (await client.post("/v1/datasets", json={"name": "math"})).json()["id"]
+    item = (await client.post(f"/v1/datasets/{ds}/items", json={
+        "expect": {"tools": {"required": ["calculate"]}, "text": {"must_contain": ["260400"]}},
+    })).json()["id"]
+    created = datetime.now(timezone.utc) - timedelta(minutes=5)
+    traces = {}
+    for name, answer in (("right", "That is 260400 requests."), ("wrong", "About 26,040.")):
+        trace = Trace(name="agent", start_time=created, status="ok", project_id="meta-compare",
+                      environment="test", created_at=created)
+        db_session.add(trace)
+        await db_session.flush()
+        root = Span(trace_id=trace.id, name="agent", span_type="agent", start_time=created,
+                    status="ok", out={"answer": answer})
+        db_session.add(root)
+        await db_session.flush()
+        db_session.add(Span(trace_id=trace.id, parent_span_id=root.id, name="calculate",
+                            span_type="tool", start_time=created, status="ok",
+                            out={"content": "260400"}))
+        traces[name] = trace.id
+    await db_session.commit()
+    results = {}
+    for name, trace_id in traces.items():
+        run = await client.post(f"/v1/datasets/{ds}/runs", json={
+            "name": name, "results": [{"item_id": item, "trace_id": trace_id}]})
+        assert run.status_code == 200, run.text
+        results[name] = run.json()["results"][0]
+    assert results["right"]["status"] == "pass" and results["wrong"]["status"] == "fail"
+    assert "26,040" not in json.dumps(results["wrong"])
 
 
 @pytest.mark.anyio

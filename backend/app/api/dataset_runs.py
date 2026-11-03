@@ -18,6 +18,7 @@ from app.api.datasets import _dataset, _observed
 from app.case_check import check_case, compare_results
 from app.db import DbSession
 from app.evaluators.manitos_turn import RUBRIC
+from app.models import Span
 from app.models.datasets import DatasetItem
 from app.models.runs import DatasetRun, RunResult
 
@@ -47,6 +48,31 @@ class RunIn(BaseModel):
     name: str | None = Field(None, max_length=120)
     version: Version = Field(default_factory=Version)
     results: list[CaseTrace] = Field(..., min_length=1, max_length=2000)
+
+
+def _text_of(value: Any) -> str | None:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("content", "answer", "text", "reply", "result"):
+            if isinstance(value.get(key), str):
+                return value[key]
+    return None
+
+
+async def _reply(session: AsyncSession, trace_id: str) -> str | None:
+    """The final answer of a trace: the output of its root span, when the capture mode kept it.
+
+    Read to check a case and then dropped; a run stores only pass or fail."""
+    row = (
+        await session.execute(
+            select(Span.out)
+            .where(Span.trace_id == trace_id, Span.parent_span_id.is_(None))
+            .order_by(Span.start_time)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return _text_of(row)
 
 
 def _run_dict(run: DatasetRun, results: list[RunResult] | None = None) -> dict[str, Any]:
@@ -115,7 +141,8 @@ async def create_run(
     stored: list[RunResult] = []
     for entry in body.results:
         observed, _ = await _observed(session, entry.trace_id)
-        checked = check_case(items[entry.item_id].expect, observed)
+        reply = await _reply(session, entry.trace_id)
+        checked = check_case(items[entry.item_id].expect, observed, reply)
         result = RunResult(
             run_id=run.id,
             item_id=entry.item_id,
