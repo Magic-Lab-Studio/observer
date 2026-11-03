@@ -10,7 +10,7 @@ const inputCls = 'w-full rounded-lg border border-line bg-panel px-3 py-1.5 text
 const labelCls = 'mb-1 block text-[11px] font-semibold uppercase tracking-wider text-faint';
 
 /** Saves a trace as a test case. Only metadata leaves the trace; the expectations are typed here. */
-export default function SaveAsCase({ traceId, onClose }: { traceId: string; onClose: () => void }) {
+export default function SaveAsCase({ traceId, project, onClose }: { traceId: string; project: string | null; onClose: () => void }) {
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [datasetId, setDatasetId] = useState('');
   const [newName, setNewName] = useState('');
@@ -21,8 +21,8 @@ export default function SaveAsCase({ traceId, onClose }: { traceId: string; onCl
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   useEffect(() => {
-    api.listDatasets().then((d) => { setDatasets(d); if (d[0]) setDatasetId(d[0].id); }).catch(() => setDatasets([]));
-  }, []);
+    api.listDatasets(project).then((d) => { setDatasets(d); if (d[0]) setDatasetId(d[0].id); }).catch(() => setDatasets([]));
+  }, [project]);
 
   const set = <K extends keyof CaseForm>(k: K, v: CaseForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   const expect = buildExpect(form);
@@ -32,7 +32,7 @@ export default function SaveAsCase({ traceId, onClose }: { traceId: string; onCl
   const save = async () => {
     setState('saving');
     try {
-      const id = creating ? (await api.createDataset(newName.trim())).id : datasetId;
+      const id = creating ? (await api.createDataset(newName.trim(), project)).id : datasetId;
       await api.addCase(id, {
         trace_id: traceId, tags: tags.split(',').map((x) => x.trim()).filter(Boolean), expect,
         label: label || null, notes: notes.trim() || null,

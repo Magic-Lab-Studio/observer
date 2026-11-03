@@ -97,7 +97,7 @@ function TraceDetail() {
         <p className="mt-1 font-mono text-[11px] text-faint">{trace.id} · {parseApiDate(trace.created_at).toLocaleString(localeTag())}</p>
       </div>
 
-      {saving && <SaveAsCase traceId={trace.id} onClose={() => setSaving(false)} />}
+      {saving && <SaveAsCase traceId={trace.id} project={trace.project_id} onClose={() => setSaving(false)} />}
 
       {diagnostics?.repeated_calls.map((g) => (
         <div key={`${g.parent_span_id}/${g.tool}/${g.span_ids[0]}`} role="status"
