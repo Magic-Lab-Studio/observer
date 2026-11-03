@@ -125,6 +125,18 @@ async def test_muse_spark_judges_through_the_meta_model_api(monkeypatch, judge_h
     body = json.loads(seen[0].content)
     assert body["model"] == "muse-spark-1.3"
     assert body["max_completion_tokens"] == 1024 and "max_tokens" not in body
+    assert body["reasoning_effort"] == "minimal"
+
+
+@pytest.mark.anyio
+async def test_an_answer_lost_to_reasoning_is_truncated_not_scored(monkeypatch, judge_http):
+    state, _ = judge_http
+    body = {"choices": [{"message": {"content": None}, "finish_reason": "length"}]}
+    state["handler"] = lambda request: httpx.Response(200, json=body)
+    result = await _judge(monkeypatch, "meta", META_API_KEY="k").evaluate("t", TRACE, [])
+    assert result.passed is None
+    assert {s["reason"] for s in result.details["skipped_criteria"]} == {"judge_truncated"}
+    assert all(s["retryable"] for s in result.details["skipped_criteria"])
 
 
 @pytest.mark.anyio
