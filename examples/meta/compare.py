@@ -140,7 +140,8 @@ def main() -> None:
             "results": [{"item_id": i, "trace_id": t} for i, t in zip(items, trace_ids)],
         })
         run.raise_for_status()
-        print(f"run {model:<16} pass rate {run.json()['summary'].get('pass_rate')}")
+        rate = run.json()["summary"].get("pass_rate")
+        print(f"run {model:<16} pass rate " + ("-" if rate is None else f"{rate:.0%}"))
         if ARGS.judge:
             for trace_id in trace_ids:
                 graded = api.post("/v1/evaluations/run", json={
@@ -155,7 +156,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--observer", default="http://127.0.0.1:8000")
+    parser.add_argument("--observer", default=os.getenv("OBSERVER_URL", "http://127.0.0.1:8000"))
     parser.add_argument("--models", nargs="+", default=["llama3.2:3b", "muse-spark-1.3"])
     parser.add_argument("--max-tokens", type=int, default=400)
     parser.add_argument("--out", default="poemario.txt")
