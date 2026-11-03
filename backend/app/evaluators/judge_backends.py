@@ -24,7 +24,7 @@ import os
 from dataclasses import dataclass
 
 PROVIDERS = ("openai", "openai-compatible", "meta", "anthropic")
-_DEFAULT_MODEL = {"openai": "gpt-4o", "meta": "muse-spark-1.1", "anthropic": "claude-opus-5-5"}
+_DEFAULT_MODEL = {"openai": "gpt-4o", "meta": "muse-spark-1.3", "anthropic": "claude-opus-5-5"}
 _DEFAULT_BASE_URL = {"openai": "https://api.openai.com/v1", "meta": "https://api.meta.ai/v1"}
 # The judge answers with one line of JSON; this caps a runaway answer, not a normal one.
 _MAX_COMPLETION_TOKENS = 1024

@@ -129,6 +129,10 @@ async def run_evaluation(
                 "id": str(s.id),
                 "name": s.name,
                 "span_type": s.span_type,
+                # what the span stored (already reduced by the project's capture mode): the
+                # judge's quality and instruction criteria grade this input and output
+                "input": s.inp,
+                "output": s.out,
                 "tokens_input": s.tokens_input,
                 "tokens_output": s.tokens_output,
                 "cost_usd": float(s.cost_usd) if s.cost_usd is not None else None,
