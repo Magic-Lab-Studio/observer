@@ -39,7 +39,8 @@ def judge_http(monkeypatch):
 
 def _judge(monkeypatch, provider="openai", **env):
     for key in ("OBSERVATORY_JUDGE_PROVIDER", "OBSERVATORY_JUDGE_BASE_URL",
-                "OBSERVATORY_JUDGE_API_KEY", "OBSERVATORY_JUDGE_MODEL", "OPENAI_API_KEY"):
+                "OBSERVATORY_JUDGE_API_KEY", "OBSERVATORY_JUDGE_MODEL", "OPENAI_API_KEY",
+                "META_API_KEY", "MODEL_API_KEY"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("OBSERVATORY_JUDGE_PROVIDER", provider)
     for key, value in env.items():
@@ -109,6 +110,30 @@ async def test_openai_compatible_local_endpoint_needs_no_key(monkeypatch, judge_
     assert result.passed is True
     assert str(seen[0].url) == "http://127.0.0.1:11434/v1/chat/completions"
     assert "authorization" not in seen[0].headers
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("key_var", ["META_API_KEY", "MODEL_API_KEY", "OBSERVATORY_JUDGE_API_KEY"])
+async def test_muse_spark_judges_through_the_meta_model_api(monkeypatch, judge_http, key_var):
+    state, seen = judge_http
+    state["handler"] = _answer("excellent")
+    result = await _judge(monkeypatch, "meta", **{key_var: "meta-key"}).evaluate("t", TRACE, [])
+    assert result.passed is True
+    assert result.details["judge"] == {"provider": "meta", "model": "muse-spark-1.1"}
+    assert str(seen[0].url) == "https://api.meta.ai/v1/chat/completions"
+    assert seen[0].headers["authorization"] == "Bearer meta-key"
+    body = json.loads(seen[0].content)
+    assert body["model"] == "muse-spark-1.1"
+    assert body["max_completion_tokens"] == 1024 and "max_tokens" not in body
+
+
+@pytest.mark.anyio
+async def test_meta_judge_without_a_key_is_not_configured(monkeypatch, judge_http):
+    _, seen = judge_http
+    result = await _judge(monkeypatch, "meta").evaluate("t", TRACE, [])
+    assert result.passed is None
+    assert {s["reason"] for s in result.details["skipped_criteria"]} == {"judge_not_configured"}
+    assert seen == []
 
 
 def test_configuration_problems_are_named(monkeypatch):

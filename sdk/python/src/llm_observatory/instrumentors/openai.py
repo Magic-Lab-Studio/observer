@@ -3,10 +3,38 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 from llm_observatory.instrumentors._patching import _as_method, _unwrap, record_exception
 from llm_observatory.pricing import calculate_cost
 from llm_observatory.tracer import Span, SpanStatus, get_tracer
+
+# The OpenAI client also talks to other providers' OpenAI-compatible endpoints. The provider is
+# read from the client's base URL so their calls are not counted as OpenAI's.
+_HOST_PROVIDERS = {"api.meta.ai": "meta", "api.openai.com": "openai"}
+_OLLAMA_PORT = 11434
+
+
+def provider_for_base_url(base_url: Any) -> tuple[str, str | None]:
+    """``(provider, server address)`` for a client base URL; ``openai`` when it is not known."""
+    try:
+        parts = urlsplit(str(base_url))
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except ValueError:
+        return "openai", None
+    if not host:
+        return "openai", None
+    if host in _HOST_PROVIDERS:
+        return _HOST_PROVIDERS[host], host
+    if port == _OLLAMA_PORT or "ollama" in host:
+        return "ollama", host
+    return "openai", host
+
+
+def _client_provider(inst: Any) -> tuple[str, str | None]:
+    client = getattr(inst, "_client", None)
+    return provider_for_base_url(getattr(client, "base_url", None) or "")
 
 
 class OpenAIInstrumentor:
@@ -40,17 +68,20 @@ class OpenAIInstrumentor:
             pass
 
     def _build_span(
-        self, model: str, messages: list[dict[str, Any]]
+        self, model: str, messages: list[dict[str, Any]], inst: Any = None
     ) -> tuple[Span, Any]:
-        """Build a span for an OpenAI call."""
+        """Build a span for a chat completion made with the OpenAI client."""
         tracer = get_tracer()
         span = tracer.start_span(
             name="openai.chat.completions.create",
             span_type="llm",
         )
         span.set_input({"model": model, "messages": messages})
-        span.set_attribute("gen_ai.system", "openai")
-        span.set_attribute("gen_ai.provider.name", "openai")
+        provider, server = _client_provider(inst)
+        span.set_attribute("gen_ai.system", provider)
+        span.set_attribute("gen_ai.provider.name", provider)
+        if server:
+            span.set_attribute("server.address", server)
         span.set_attribute("gen_ai.operation.name", "chat")
         span.set_attribute("gen_ai.request.model", model)
         return span, tracer
@@ -110,7 +141,7 @@ class OpenAIInstrumentor:
         model = kwargs.get("model", "unknown")
         messages = kwargs.get("messages", [])
 
-        span, _ = self._build_span(model, messages)
+        span, _ = self._build_span(model, messages, inst)
 
         try:
             result = self._original_sync_create(inst, *args, **kwargs)
@@ -125,7 +156,7 @@ class OpenAIInstrumentor:
         model = kwargs.get("model", "unknown")
         messages = kwargs.get("messages", [])
 
-        span, _ = self._build_span(model, messages)
+        span, _ = self._build_span(model, messages, inst)
 
         try:
             result = await self._original_async_create(inst, *args, **kwargs)
