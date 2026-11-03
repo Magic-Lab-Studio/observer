@@ -134,13 +134,14 @@ async def create_run(
         raise HTTPException(status_code=422, detail=f"cases not in this dataset: {unknown[:5]}")
     if len({r.item_id for r in body.results}) != len(body.results):
         raise HTTPException(status_code=422, detail="a case appears more than once")
-    version = {**body.version.model_dump(), "rubric": RUBRIC}
+    seen = [(entry, *(await _observed(session, entry.trace_id))) for entry in body.results]
+    rubrics = sorted({observed.get("rubric") or RUBRIC for _, observed, _ in seen})
+    version = {**body.version.model_dump(), "rubric": " + ".join(rubrics)}
     run = DatasetRun(dataset_id=dataset_id, name=body.name, version=version)
     session.add(run)
     await session.flush()
     stored: list[RunResult] = []
-    for entry in body.results:
-        observed, _ = await _observed(session, entry.trace_id)
+    for entry, observed, _ in seen:
         reply = await _reply(session, entry.trace_id)
         checked = check_case(items[entry.item_id].expect, observed, reply)
         result = RunResult(

@@ -189,6 +189,8 @@ async def test_a_run_checks_the_reply_text_without_storing_it(client, db_session
         assert run.status_code == 200, run.text
         results[name] = run.json()["results"][0]
     assert results["right"]["status"] == "pass" and results["wrong"]["status"] == "fail"
+    run = (await client.get(f"/v1/datasets/{ds}/runs")).json()[0]
+    assert run["version"]["rubric"] == "generic_turn@1"  # not a Manitos turn
     assert "26,040" not in json.dumps(results["wrong"])
 
 

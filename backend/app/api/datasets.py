@@ -14,7 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auto_eval import LIFECYCLE
 from app.db import DbSession
+from app.evaluators import generic_turn
+from app.evaluators.manitos_turn import RUBRIC as MANITOS_RUBRIC
 from app.evaluators.manitos_turn import score_turn
 from app.metrics_core import load_signals_for
 from app.models.datasets import Dataset, DatasetItem
@@ -149,8 +152,13 @@ async def _observed(session: AsyncSession, trace_id: str) -> tuple[dict[str, Any
         "tool_error": signals.tool_error,
         "fallback": signals.fallback,
         "tools": sorted(set(tool_spans)),
-        "health_score": score_turn(signals)["health"]["score"],
     }
+    # the rubric the automatic evaluations use for this trace: Manitos turns or any other agent
+    if LIFECYCLE in signals.seen_spans:
+        observed["rubric"], scored = MANITOS_RUBRIC, score_turn(signals)
+    else:
+        observed["rubric"], scored = generic_turn.RUBRIC, generic_turn.score_trace(signals)
+    observed["health_score"] = scored["health"]["score"]
     return observed, signals.intent or None
 
 
