@@ -148,8 +148,9 @@ def main() -> None:
                 graded.raise_for_status()
                 details = graded.json()["result"]["details"]
                 judge = details.get("judge") or {}
-                print(f"  judged by {judge.get('model')}: {graded.json()['score']:.2f} "
-                      f"({details['evaluation_status']})")
+                score = graded.json()["score"]
+                shown = "-" if score is None else f"{float(score):.2f}"
+                print(f"  judged by {judge.get('model')}: {shown} ({details['evaluation_status']})")
 
 
 if __name__ == "__main__":
