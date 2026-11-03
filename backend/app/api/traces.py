@@ -35,8 +35,10 @@ from app.limits import (
     bounded_json,
 )
 from app.loop_detection import min_repeats, repeated_calls
+from app.metrics_core import load_signals_for
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
+from app.outcomes import turn_outcome
 from app.ratelimit import limiter
 from app.trace_summary import fill_trace_identity, refresh_trace_summary
 from app.websocket import manager
@@ -683,15 +685,18 @@ async def get_trace_diagnostics(
     trace_id: str,
     session: AsyncSession = DbSession,
 ) -> dict:
-    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``)."""
+    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``) and how the
+    turn ended (outcome, source, reason; ``app.outcomes``)."""
     valid_id = await _resolve_trace_id(session, trace_id)
     if await session.get(Trace, valid_id) is None:
         raise HTTPException(status_code=404, detail="Trace not found")
     rows = (await session.execute(select(Span).where(Span.trace_id == valid_id))).scalars().all()
+    signals = (await load_signals_for(session, [valid_id]))[0]
     return {
         "trace_id": valid_id,
         "min_repeats": min_repeats(),
         "repeated_calls": repeated_calls(list(rows)),
+        **turn_outcome(signals),
     }
 
 
