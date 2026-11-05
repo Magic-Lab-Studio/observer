@@ -64,6 +64,7 @@ METRICS: dict[str, dict[str, Any]] = {
     },
     "outcome_refused_rate": {"label": "Turnos rechazados", "unit": "ratio", "kind": "turns"},
     "outcome_failed_rate": {"label": "Turnos fallidos", "unit": "ratio", "kind": "turns"},
+    "outcome_cancelled_rate": {"label": "Turnos cancelados", "unit": "ratio", "kind": "turns"},
     "outcome_unknown_rate": {
         "label": "Turnos sin resultado conocido",
         "unit": "ratio",

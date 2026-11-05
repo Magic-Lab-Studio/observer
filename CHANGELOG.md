@@ -25,6 +25,9 @@
 - Added (TypeScript SDK): agent contract attribute builders (`gateAttributes`, `closeAttributes`...).
 - Added (dashboard): the "why" panel on the trace page, outcome chips in the trace list (the list
   response gains `outcome`), and "How turns ended" on Overview.
+- Added: the outcome `cancelled` (`close.kind` `cancel`) for a turn the user or the caller stopped:
+  it no longer counts as `failed`; alert metric `outcome_cancelled_rate`, Explore measure
+  `cancelled`, a neutral tone in the dashboard. Additive: the contract stays `observer.agent.v1`.
 
 ## 0.2.0 — 2026-10-25
 

@@ -15,9 +15,9 @@ import {
 describe("agent contract attributes", () => {
   it("matches the backend's outcomes and close kinds", () => {
     expect([...OUTCOMES]).toEqual([
-      "answered", "degraded", "abstained", "clarification", "refused", "failed",
+      "answered", "degraded", "abstained", "clarification", "refused", "failed", "cancelled",
     ]);
-    expect([...CLOSE_KINDS]).toEqual(["answer", "clarify", "abstain", "refuse", "fail"]);
+    expect([...CLOSE_KINDS]).toEqual(["answer", "clarify", "abstain", "refuse", "fail", "cancel"]);
   });
 
   it("builds an abstention with its gate and close", () => {

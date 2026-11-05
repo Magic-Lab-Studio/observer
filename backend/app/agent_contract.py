@@ -4,7 +4,8 @@ An agent tells Observer *why* a turn ended the way it did with plain span attrib
 ingestion path (the SDK batch, OTLP, the ManitOS envelope):
 
 * the turn's **outcome** (``observer.outcome``: answered, degraded, abstained, clarification,
-  refused, failed) and its reason (``observer.outcome.reason``);
+  refused, failed, cancelled: stopped by the user or the caller, not a failure) and its reason
+  (``observer.outcome.reason``);
 * typed **agent spans**: ``decision``, ``tool``, ``retrieval``, ``gate``, ``verification``,
   ``replan`` and ``close``, each with a fixed set of keys.
 
@@ -18,7 +19,9 @@ from typing import Any
 
 VERSION = "observer.agent.v1"
 
-OUTCOMES = ("answered", "degraded", "abstained", "clarification", "refused", "failed")
+OUTCOMES = (
+    "answered", "degraded", "abstained", "clarification", "refused", "failed", "cancelled"
+)
 UNKNOWN = "unknown"
 
 # ``close.kind`` -> outcome
@@ -28,6 +31,7 @@ CLOSE_KINDS = {
     "abstain": "abstained",
     "refuse": "refused",
     "fail": "failed",
+    "cancel": "cancelled",
 }
 
 AGENT_SPAN_TYPES = ("decision", "tool", "retrieval", "gate", "verification", "replan", "close")

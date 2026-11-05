@@ -354,6 +354,8 @@ premium route can drive most of the spend.
 - 2026-11-03: phase 2 planned (steps 10-14) from product feedback on agent orchestrators and from cost-per-outcome accounting; step 9 made configurable per project
   (`off` / `rules` / `judge`). Suggested order: 10 (outcomes and spans are what 13 and 14 read),
   11 (adoption), 9, 12, 13, 14.
+- 2026-11-05: steps 10a and 10b merged (#88). Outcome `cancelled` added so a turn the user
+  stopped is not a failure (ManitOS reports its stop button this way).
 - 2026-11-05: step 11 built. A system's own JSONL events become traces through a YAML mapping
   (`observer-ingest`, `/v1/ingest/events`). Learned: batches must never split a trace, because a
   span's start and end must arrive together.
