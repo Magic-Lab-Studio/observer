@@ -440,6 +440,11 @@ def _get_global_tracer() -> Tracer:
     return _global_tracer
 
 
+def current_span() -> Span | None:
+    """The span open in this context (the one a ``@trace`` function runs in), or None."""
+    return _current_span.get()
+
+
 def get_tracer() -> Tracer:
     """Get the global tracer instance."""
     return _get_global_tracer()
