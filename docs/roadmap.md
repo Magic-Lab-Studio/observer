@@ -31,7 +31,7 @@ and write down what was learned or changed. Keep entries short.
 | 7 | Configurable capture privacy | done | #58 |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
 | 9 | Groundedness, configurable per project (hallucinations) | planned | |
-| 10 | Outcomes and an agent span contract (why it did not answer) | in progress | 10a: contract and backend |
+| 10 | Outcomes and an agent span contract (why it did not answer) | in progress | 10a: contract and backend; 10b: SDK helpers and dashboard |
 | 11 | Ingest the events a system already emits | planned | |
 | 12 | Non-determinism: same input, N runs | planned | |
 | 13 | Cost per outcome, not per token | planned | |

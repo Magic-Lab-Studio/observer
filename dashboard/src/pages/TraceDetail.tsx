@@ -5,6 +5,7 @@ import type { TraceDiagnostics, Trace, Span } from '../types';
 import TraceWaterfall from '../components/TraceWaterfall';
 import SpanDetail from '../components/SpanDetail';
 import SaveAsCase from '../components/SaveAsCase';
+import WhyPanel from '../components/WhyPanel';
 import { Card, Chip, EmptyState, ErrorState, Icon, Kpi, Skeleton, StatusPill } from '../components/ui';
 import { fmtInt, fmtMs, fmtUsd, stageLabel, stageTimings, traceDurationMs } from '../helpers/format';
 import { parseApiDate } from '../dates';
@@ -98,6 +99,8 @@ function TraceDetail() {
       </div>
 
       {saving && <SaveAsCase traceId={trace.id} onClose={() => setSaving(false)} />}
+
+      <WhyPanel info={diagnostics} />
 
       {diagnostics?.repeated_calls.map((g) => (
         <div key={`${g.parent_span_id}/${g.tool}/${g.span_ids[0]}`} role="status"

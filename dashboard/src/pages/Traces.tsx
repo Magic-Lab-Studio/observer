@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useFilters } from '../context';
 import type { Trace } from '../types';
+import OutcomeChip from '../components/OutcomeChip';
 import { Chip, EmptyState, ErrorState, Icon, Segmented, Skeleton, StatusDot } from '../components/ui';
 import { fmtInt, fmtMs, shortId, stageLabel, stageTimings, timeAgo, traceDurationMs } from '../helpers/format';
 import { t } from '../i18n';
@@ -124,6 +125,7 @@ function Traces() {
                     <td className="py-2.5 pl-4"><StatusDot status={t.status} /></td>
                     <td className="px-3 py-2.5">
                       <Link to={`/traces/${t.id}`} className="font-medium text-ink hover:text-accent">{t.name}</Link>
+                      <OutcomeChip outcome={t.outcome} />
                       <div className="font-mono text-[11px] text-faint">{shortId(t.turn_id, 12)}</div>
                     </td>
                     <td className="px-3 py-2.5">{t.environment ? <Chip>{t.environment}</Chip> : <span className="text-faint">–</span>}</td>

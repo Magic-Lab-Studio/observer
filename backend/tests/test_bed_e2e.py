@@ -28,3 +28,15 @@ async def test_bed_checks_hold(client, project, path, render, step):
     failed = [(label, detail) for label, ok, detail in
               await CHECKS[step](client, episodes, project, "test") if not ok]
     assert not failed, failed
+
+
+@pytest.mark.anyio
+async def test_sdk_helpers_reach_the_right_outcomes(client):
+    pytest.importorskip("llm_observatory.agent")
+    from orchestrator_bed.sdk_emit import check_sdk, to_sdk
+
+    body, truths = to_sdk("bed-sdk")
+    assert (await client.post("/v1/traces/batch", json=body)).status_code == 200
+    failed = [(label, detail) for label, ok, detail in await check_sdk(client, truths, "bed-sdk")
+              if not ok]
+    assert not failed, failed

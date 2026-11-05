@@ -62,8 +62,40 @@ Reason codes can be a list or a comma-separated string. Keep values short: a cod
 Argument values, passages and replies are content and belong in the span's input and output,
 where the capture mode decides what is stored.
 
+## From the SDKs
+
+Python, `llm_observatory.agent`: context managers that open a child span of the current one with
+the contract's type and keys, and keep it current while the block runs. An exception marks the
+span as an error and propagates.
+
+```python
+from llm_observatory import agent, trace
+
+@trace(name="turn", span_type="agent")
+def answer(question):
+    agent.set_task("support_answer")
+    with agent.decision("route", ["billing", "orders"]) as d:
+        d.choose("orders", rejected={"billing": "low_score"})
+    with agent.retrieval("kb") as r:
+        r.found(4, sources=["kb:12", "kb:40"])
+    with agent.gate("coverage") as g:
+        g.stop("coverage_below_min")      # a block that ends without a verdict passed
+    agent.close("abstain")                # or agent.outcome("answered") on the root span
+```
+
+Also `agent.tool_call(name, arg_names)` (`.result(size=, error_code=)`), `agent.verification()`
+(`.result(accepted, rejected, pruned, reason_codes)`), `agent.replan(reason)` and
+`agent.set_user(id)`. `Tracer(attributes={...})` adds attributes to every span.
+
+TypeScript: `outcomeAttributes`, `gateAttributes`, `decisionAttributes`, `retrievalAttributes`,
+`toolAttributes`, `verificationAttributes`, `replanAttributes` and `closeAttributes` return the
+keys (with `observer.span.type`) to merge into a span's attributes.
+
 ## Where it shows
 
+- **Dashboard:** a "why" panel on the trace page (outcome, source, reason, the gate that stopped
+  the turn), an outcome chip in the trace list, and "How turns ended" on Overview for the selected
+  project.
 - **`GET /v1/agent/turns?project_id=…&hours=…[&outcome=…]`**: each turn's outcome, source,
   reason, gates and retrieved passage count, plus the counts per outcome.
 - **`GET /v1/traces/{id}/diagnostics`**: the same fields for one trace, next to the repeated-call

@@ -161,3 +161,13 @@ async def test_turn_path_reads_the_declared_type_of_sdk_spans(client):
     steps = [(s["span_type"], s["outcome"]) for s in path["steps"]]
     assert steps == [("gate", "stop"), ("close", "refuse")]
     assert path["steps"][1]["attributes"]["observer.outcome.reason"] == "policy"
+
+
+@pytest.mark.anyio
+async def test_trace_listing_carries_each_turn_outcome(client):
+    tid, spans = _abstention(time.time() - 30)
+    await _ingest(client, spans)
+    listed = (await client.get(f"/v1/traces/?project_id={PROJECT}")).json()["traces"]
+    assert {t["id"]: t["outcome"] for t in listed}[tid] == "abstained"
+    single = (await client.get(f"/v1/traces/{tid}")).json()
+    assert single["id"] == tid

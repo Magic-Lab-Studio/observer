@@ -138,8 +138,8 @@ export function Chip({ children, tone = 'neutral' }: { children: ReactNode; tone
   return <span className={`inline-block rounded-md px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>{children}</span>;
 }
 
-export function Meter({ rate, tone }: { rate: number; tone?: 'bad' | 'warn' | 'accent' }) {
-  const color = { bad: 'bg-bad', warn: 'bg-warn', accent: 'bg-accent' }[tone ?? 'accent'];
+export function Meter({ rate, tone }: { rate: number; tone?: 'bad' | 'warn' | 'accent' | 'muted' }) {
+  const color = { bad: 'bg-bad', warn: 'bg-warn', accent: 'bg-accent', muted: 'bg-faint' }[tone ?? 'accent'];
   return (
     <div className="h-1.5 w-full rounded-full bg-raised overflow-hidden">
       <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, Math.max(rate > 0 ? 1.5 : 0, rate * 100))}%` }} />

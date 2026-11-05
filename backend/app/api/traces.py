@@ -165,6 +165,8 @@ class TraceResponse(BaseModel):
     status: str
     metadata: dict | None
     created_at: datetime
+    # how the turn ended (observer.agent.v1); filled in trace listings
+    outcome: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -519,9 +521,15 @@ async def list_traces(
     data_query = base_query.order_by(Trace.created_at.desc()).limit(limit).offset(offset)
     result = await session.execute(data_query)
     traces = list(result.scalars().all())
+    signals = await load_signals_for(session, [t.id for t in traces])
+    outcomes = {s.trace_id: s.outcome for s in signals}
+    listed = [
+        TraceResponse.model_validate(t).model_copy(update={"outcome": outcomes.get(str(t.id))})
+        for t in traces
+    ]
 
     return {
-        "traces": traces,
+        "traces": listed,
         "total": total,
         "limit": limit,
         "offset": offset,

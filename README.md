@@ -543,6 +543,28 @@ from llm_observatory.exporters.otlp import OTLPExporter
 tracer.add_exporter(OTLPExporter(endpoint="http://localhost:8000"))
 ```
 
+### Agent outcomes from the SDK
+
+`llm_observatory.agent` writes the agent span contract ([docs/agent-spans.md](docs/agent-spans.md)):
+
+```python
+from llm_observatory import agent, trace
+
+@trace(name="turn", span_type="agent")
+def answer(question):
+    with agent.retrieval("kb") as r:
+        r.found(len(passages), sources=[p.id for p in passages])
+    with agent.gate("coverage") as g:
+        if len(passages) < 2:
+            g.stop("coverage_below_min")
+            agent.close("abstain")
+            return None
+    ...
+    agent.outcome("answered")
+```
+
+`Tracer(attributes={...})` adds attributes to every span (a commit, a task).
+
 ### Supported providers
 
 | Provider   | Auto-instrument | Manual trace |
@@ -578,6 +600,10 @@ const result = await asyncTrace("summarize", async (span) => {
 const tracer = new Tracer({ serviceName: "my-app" });
 import { OTLPExporter } from "@magic-lab-studio/observer";
 tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
+
+// Agent contract attributes (docs/agent-spans.md)
+import { gateAttributes, closeAttributes } from "@magic-lab-studio/observer";
+Object.assign(span.attributes, gateAttributes({ name: "coverage", status: "stop", reasonCodes: ["coverage_below_min"] }));
 ```
 
 ## CLI

@@ -11,6 +11,12 @@
   `/v1/governance/turns/{id}`; Explore measures and dimensions; alert metrics
   `outcome_<outcome>_rate` and `abstained_with_evidence_rate`.
 - Added: `examples/orchestrator`, a synthetic orchestrator with planted answers, run in CI.
+- Added (Python SDK): `llm_observatory.agent` helpers (`outcome`, `gate`, `decision`, `retrieval`,
+  `tool_call`, `verification`, `replan`, `close`, `set_task`, `set_user`) and
+  `Tracer(attributes=...)`.
+- Added (TypeScript SDK): agent contract attribute builders (`gateAttributes`, `closeAttributes`...).
+- Added (dashboard): the "why" panel on the trace page, outcome chips in the trace list (the list
+  response gains `outcome`), and "How turns ended" on Overview.
 
 ## 0.2.0 — 2026-10-25
 
