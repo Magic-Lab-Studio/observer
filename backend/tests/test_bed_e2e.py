@@ -12,9 +12,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "examples" / "orchestrator"))
 
-from orchestrator_bed import CHECKS, build_episodes, to_batch, to_otlp  # noqa: E402
+from orchestrator_bed import CHECKS, build_episodes, to_batch, to_events, to_otlp  # noqa: E402
 
-FORMATS = [("bed-batch", "/v1/traces/batch", to_batch), ("bed-otlp", "/v1/otlp/v1/traces", to_otlp)]
+FORMATS = [("bed-batch", "/v1/traces/batch", to_batch), ("bed-otlp", "/v1/otlp/v1/traces", to_otlp),
+           ("bed-events", "/v1/ingest/events", to_events)]
 
 
 @pytest.mark.anyio

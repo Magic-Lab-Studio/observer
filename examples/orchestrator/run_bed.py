@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Send the synthetic orchestrator's episodes to a running Observer and check its answers.
 
-Each format goes to its own project (``bed-batch``: the SDK wire format; ``bed-otlp``: OTLP/JSON),
+Each format goes to its own project (``bed-batch``: the SDK wire format; ``bed-otlp``: OTLP/JSON;
+``bed-events``: the orchestrator's own JSON events with a mapping),
 then every registered check compares what Observer's public API says with the planted truth.
 
     python examples/orchestrator/run_bed.py --endpoint http://127.0.0.1:8000 [--check all]
@@ -23,11 +24,12 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from orchestrator_bed import CHECKS, build_episodes, to_batch, to_otlp
+from orchestrator_bed import CHECKS, build_episodes, to_batch, to_events, to_otlp
 from orchestrator_bed.sdk_emit import check_sdk, to_sdk
 
 FORMATS = {"batch": ("bed-batch", "/v1/traces/batch", to_batch),
-           "otlp": ("bed-otlp", "/v1/otlp/v1/traces", to_otlp)}
+           "otlp": ("bed-otlp", "/v1/otlp/v1/traces", to_otlp),
+           "events": ("bed-events", "/v1/ingest/events", to_events)}
 
 
 async def run(endpoint: str, api_key: str | None, formats: list[str], checks: list[str],
@@ -40,11 +42,18 @@ async def run(endpoint: str, api_key: str | None, formats: list[str], checks: li
     async with httpx.AsyncClient(base_url=endpoint, headers=headers, timeout=30) as api:
         for fmt in (f for f in formats if f != "sdk"):
             project, path, render = FORMATS[fmt]
-            r = await api.post(path, json=render(episodes, project=project, run=run_id, base_s=base))
+            body = render(episodes, project=project, run=run_id, base_s=base)
+            r = await api.post(path, json=body)
             ok = r.status_code == 200
             failures += not ok
             print(f"{'PASS' if ok else 'FAIL'}  sent {len(episodes)} episodes as {fmt}"
                   + ("" if ok else f"  [{r.status_code} {r.text[:200]}]"))
+            if fmt == "events" and ok:
+                again = (await api.post(path, json=body)).json()
+                same = again.get("accepted") == 0 and again.get("duplicates") == len(episodes)
+                failures += not same
+                print(f"{'PASS' if same else 'FAIL'}  sending the same events again stores nothing"
+                      + ("" if same else f"  [{again}]"))
         if "sdk" in formats:
             body, truths = to_sdk("bed-sdk")
             r = await api.post("/v1/traces/batch", json=body)
@@ -69,8 +78,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--endpoint", default="http://127.0.0.1:8000")
     parser.add_argument("--api-key", default=None)
-    parser.add_argument("--emit", default="batch,otlp,sdk",
-                        help="comma list: batch, otlp, sdk (the Python SDK helpers)")
+    parser.add_argument("--emit", default="batch,otlp,events,sdk",
+                        help="comma list: batch, otlp, events (JSON events + a mapping), sdk")
     parser.add_argument("--check", default="all", help="comma list of steps, or all")
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args(argv)

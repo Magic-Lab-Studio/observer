@@ -406,6 +406,14 @@ by outcome, and the alert metrics `outcome_<outcome>_rate` and `abstained_with_e
 (an abstention whose retrieval did find passages) watch them. Keys are metadata only, so they
 survive the `metadata` capture mode.
 
+### Events a system already emits
+
+A system that already logs JSON events (a job id, an event name, started/completed pairs) can be
+observed without new instrumentation. A YAML mapping says how events become traces, and
+`observer-ingest --mapping map.yaml --from events.jsonl --project my-agent [--dry-run]` sends them
+to `POST /v1/ingest/events`. Ingestion is idempotent, and fields the mapping does not name are
+never stored. See [docs/event-ingest.md](docs/event-ingest.md).
+
 ### Ingestion reliability
 
 The Python SDK exporter retries only what can succeed later (network errors, 408/425/429/5xx) with

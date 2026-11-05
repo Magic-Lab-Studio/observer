@@ -32,7 +32,7 @@ and write down what was learned or changed. Keep entries short.
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
 | 9 | Groundedness, configurable per project (hallucinations) | planned | |
 | 10 | Outcomes and an agent span contract (why it did not answer) | in progress | 10a: contract and backend; 10b: SDK helpers and dashboard |
-| 11 | Ingest the events a system already emits | planned | |
+| 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
 | 13 | Cost per outcome, not per token | planned | |
 | 14 | Gate funnel and critical path | planned | |
@@ -236,6 +236,12 @@ SDK instrumentors nor OTLP see them. Re-instrumenting is the main reason not to 
 - Done when: a JSONL file of a sample orchestrator becomes traces with the right parent/child
   structure, outcomes and timings; re-running it creates no duplicates; a field outside the mapping
   never reaches the database.
+- **Built (2026-11-05):** `app/event_mapping.py` (closed mapping, deterministic ids, partial spans
+  for steps that never ended), `POST /v1/ingest/events` through `apply_envelope`, and
+  `observer-ingest` with `--dry-run`. The bed's `bed-events` rendering passes step 10's outcome
+  checks and a new step 11 check: every step hangs from its root, and the unmapped field is
+  nowhere. A second send stores nothing. Loki and Azure exist only as the `EventSource`
+  interface; they are not built or verified. See [event-ingest.md](event-ingest.md).
 
 ## Step 12: non-determinism
 
@@ -350,6 +356,9 @@ premium route can drive most of the spend.
   11 (adoption), 9, 12, 13, 14.
 - 2026-11-05: steps 10a and 10b merged (#88). Outcome `cancelled` added so a turn the user
   stopped is not a failure (ManitOS reports its stop button this way).
+- 2026-11-05: step 11 built. A system's own JSONL events become traces through a YAML mapping
+  (`observer-ingest`, `/v1/ingest/events`). Learned: batches must never split a trace, because a
+  span's start and end must arrive together.
 
 ## Later
 
