@@ -399,7 +399,7 @@ tools `list_denials` and `list_decisions` read it.
 
 Any agent can say how a turn ended and why with the agent span contract `observer.agent.v1`
 ([docs/agent-spans.md](docs/agent-spans.md)): an outcome (`answered`, `degraded`, `abstained`,
-`clarification`, `refused`, `failed`) and typed spans (`decision`, `tool`, `retrieval`, `gate`,
+`clarification`, `refused`, `failed`, `cancelled`) and typed spans (`decision`, `tool`, `retrieval`, `gate`,
 `verification`, `replan`, `close`). Turns that declare nothing get an outcome derived on read, and
 `unknown` when there is no evidence. `/v1/agent/turns` lists outcomes and reasons, Explore groups
 by outcome, and the alert metrics `outcome_<outcome>_rate` and `abstained_with_evidence_rate`

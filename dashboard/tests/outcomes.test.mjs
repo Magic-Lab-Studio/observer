@@ -7,6 +7,7 @@ test('outcome tones: answered is good, failed is bad, not answering warns, unkno
   assert.equal(outcomeTone('failed'), 'bad');
   for (const o of ['degraded', 'abstained', 'clarification', 'refused']) assert.equal(outcomeTone(o), 'warn');
   assert.equal(outcomeTone('unknown'), 'neutral');
+  assert.equal(outcomeTone('cancelled'), 'neutral');  // stopped by the user, not a failure
   assert.equal(outcomeTone(undefined), 'neutral');
 });
 
