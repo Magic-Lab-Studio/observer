@@ -1,5 +1,6 @@
 """LLM Observatory Python SDK - Open-source LLM observability."""
 
+from llm_observatory import agent
 from llm_observatory.exporters.otlp import OTLPExporter
 from llm_observatory.instrumentors import instrument, uninstrument
 from llm_observatory.pricing import MODEL_PRICING, calculate_cost, get_model_pricing
@@ -8,6 +9,7 @@ from llm_observatory.tracer import (
     SpanStatus,
     TokenUsage,
     Tracer,
+    current_span,
     get_tracer,
     set_tracer,
     trace,
@@ -16,11 +18,13 @@ from llm_observatory.tracer import (
 __version__ = "0.2.0"
 
 __all__ = [
+    "agent",
     "Tracer",
     "Span",
     "SpanStatus",
     "TokenUsage",
     "trace",
+    "current_span",
     "get_tracer",
     "set_tracer",
     "instrument",

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Agent outcomes (roadmap step 10)
+- Added: the agent span contract `observer.agent.v1` (`docs/agent-spans.md`, `GET /v1/agent/contract`):
+  outcome attributes and typed `decision`, `tool`, `retrieval`, `gate`, `verification`, `replan`,
+  `close` spans, on every ingestion path; OTLP reads `observer.span.type`.
+- Added: each turn's outcome, source and reason derived on read (`unknown` without evidence);
+  `GET /v1/agent/turns`; outcome fields in `/v1/traces/{id}/diagnostics`; contract steps in
+  `/v1/governance/turns/{id}`; Explore measures and dimensions; alert metrics
+  `outcome_<outcome>_rate` and `abstained_with_evidence_rate`.
+- Added: `examples/orchestrator`, a synthetic orchestrator with planted answers, run in CI.
+- Added (Python SDK): `llm_observatory.agent` helpers (`outcome`, `gate`, `decision`, `retrieval`,
+  `tool_call`, `verification`, `replan`, `close`, `set_task`, `set_user`) and
+  `Tracer(attributes=...)`, and `current_span()`.
+- Added (TypeScript SDK): agent contract attribute builders (`gateAttributes`, `closeAttributes`...).
+- Added (dashboard): the "why" panel on the trace page, outcome chips in the trace list (the list
+  response gains `outcome`), and "How turns ended" on Overview.
+
 ## 0.2.0 — 2026-10-25
 
 First release since 0.1.1 (37 merged changes). Upgrading the SDKs is recommended: the 0.1.1

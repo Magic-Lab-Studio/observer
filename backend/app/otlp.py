@@ -23,6 +23,7 @@ import zlib
 from dataclasses import dataclass
 from typing import Any
 
+from app.agent_contract import contract_type
 from app.capture import MODES, filter_attributes
 
 MAX_BODY_BYTES = 16 * 1024 * 1024
@@ -152,6 +153,9 @@ def _safe_attributes(raw: dict[str, Any], mode: str) -> dict[str, Any]:
 
 
 def _span_type(attrs: dict[str, Any]) -> str:
+    declared = contract_type(None, attrs)
+    if declared:
+        return declared
     kind = str(attrs.get("openinference.span.kind") or "").upper()
     if kind in _OPENINFERENCE_KIND:
         return _OPENINFERENCE_KIND[kind]

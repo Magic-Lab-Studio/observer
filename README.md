@@ -242,7 +242,9 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/traces`                      | List traces (paginated)          |
 | `GET`    | `/v1/traces/{id}`                 | Get trace detail                 |
 | `GET`    | `/v1/traces/{id}/spans`           | Spans of a trace                 |
-| `GET`    | `/v1/traces/{id}/diagnostics`     | Repeated-tool-call (loop) warnings |
+| `GET`    | `/v1/traces/{id}/diagnostics`     | Repeated-tool-call (loop) warnings and the turn's outcome |
+| `GET`    | `/v1/agent/turns`                 | Outcome and reason of each turn of a project |
+| `GET`    | `/v1/agent/contract`              | The agent span contract (`observer.agent.v1`) |
 | `DELETE` | `/v1/traces/{id}`                 | Delete trace                     |
 | `POST`   | `/v1/traces/batch-delete`         | Bulk delete traces               |
 | `GET`    | `/v1/traces/{id}/evaluations`     | Evaluations for a trace          |
@@ -393,6 +395,17 @@ carry the paid list price as `cost.equivalent_usd`, which `/v1/analytics/cost-by
 input or output, and rebuilds one turn's path. The dashboard's **Gobernanza** page and the MCP
 tools `list_denials` and `list_decisions` read it.
 
+### Agent outcomes
+
+Any agent can say how a turn ended and why with the agent span contract `observer.agent.v1`
+([docs/agent-spans.md](docs/agent-spans.md)): an outcome (`answered`, `degraded`, `abstained`,
+`clarification`, `refused`, `failed`) and typed spans (`decision`, `tool`, `retrieval`, `gate`,
+`verification`, `replan`, `close`). Turns that declare nothing get an outcome derived on read, and
+`unknown` when there is no evidence. `/v1/agent/turns` lists outcomes and reasons, Explore groups
+by outcome, and the alert metrics `outcome_<outcome>_rate` and `abstained_with_evidence_rate`
+(an abstention whose retrieval did find passages) watch them. Keys are metadata only, so they
+survive the `metadata` capture mode.
+
 ### Ingestion reliability
 
 The Python SDK exporter retries only what can succeed later (network errors, 408/425/429/5xx) with
@@ -530,6 +543,28 @@ from llm_observatory.exporters.otlp import OTLPExporter
 tracer.add_exporter(OTLPExporter(endpoint="http://localhost:8000"))
 ```
 
+### Agent outcomes from the SDK
+
+`llm_observatory.agent` writes the agent span contract ([docs/agent-spans.md](docs/agent-spans.md)):
+
+```python
+from llm_observatory import agent, trace
+
+@trace(name="turn", span_type="agent")
+def answer(question):
+    with agent.retrieval("kb") as r:
+        r.found(len(passages), sources=[p.id for p in passages])
+    with agent.gate("coverage") as g:
+        if len(passages) < 2:
+            g.stop("coverage_below_min")
+            agent.close("abstain")
+            return None
+    ...
+    agent.outcome("answered")
+```
+
+`Tracer(attributes={...})` adds attributes to every span (a commit, a task).
+
 ### Supported providers
 
 | Provider   | Auto-instrument | Manual trace |
@@ -565,6 +600,10 @@ const result = await asyncTrace("summarize", async (span) => {
 const tracer = new Tracer({ serviceName: "my-app" });
 import { OTLPExporter } from "@magic-lab-studio/observer";
 tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
+
+// Agent contract attributes (docs/agent-spans.md)
+import { gateAttributes, closeAttributes } from "@magic-lab-studio/observer";
+Object.assign(span.attributes, gateAttributes({ name: "coverage", status: "stop", reasonCodes: ["coverage_below_min"] }));
 ```
 
 ## CLI

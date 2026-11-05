@@ -2,6 +2,8 @@
  * Shared TypeScript types for the LLM Observatory dashboard.
  */
 
+import type { OutcomeInfo } from './helpers/outcomes';
+
 export interface Trace {
   id: string;
   name: string;
@@ -16,6 +18,8 @@ export interface Trace {
   status: string;
   metadata: Record<string, unknown> | null;
   created_at: string;
+  /** How the turn ended (agent contract observer.agent.v1); filled in trace listings. */
+  outcome?: string | null;
 }
 
 export interface Span {
@@ -237,7 +241,7 @@ export interface RepeatedCalls {
   tool: string; parent_span_id: string | null; count: number; errors: number;
   arguments_known: boolean; same_output: boolean; span_ids: string[]; window_ms: number | null; severity: 'warning';
 }
-export interface TraceDiagnostics { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }
+export interface TraceDiagnostics extends OutcomeInfo { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }
 export interface ProjectInfo { project_id: string; trace_count: number; last_trace_at: string | null }
 
 // Governance views (/v1/governance): decision, security, approval and skill spans.

@@ -30,6 +30,12 @@ and write down what was learned or changed. Keep entries short.
 | 6 | Read-only MCP server | done | #57 |
 | 7 | Configurable capture privacy | done | #58 |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
+| 9 | Groundedness, configurable per project (hallucinations) | planned | |
+| 10 | Outcomes and an agent span contract (why it did not answer) | in progress | 10a: contract and backend; 10b: SDK helpers and dashboard |
+| 11 | Ingest the events a system already emits | planned | |
+| 12 | Non-determinism: same input, N runs | planned | |
+| 13 | Cost per outcome, not per token | planned | |
+| 14 | Gate funnel and critical path | planned | |
 
 ## Step 1: health vs quality
 
@@ -147,6 +153,139 @@ spool and a circuit breaker.
   SDK exposes `stats()` locally).
 
 
+## Step 9: groundedness (hallucination check)
+
+Problem: Observer does not measure hallucinations. The judge's `output_quality` includes
+"accuracy", but it sees only the prompt and the reply, with no source to check them against: it
+catches an error it happens to know, not a plausible invented fact. Test cases catch a known wrong
+answer (`must_contain` / `must_not_contain`, a human label), not an unknown one.
+
+- A `groundedness` criterion in the rubric, scored by the judge: every factual claim of the reply
+  is checked against the context the agent had in that trace (the output of its tool spans:
+  retrieval, search, file reads, API results, plus the system and user input). Levels from
+  "every claim supported" to "contradicts the context"; the unsupported claims are listed in the
+  evaluation detail, short, as evidence.
+- No context in the trace (no tool spans, or a capture mode that kept no content): the criterion
+  is `unknown` with the reason, never a pass. A trace whose reply needs no source (a poem, a
+  greeting) can be marked not applicable by the rubric, not scored as grounded.
+- The context goes to the judge, so a cloud judge receives it; bounded size (truncate per tool
+  output, say how much was dropped) and the project's capture mode decide what can be sent.
+- Shown per model on Evaluations next to quality, and usable as a case expectation
+  (`groundedness >= level`) so a run can fail on it.
+- **Configurable per project** (stored with the project's settings, editable on the Privacy page next
+  to the capture mode, and readable over the API):
+  - `mode`: `off` (default) · `rules` (no model: share of claims with a citation, number of sources,
+    citations that point to a source the trace really fetched) · `judge` · `rules+judge`.
+  - `context`: which spans count as evidence (span types, tool-name patterns, the system prompt or
+    not) and a size cap per span and per trace.
+  - `judge`: provider and model (a local judge keeps the context on the machine), and a sampling rate
+    so cost stays bounded on busy projects.
+  - `applies_to`: intents or tags that need a source; everything else is `not applicable`.
+  - `threshold` and an alert metric `ungrounded_rate`, plus a case expectation
+    (`groundedness >= level`).
+- Done when: a trace whose reply invents a number absent from its tool output scores low with that
+  claim listed; the same reply with the number present in the tool output scores high; a trace
+  without context stays `unknown`; `rules` mode needs no model; a project with `mode: off` sends
+  nothing anywhere; tests cover these, plus one real run with a model judge.
+
+## Phase 2: why the agent did not answer, and what each result cost
+
+Steps 10 to 14 come from two sources: product feedback on agent systems of a common shape (a
+planner that routes to specialists, tool search, verification gates, answers that may abstain or
+degrade, a model layer of their own instead of the OpenAI client, structured JSON events already
+emitted), and the shift in how teams account for agent spend (cost per shipped
+result instead of cost per token). The question they share is the one these systems ask most and
+answer worst: *why did the agent not answer, and was it worth what it cost?*
+
+What already exists and is reused: tool spans and repeated-call (loop) warnings, governance spans
+for one integration (decision, security, approval, skill: `/v1/governance`), `session.id` from
+OTLP, datasets, runs per version and the CI gate, capture modes per project, alerts with desktop
+notifications, and the price table.
+
+## Step 10: outcomes and an agent span contract
+
+Problem: a trace ends `ok` or `error`. An agent that abstained, asked for clarification, refused
+or answered degraded looks `ok`, so "why did it not answer?" means reading logs.
+
+- **Outcome per turn**: `answered`, `degraded`, `abstained`, `clarification`, `refused`,
+  `failed`, from an attribute the agent sets (`observer.outcome`) or derived by rules; rates over
+  time on Overview and Explore, and alert metrics for each (a jump in abstentions is an alert).
+- **An open span contract** (OTLP attributes plus SDK helpers), generalising the governance spans:
+  `decision` (candidates, chosen, rejected with reason), `tool` (name, argument names, result size,
+  error code), `retrieval` (passages, sources), `gate` (requirement, status, reason codes),
+  `verification` (claims accepted, rejected, pruned), `replan` / `close` (clarify, abstain,
+  refuse). Names and codes only by default; content follows the capture mode.
+- **"Abstained with evidence"**: a turn that abstained although its retrieval returned passages,
+  as a flag on the trace and an alert metric. It points at gates that are too strict.
+- Done when: a synthetic agent emitting each outcome and span type shows the reason for an
+  abstention on its trace page without reading content; the abstained-with-evidence alert fires
+  on a planted case; the contract is documented in `docs/agent-spans.md`.
+
+## Step 11: ingest the events a system already emits
+
+Problem: many production agents already write structured JSON events (`job_id`, event name,
+`duration_ms`, started/completed pairs) and call models through their own layer, so neither the
+SDK instrumentors nor OTLP see them. Re-instrumenting is the main reason not to adopt.
+
+- A declarative mapping in YAML: correlation keys (job, run, conversation), which event pairs form
+  a span, which fields become attributes, outcome and span type (step 10), and what is content.
+- Connectors that read: JSONL files first (also for backfill: observe last month without touching
+  the system), then Loki and Azure Log Analytics. Idempotent like `/v1/traces/batch`.
+- `observer-ingest --mapping map.yaml --from events.jsonl` with a dry run that prints the traces it
+  would create.
+- Done when: a JSONL file of a sample orchestrator becomes traces with the right parent/child
+  structure, outcomes and timings; re-running it creates no duplicates; a field outside the mapping
+  never reaches the database.
+
+## Step 12: non-determinism
+
+Problem: the same input passes once and fails the next time, and nobody can tell a flaky case from
+a broken one.
+
+- Run a case N times (`observer-replay --cases dataset.json --repeat 5 --endpoint URL`, which also
+  replays a JSONL of real sessions against an HTTP endpoint) and record each run.
+- Per case: the distribution of outcomes and check results, and an instability score (0 = always
+  the same, 1 = a coin flip). Per dataset: the share of unstable cases. The regression gate can
+  treat an unstable case apart from a regression.
+- Done when: a case answered correctly in 3 of 5 runs is reported as unstable with that
+  distribution, not as pass or fail; a deterministic case scores 0.
+
+## Step 13: cost per outcome, not per token
+
+Problem: Observer prices every call, but a cost per token measures consumption, not results.
+Retries, loops and failed turns cost the same as useful work, and a few heavy users or one
+premium route can drive most of the spend.
+
+- **Cost per outcome**: per answered turn, per passed case and per shipped change. A trace can
+  carry `vcs.commit` / `vcs.branch` / `vcs.change` (pull request) and a CI hook reports when a
+  change merged, so a project shows the cost per merged change next to its rework (cases that
+  regressed after it).
+- **Waste**: the share of spend on failed turns, retries, fallbacks and repeated calls (step 10
+  outcomes and the existing loop warning).
+- **Concentration**: cost per active user (`user.id`) and the share of the top 5%, because
+  averages over all users hide who drives spend.
+- **Routing**: spend and outcomes per model and task type, premium versus local, to see which work
+  could move to a cheaper or self-hosted model without losing outcomes (checked with a run, step
+  12, before switching).
+- **Owned capacity**: local models cost 0 per call today. A project can set a fully loaded hourly
+  cost per local provider (hardware amortisation, power, operation) so owned and rented capacity
+  compare on the same cost per outcome.
+- Alert metrics: spend per day, cost per outcome, waste share.
+- Done when: a project with merged and abandoned changes shows a cost per merged change that
+  excludes nothing silently; waste and top-5% share match a hand count on synthetic data; a local
+  provider with an hourly cost is no longer shown as free.
+
+## Step 14: gate funnel and critical path
+
+- **Gate funnel**: from step 10 gate spans, how many turns each gate stops (for example retrieval
+  -> coverage -> drafting -> verification -> publication) and with which reason codes, over time.
+- **Critical path**: how many model calls run one after another in a turn, their share of the
+  latency, and which ones have no dependency between them (candidates to run in parallel).
+- **Time budget per stage**: an expected duration per stage and the turns that exceed it.
+- Done when: a synthetic orchestrator with one over-strict gate shows that gate first in the funnel
+  with its reason code; a turn with sequential independent calls shows them as parallelisable with
+  their share of latency.
+
 ## Reference comparison (documentation only)
 
 | Product | Worth learning from |
@@ -206,6 +345,9 @@ spool and a circuit breaker.
 - 2026-10-22 to 2026-10-26: one `compose.yaml` for Docker and Podman with configurable host ports
   (#68, #70), vite 8.3.5 (#69), release 0.2.0 (#74, see `CHANGELOG.md`), Explore, Alerts and
   Evaluations for any project with the `generic_turn@1` rubric (#75), publish fixes (#76, #77).
+- 2026-11-03: phase 2 planned (steps 10-14) from product feedback on agent orchestrators and from cost-per-outcome accounting; step 9 made configurable per project
+  (`off` / `rules` / `judge`). Suggested order: 10 (outcomes and spans are what 13 and 14 read),
+  11 (adoption), 9, 12, 13, 14.
 
 ## Later
 
@@ -215,4 +357,14 @@ Not scheduled; recorded here because the text above refers to this section.
 - Drop counters reported by the sender (what never reached the Observer).
 - Reply-text phrase checks stay `unknown` by operator decision (metadata-only export).
 - OTLP over gRPC.
+- Conversations as an object: turn index, follow-ups, history state and one timeline per
+  conversation (today: `session.id` only).
+- Privacy per field: an allow-list of attributes, redaction or hashing per field, metadata only by
+  default and content capture per environment.
+- Correlation ids as first-class search (`job_id`, `run_id`, `conversation_id`, `trace_id`) with
+  links out to external logs.
+- An embeddable trace viewer (web component or iframe with a deep link to one turn).
+- Export to OTLP and Langfuse, and full OpenTelemetry `gen_ai.*` conventions on export.
+- Alert delivery to Slack and Teams (webhooks), beyond desktop notifications.
+- Tag every trace with the version (git SHA, manifest hash, branch), not only runs.
 - The SQLite foreign keys and WAL are enabled per connection since 2026-10-17; the LLM judge should become an explicit opt-in.

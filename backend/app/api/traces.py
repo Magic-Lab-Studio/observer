@@ -35,8 +35,10 @@ from app.limits import (
     bounded_json,
 )
 from app.loop_detection import min_repeats, repeated_calls
+from app.metrics_core import load_signals_for
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
+from app.outcomes import turn_outcome
 from app.ratelimit import limiter
 from app.trace_summary import fill_trace_identity, refresh_trace_summary
 from app.websocket import manager
@@ -163,6 +165,8 @@ class TraceResponse(BaseModel):
     status: str
     metadata: dict | None
     created_at: datetime
+    # how the turn ended (observer.agent.v1); filled in trace listings
+    outcome: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -517,9 +521,15 @@ async def list_traces(
     data_query = base_query.order_by(Trace.created_at.desc()).limit(limit).offset(offset)
     result = await session.execute(data_query)
     traces = list(result.scalars().all())
+    signals = await load_signals_for(session, [t.id for t in traces])
+    outcomes = {s.trace_id: s.outcome for s in signals}
+    listed = [
+        TraceResponse.model_validate(t).model_copy(update={"outcome": outcomes.get(str(t.id))})
+        for t in traces
+    ]
 
     return {
-        "traces": traces,
+        "traces": listed,
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -683,15 +693,18 @@ async def get_trace_diagnostics(
     trace_id: str,
     session: AsyncSession = DbSession,
 ) -> dict:
-    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``)."""
+    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``) and how the
+    turn ended (outcome, source, reason; ``app.outcomes``)."""
     valid_id = await _resolve_trace_id(session, trace_id)
     if await session.get(Trace, valid_id) is None:
         raise HTTPException(status_code=404, detail="Trace not found")
     rows = (await session.execute(select(Span).where(Span.trace_id == valid_id))).scalars().all()
+    signals = (await load_signals_for(session, [valid_id]))[0]
     return {
         "trace_id": valid_id,
         "min_repeats": min_repeats(),
         "repeated_calls": repeated_calls(list(rows)),
+        **turn_outcome(signals),
     }
 
 

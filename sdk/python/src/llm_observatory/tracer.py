@@ -133,6 +133,8 @@ class Tracer:
         max_queue_size: int = 10_000,
         max_kept_spans: int = 10_000,
         environment: str | None = None,
+        *,
+        attributes: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the tracer.
 
@@ -147,6 +149,8 @@ class Tracer:
             max_kept_spans: Spans kept in memory for ``export()``; the oldest are forgotten.
             environment: Deployment environment (``production``, ``staging``...), exported as
                 ``deployment.environment.name`` so the dashboard can filter by it.
+            attributes: Attributes every span carries (``vcs.commit``, ``observer.task``...);
+                a value the span sets itself wins.
         """
         self.service_name = service_name
         self.endpoint = endpoint
@@ -155,6 +159,7 @@ class Tracer:
         self.flush_interval = flush_interval
         self.max_queue_size = max_queue_size
         self.environment = environment
+        self.attributes = dict(attributes or {})
         self._spans: deque[Span] = deque(maxlen=max_kept_spans)
         self._exporters: list[Any] = []
         self._buffer: list[dict[str, Any]] = []
@@ -280,7 +285,7 @@ class Tracer:
         """Convert a span to a dictionary for export. The tracer's service and environment travel
         as OpenTelemetry resource attributes; the backend uses them to fill the trace's project
         and environment (a value the span sets itself wins)."""
-        attributes = {"service.name": self.service_name, **span.attributes}
+        attributes = {"service.name": self.service_name, **self.attributes, **span.attributes}
         if self.environment:
             attributes.setdefault("deployment.environment.name", self.environment)
         return {
@@ -433,6 +438,11 @@ def _get_global_tracer() -> Tracer:
     if _global_tracer is None:
         _global_tracer = Tracer()
     return _global_tracer
+
+
+def current_span() -> Span | None:
+    """The span open in this context (the one a ``@trace`` function runs in), or None."""
+    return _current_span.get()
 
 
 def get_tracer() -> Tracer:

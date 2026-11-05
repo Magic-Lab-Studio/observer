@@ -27,7 +27,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: python -m pip install ruff
-      - run: ruff check backend cli sdk/python
+      - run: ruff check backend cli sdk/python examples
 
   python-test:
     runs-on: ubuntu-latest
@@ -81,6 +81,7 @@ jobs:
           (cd backend && alembic upgrade head && (uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../backend.log 2>&1 &))
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
           python scripts/agent_scenarios.py --endpoint http://127.0.0.1:8000 --slow-seconds 2 || (cat backend.log; exit 1)
+          python examples/orchestrator/run_bed.py --endpoint http://127.0.0.1:8000 || (cat backend.log; exit 1)
 
   sqlite-migrations:
     runs-on: ubuntu-latest
