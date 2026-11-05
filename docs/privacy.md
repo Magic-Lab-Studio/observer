@@ -12,7 +12,8 @@ OTLP), so the guarantee does not depend on the sender.
 
 **Without a project mode** each path keeps its historical behaviour, so enabling this changes
 nothing by itself: the SDK routes and the Manitos exporter store what they send (Manitos only sends
-metadata), OTLP stores `metadata` (`OBSERVATORY_OTLP_CAPTURE`). `OBSERVATORY_CAPTURE_DEFAULT`
+metadata), OTLP stores `metadata` (`OBSERVATORY_OTLP_CAPTURE`), and so do mapped events
+(`OBSERVATORY_EVENTS_CAPTURE`, [event-ingest.md](event-ingest.md)). `OBSERVATORY_CAPTURE_DEFAULT`
 (`metadata` | `redacted` | `full`) overrides these defaults for every path.
 
 ## Setting a mode and checking it

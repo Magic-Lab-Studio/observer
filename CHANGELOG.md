@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Event ingestion (roadmap step 11)
+- Added: `POST /v1/ingest/events` and the `observer-ingest` command (`--dry-run`). A system's own
+  JSON events become traces through a closed YAML mapping: event pairs make spans, a field holds
+  the parent, fields become attributes, and content follows the capture mode
+  (`OBSERVATORY_EVENTS_CAPTURE`, default `metadata`). Ids are deterministic, so a resend stores
+  nothing. Fields the mapping does not name are never stored. See `docs/event-ingest.md`.
+- Added: the test bed's `bed-events` rendering and step 11 check (structure, unmapped field absent).
+
 ### Agent outcomes (roadmap step 10)
 - Added: the agent span contract `observer.agent.v1` (`docs/agent-spans.md`, `GET /v1/agent/contract`):
   outcome attributes and typed `decision`, `tool`, `retrieval`, `gate`, `verification`, `replan`,

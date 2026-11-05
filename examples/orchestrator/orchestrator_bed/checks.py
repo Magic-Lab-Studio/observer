@@ -45,4 +45,28 @@ async def check_outcomes(api: Any, episodes: list[Episode], project: str, run: s
     return out
 
 
-CHECKS: dict[str, Callable[..., Awaitable[list[Result]]]] = {"10": check_outcomes}
+async def check_structure(api: Any, episodes: list[Episode], project: str,
+                          run: str) -> list[Result]:
+    """Step 11: whatever the format, every step hangs from its episode's root, and a field the
+    sender's mapping did not name (``customer_note``) is nowhere in what Observer stored."""
+    from .events_emit import UNMAPPED_MARKER
+
+    out: list[Result] = []
+    for ep in episodes:
+        spans = (await api.get(f"/v1/traces/{trace_id(project, run, ep)}/spans")).json()
+        if not isinstance(spans, list) or len(spans) != len(ep.spans):
+            out.append((f"{project} {ep.key}: all spans stored", False,
+                        f"{len(spans) if isinstance(spans, list) else spans} != {len(ep.spans)}"))
+            continue
+        roots = [s for s in spans if s["parent_id"] is None]
+        children_ok = len(roots) == 1 and all(s["parent_id"] == roots[0]["id"]
+                                              for s in spans if s is not roots[0])
+        out.append((f"{project} {ep.key}: steps hang from the root", children_ok,
+                    str([(s["name"], s["parent_id"]) for s in spans])[:200]))
+        out.append((f"{project} {ep.key}: unmapped field not stored",
+                    UNMAPPED_MARKER not in str(spans) and "customer_note" not in str(spans), ""))
+    return out
+
+
+CHECKS: dict[str, Callable[..., Awaitable[list[Result]]]] = {"10": check_outcomes,
+                                                              "11": check_structure}
