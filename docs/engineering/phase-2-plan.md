@@ -6,8 +6,8 @@ test bed, and what "done" means for each delivery. Product reasons are in the ro
 ## Ground rules
 
 - **Branches.** One draft pull request per delivery, stacked: `docs/roadmap-agent-systems` ->
-  `feat/phase2-10a-outcomes` -> ... The stack sits on `feat/meta-model-api` (#85) and is retargeted
-  to `main` when that merges. Drafts are never merged or force-pushed by the author of the work.
+  `feat/phase2-10a-outcomes` -> ... The stack sits on `main`; the Meta work (#85) merges on
+  its own. Drafts are never merged or force-pushed by the author of the work.
 - **Contracts are additive.** No breaking change to `/v1/traces/batch`,
   `/v1/ingest/manitos/traces` (`manitos.telemetry.v1`) or the SDK APIs.
 - **Privacy.** New fields that can hold content follow the project's capture mode; names, codes
