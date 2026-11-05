@@ -51,9 +51,19 @@ def test_invalid_outcome_value_is_ignored():
 
 def test_close_kinds_map_to_outcomes():
     for kind, outcome in [("clarify", "clarification"), ("abstain", "abstained"),
-                          ("refuse", "refused"), ("answer", "answered"), ("fail", "failed")]:
+                          ("refuse", "refused"), ("answer", "answered"), ("fail", "failed"),
+                          ("cancel", "cancelled")]:
         s = _turn(_close(kind, "why"))
         assert (s.outcome, s.outcome_source, s.outcome_reason) == (outcome, "close", "why")
+
+
+def test_a_turn_the_user_stopped_is_cancelled_not_failed():
+    # the transport marks a stopped turn as an error; the agent's word decides
+    declared = _turn(({"observer.outcome": "cancelled", "observer.outcome.reason": "user_stop"},
+                      "agent", True, 0, 2), _llm(), status="error")
+    assert (declared.outcome, declared.outcome_reason) == ("cancelled", "user_stop")
+    closed = _turn(_llm(), _close("cancel", "user_stop"), status="error")
+    assert (closed.outcome, closed.outcome_source) == ("cancelled", "close")
 
 
 def test_error_trace_is_failed():

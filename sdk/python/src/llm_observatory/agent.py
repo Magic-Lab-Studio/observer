@@ -32,8 +32,10 @@ from typing import Any
 
 from llm_observatory.tracer import Span, SpanStatus, _current_span, _record_error, get_tracer
 
-OUTCOMES = ("answered", "degraded", "abstained", "clarification", "refused", "failed")
-CLOSE_KINDS = ("answer", "clarify", "abstain", "refuse", "fail")
+OUTCOMES = (
+    "answered", "degraded", "abstained", "clarification", "refused", "failed", "cancelled"
+)
+CLOSE_KINDS = ("answer", "clarify", "abstain", "refuse", "fail", "cancel")
 GATE_STATUSES = ("pass", "stop", "skip")
 
 

@@ -105,6 +105,11 @@ def outcome_episodes() -> list[Episode]:
         Episode("failed", [_root(1200, status="error"), _plan(),
                            _llm("llm", 130, 1100, finish="error", status="error")],
                 truth("failed", "status")),
+        # the user stopped it: the transport says error, the close step says why
+        Episode("cancelled", [_root(800, status="error"), _plan(),
+                              _llm("llm", 130, 790, finish="error", status="error"),
+                              _close("cancel", 792, "user_stop")],
+                truth("cancelled", "close", "user_stop")),
         Episode("declared", [_root(300, **{"observer.outcome": "answered",
                                            "observer.outcome.reason": "cache_hit"})],
                 truth("answered", "attribute", "cache_hit")),

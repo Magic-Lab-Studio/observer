@@ -13,7 +13,7 @@ ManitOS envelope. Every key is metadata (names, codes, counts, ids), so it is ke
 
 | Attribute | Value |
 |---|---|
-| `observer.outcome` | `answered`, `degraded`, `abstained`, `clarification`, `refused`, `failed` |
+| `observer.outcome` | `answered`, `degraded`, `abstained`, `clarification`, `refused`, `failed`, `cancelled` |
 | `observer.outcome.reason` | a short reason code, e.g. `coverage_below_min` |
 | `observer.task` | the kind of task, e.g. `support_answer` (an Explore dimension) |
 | `user.id` / `enduser.id` | an opaque user id |
@@ -23,8 +23,9 @@ In order, the first rule that applies wins:
 
 1. **`observer.outcome`** on a span. The root span's value wins; otherwise the span that ended
    last.
-2. The `kind` of a **`close`** span (`answer`, `clarify`, `abstain`, `refuse`, `fail`).
-3. A trace in **error** is `failed`.
+2. The `kind` of a **`close`** span (`answer`, `clarify`, `abstain`, `refuse`, `fail`, `cancel`).
+3. A trace in **error** is `failed`. A turn stopped by the user or the caller usually ends in
+   error too; declare it `cancelled` (rule 1 or 2) so it does not count as a failure.
 4. A **degraded** reply is `degraded`: the ManitOS degraded or truncated flags, or the **last**
    LLM span cut off by its token limit (`length` / `max_tokens`). An early cut-off the agent
    recovered from does not count.
@@ -103,7 +104,8 @@ keys (with `observer.span.type`) to merge into a span's attributes.
 - **`GET /v1/governance/turns/{id}`**: retrieval, gate, verification, replan and close steps in
   the turn's path, by stored type or by `observer.span.type`. ManitOS steps are unchanged.
 - **Explore** (turns view):
-  - measures `answered`, `abstained`, `clarification`, `refused`, `failed`, `outcome_degraded`
+  - measures `answered`, `abstained`, `clarification`, `refused`, `failed`, `cancelled`,
+    `outcome_degraded`
     and `abstained_with_evidence` (0/1 each);
   - dimensions `outcome`, `outcome_source` and `task`.
 - **Alert metrics:**

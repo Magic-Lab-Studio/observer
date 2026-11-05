@@ -118,5 +118,5 @@ def test_outcome_rejects_unknown_values_and_needs_a_span(tracer):
 
 def test_the_sdk_constants_match_the_contract():
     assert agent.OUTCOMES == (
-        "answered", "degraded", "abstained", "clarification", "refused", "failed")
-    assert agent.CLOSE_KINDS == ("answer", "clarify", "abstain", "refuse", "fail")
+        "answered", "degraded", "abstained", "clarification", "refused", "failed", "cancelled")
+    assert agent.CLOSE_KINDS == ("answer", "clarify", "abstain", "refuse", "fail", "cancel")

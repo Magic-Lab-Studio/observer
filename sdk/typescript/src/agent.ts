@@ -17,10 +17,11 @@ export const OUTCOMES = [
   "clarification",
   "refused",
   "failed",
+  "cancelled",
 ] as const;
 export type Outcome = (typeof OUTCOMES)[number];
 
-export const CLOSE_KINDS = ["answer", "clarify", "abstain", "refuse", "fail"] as const;
+export const CLOSE_KINDS = ["answer", "clarify", "abstain", "refuse", "fail", "cancel"] as const;
 export type CloseKind = (typeof CLOSE_KINDS)[number];
 
 export const AGENT_SPAN_TYPES = [

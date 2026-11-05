@@ -60,6 +60,7 @@ VIEWS: dict[str, ViewSpec] = {
             "clarification": "Pidió aclaración (0/1)",
             "refused": "Rechazado (0/1)",
             "failed": "Fallido (0/1)",
+            "cancelled": "Cancelado (0/1)",
             "abstained_with_evidence": "Abstención con evidencia (0/1)",
         },
         dimensions={
@@ -237,6 +238,7 @@ def turn_records(turns: list[TurnSignals]) -> list[dict[str, Any]]:
                 "clarification": 1.0 if s.outcome == "clarification" else 0.0,
                 "refused": 1.0 if s.outcome == "refused" else 0.0,
                 "failed": 1.0 if s.outcome == "failed" else 0.0,
+                "cancelled": 1.0 if s.outcome == "cancelled" else 0.0,
                 "abstained_with_evidence": 1.0 if s.abstained_with_evidence else 0.0,
             }
         )

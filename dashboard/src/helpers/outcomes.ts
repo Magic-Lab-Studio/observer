@@ -1,7 +1,7 @@
 // How a turn ended (agent contract observer.agent.v1): labels, tones and the "why" lines the
 // trace page shows. Pure functions; the Spanish text is the i18n key.
 
-export const OUTCOMES = ['answered', 'degraded', 'abstained', 'clarification', 'refused', 'failed', 'unknown'] as const;
+export const OUTCOMES = ['answered', 'degraded', 'abstained', 'clarification', 'refused', 'failed', 'cancelled', 'unknown'] as const;
 export type Outcome = (typeof OUTCOMES)[number];
 
 export const OUTCOME_LABEL: Record<string, string> = {
@@ -11,6 +11,7 @@ export const OUTCOME_LABEL: Record<string, string> = {
   clarification: 'Pidió aclaración',
   refused: 'Rechazado',
   failed: 'Fallido',
+  cancelled: 'Cancelado',
   unknown: 'Sin resultado conocido',
 };
 

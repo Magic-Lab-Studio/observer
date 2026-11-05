@@ -5,7 +5,8 @@ rules can improve without a backfill. In order, the first rule that applies wins
 
 1. ``observer.outcome`` on a span (the root span's value, else the one that ended last);
 2. the ``kind`` of a ``close`` span (``abstain`` -> abstained, ...);
-3. a trace in error -> ``failed``;
+3. a trace in error -> ``failed`` (a turn the user stopped is ``cancelled`` only when the agent
+   says so, with rule 1 or 2: the transport cannot tell a stop from a crash);
 4. a degraded reply -> ``degraded``: the ManitOS flags, or the last LLM span cut off by its
    token limit (an early cut-off the agent recovered from does not count);
 5. ``answered`` only with positive evidence: a ManitOS ``model.answered`` span, or the last LLM
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
 
 _ANSWER_FINISH = {"stop", "end_turn", "stop_sequence", "eos"}
 _CUT_FINISH = {"length", "max_tokens"}
-_NOT_ANSWERED = {"abstained", "clarification", "refused", "failed"}
+_NOT_ANSWERED = {"abstained", "clarification", "refused", "failed", "cancelled"}
 
 
 def derive_outcome(s: TurnSignals) -> tuple[str, str, str]:
