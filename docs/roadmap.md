@@ -30,7 +30,7 @@ and write down what was learned or changed. Keep entries short.
 | 6 | Read-only MCP server | done | #57 |
 | 7 | Configurable capture privacy | done | #58 |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
-| 9 | Groundedness, configurable per project (hallucinations) | planned | |
+| 9 | Groundedness, configurable per project (hallucinations) | in progress | `rules` mode built; the model judge not yet |
 | 10 | Outcomes and an agent span contract (why it did not answer) | in progress | 10a: contract and backend; 10b: SDK helpers and dashboard |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
@@ -187,6 +187,16 @@ answer (`must_contain` / `must_not_contain`, a human label), not an unknown one.
   claim listed; the same reply with the number present in the tool output scores high; a trace
   without context stays `unknown`; `rules` mode needs no model; a project with `mode: off` sends
   nothing anywhere; tests cover these, plus one real run with a model judge.
+
+- **Built (2026-11-05, `rules` mode):** `app/groundedness.py` and `project_configs`
+  (`/v1/projects/{id}/config/groundedness`), evaluations of type `groundedness`
+  (`groundedness@1`), `ungrounded_rate`, Explore view `groundedness`, the case expectation
+  `groundedness.min_level`, the Privacy page editor and the bed's step 9 check. See
+  `docs/groundedness.md`.
+- **Not built:**
+  - the `judge` modes: the judge must first receive the spans' input and output;
+  - sampling;
+  - one real run with a model judge.
 
 ## Phase 2: why the agent did not answer, and what each result cost
 
@@ -359,6 +369,10 @@ premium route can drive most of the spend.
 - 2026-11-05: step 11 built. A system's own JSONL events become traces through a YAML mapping
   (`observer-ingest`, `/v1/ingest/events`). Learned: batches must never split a trace, because a
   span's start and end must arrive together.
+- 2026-11-05: step 9 `rules` mode built (project configuration table, `ungrounded_rate`, Explore
+  view, case expectation, editor). Groundedness results got their own evaluator type, because
+  four readers took every `rule_based` row as a turn-health score. Learned: a URL at the end of a
+  sentence kept its full stop and read as a citation the trace never fetched.
 
 ## Later
 

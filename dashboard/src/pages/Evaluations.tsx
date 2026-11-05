@@ -16,8 +16,27 @@ const TYPES = [
   { label: 'LLM judge', value: 'llm_judge' },
   { label: 'Reglas', value: 'rule_based' },
   { label: 'Humana', value: 'human' },
+  { label: 'Sustento', value: 'groundedness' },
 ];
-const TYPE_NAME: Record<string, string> = { llm_judge: 'LLM judge', rule_based: 'Reglas', human: 'Humana' };
+const TYPE_NAME: Record<string, string> = { llm_judge: 'LLM judge', rule_based: 'Reglas', human: 'Humana', groundedness: 'Sustento' };
+const GROUNDED_LABEL: Record<string, string> = {
+  grounded: 'Con sustento', partial: 'Sustento parcial', ungrounded: 'Sin sustento',
+  unknown: 'Desconocido', not_applicable: 'No aplica',
+};
+const UNSUPPORTED_LABEL: Record<string, string> = {
+  invented_number: 'Número que las fuentes no contienen',
+  unfetched_source: 'Cita una fuente que la traza no leyó',
+  no_support: 'No se encontró respaldo en las fuentes',
+};
+
+interface GroundedResult {
+  rubric: string; status: string; reason?: string; score: number | null; claims?: number; supported?: number;
+  sources?: number; unsupported?: { claim: string; why: string; detail?: string }[]; unsupported_count?: number;
+}
+function groundedResult(e: Evaluation): GroundedResult | null {
+  const r = e.result as GroundedResult | null;
+  return r && typeof r.rubric === 'string' && r.rubric.startsWith('groundedness@') ? r : null;
+}
 
 const avg = (xs: Evaluation[]) => {
   const s = xs.filter((e) => e.score != null);
@@ -146,6 +165,24 @@ function Evaluations() {
         </Card>
       )}
 
+      {byModel?.groundedness && byModel.groundedness.count > 0 && (
+        <Card title={t('Sustento por modelo')}
+          subtitle={t('Afirmaciones de cada respuesta comparadas con lo que su traza leyó (modo reglas) · {n} respuestas, {u} sin poder juzgar', { n: fmtInt(byModel.groundedness.count), u: fmtInt(byModel.groundedness.unknown) })}
+          bodyClass="p-4">
+          <ul className="space-y-2.5">
+            {byModel.groundedness.models.slice(0, 8).map((m) => (
+              <li key={m.key} className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="min-w-0 truncate font-mono text-dim" title={m.key}>{m.key}</span>
+                <span className="shrink-0 text-ink">
+                  {m.avg_score != null ? m.avg_score.toFixed(2) : '–'} <span className="text-faint">{t('sustento medio')}</span>
+                  {' · '}{fmtPct(m.ungrounded_rate, 0)} <span className="text-faint">{t('sin sustento')} · {fmtInt(m.scored)}/{fmtInt(m.count)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {error ? <ErrorState message={error} onRetry={() => void fetchEvaluations(page * LIMIT)} /> : (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="space-y-4 min-w-0">
@@ -239,6 +276,25 @@ function Evaluations() {
                     </ul>
                   </div>
                 )}
+                {groundedResult(selected) && (() => {
+                  const g = groundedResult(selected) as GroundedResult;
+                  return (
+                    <div className="mb-4 text-xs">
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        <Chip tone={g.status === 'grounded' ? 'accent' : 'warn'}>{t(GROUNDED_LABEL[g.status] ?? g.status)}</Chip>
+                        {g.claims != null && <Chip>{t('{s} de {n} afirmaciones con sustento', { s: g.supported ?? 0, n: g.claims })}</Chip>}
+                        {g.sources != null && <Chip>{t('{n} fuentes', { n: g.sources })}</Chip>}
+                      </div>
+                      {(g.unsupported ?? []).length > 0 && (
+                        <ul className="space-y-1.5">
+                          {(g.unsupported ?? []).map((u, i) => (
+                            <li key={i} className="rounded-lg bg-canvas p-2"><span className="text-ink">{u.claim}</span><br /><span className="text-warn">{t(UNSUPPORTED_LABEL[u.why] ?? u.why)}{u.detail ? `: ${u.detail}` : ''}</span></li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })()}
                 {selected.criteria && !turnCriteria(selected) && <><h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-faint">{t("Criterios")}</h4>
                   <pre className="mb-3 max-h-60 overflow-auto rounded-lg bg-canvas p-3 text-xs text-dim">{JSON.stringify(selected.criteria, null, 2)}</pre></>}
                 {selected.result && <><h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-faint">{t("Resultado")}</h4>

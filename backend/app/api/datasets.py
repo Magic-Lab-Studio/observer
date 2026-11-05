@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import groundedness
 from app.db import DbSession
 from app.evaluators.manitos_turn import score_turn
 from app.metrics_core import load_signals_for
@@ -48,11 +49,17 @@ class TextExpect(BaseModel):
     must_not_contain: list[str] = Field(default_factory=list, max_length=20)
 
 
+class GroundednessExpect(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    min_level: Literal["partial", "grounded"] | None = None
+
+
 class Expect(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tools: ToolsExpect = Field(default_factory=ToolsExpect)
     health: HealthExpect = Field(default_factory=HealthExpect)
     text: TextExpect = Field(default_factory=TextExpect)
+    groundedness: GroundednessExpect = Field(default_factory=GroundednessExpect)
 
 
 class DatasetIn(BaseModel):
@@ -104,6 +111,8 @@ def checkable(expect: dict[str, Any]) -> list[str]:
         out.append("health")
     if expect["text"]["must_contain"] or expect["text"]["must_not_contain"]:
         out.append("text")
+    if (expect.get("groundedness") or {}).get("min_level"):
+        out.append("groundedness")
     return out
 
 
@@ -150,8 +159,19 @@ async def _observed(session: AsyncSession, trace_id: str) -> tuple[dict[str, Any
         "fallback": signals.fallback,
         "tools": sorted(set(tool_spans)),
         "health_score": score_turn(signals)["health"]["score"],
+        "groundedness": await _groundedness(session, trace, signals),
     }
     return observed, signals.intent or None
+
+
+async def _groundedness(session: AsyncSession, trace: Trace, signals: Any) -> dict[str, Any]:
+    """Status and score only (the claims stay in the evaluation): computed now under the
+    project's configuration, so a run can check it without waiting for the sweep."""
+    cfg = await groundedness.load_config(session, trace.project_id)
+    if cfg.mode == "off":
+        return {"status": "unknown", "reason": "off", "score": None}
+    result = await groundedness.evaluate_trace(session, trace, cfg, signals)
+    return {k: result.get(k) for k in ("status", "reason", "score")}
 
 
 async def _dataset(session: AsyncSession, dataset_id: str) -> Dataset:

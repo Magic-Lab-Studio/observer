@@ -22,6 +22,8 @@ class SpanSpec:
     parent: str | None = None  # key of the parent span; None for the root
     status: str = "ok"
     attrs: dict[str, Any] = field(default_factory=dict)
+    inp: dict[str, Any] | None = None  # content: only the SDK wire format (batch) carries it
+    out: dict[str, Any] | None = None
 
 
 @dataclass
@@ -120,9 +122,35 @@ def outcome_episodes() -> list[Episode]:
     ]
 
 
+ORDER_RECORD = ("Order 4471 shipped on 3 March from the Bogota warehouse. Its refund is 120 USD "
+                "and reaches the card in 14 days.")
+
+
+def groundedness_episodes() -> list[Episode]:
+    """Step 9: a reply that invents a number its tool output does not contain, and its correct
+    twin. Both answered; only the content tells them apart."""
+    def episode(key: str, refund: int, truth: dict[str, Any]) -> Episode:
+        reply = (f"Your order 4471 shipped on 3 March. The refund is {refund} USD and reaches "
+                 "your card in 14 days. Anything else?")
+        root = _root(1300)
+        root.inp, root.out = {"user": "when do I get my refund for 4471?"}, {"reply": reply}
+        tool = SpanSpec("tool", "orders.lookup", "tool", 130, 400, "root",
+                        attrs={"tool.name": "orders.lookup", "tool.arg_names": ["order_id"]},
+                        inp={"order_id": "4471"}, out={"record": ORDER_RECORD})
+        return Episode(key, [root, _plan(), tool, _llm("llm", 420, 1250)],
+                       {"outcome": "answered", "outcome_source": "evidence", "outcome_reason": "",
+                        "abstained_with_evidence": False, **truth})
+
+    return [episode("grounded_reply", 120, {}), episode("invented_number", 180, {})]
+
+
+# Planted groundedness of the step-9 episodes when content was stored (batch format).
+GROUNDEDNESS_TRUTH = {"grounded_reply": ("grounded", None), "invented_number": ("ungrounded", "180")}
+
+
 def build_episodes(seed: int = 7) -> list[Episode]:
     """Every planted episode, spaced a few seconds apart (``seed`` is reserved for variation)."""
-    episodes = outcome_episodes()
+    episodes = outcome_episodes() + groundedness_episodes()
     for i, ep in enumerate(episodes):
         ep.offset_s = i * 3.0
     return episodes

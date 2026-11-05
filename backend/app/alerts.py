@@ -198,6 +198,15 @@ async def evaluate_rules(session: AsyncSession, *, now: datetime | None = None) 
             if value is None:
                 continue  # the project never sent anything: nothing to be silent about
             samples, details = 1, {"project_id": rule.project_id}
+        elif spec["kind"] == "groundedness":
+            from app.groundedness import ungrounded_rate
+
+            value, samples = await ungrounded_rate(
+                session,
+                project_id=rule.project_id,
+                environment=rule.environment,
+                since=now - timedelta(minutes=int(rule.window_minutes)),
+            )
         elif spec["kind"] == "quota":
             value, samples, details = _quota_value(rule.scope or "")
             if value is None:

@@ -414,6 +414,20 @@ observed without new instrumentation. A YAML mapping says how events become trac
 to `POST /v1/ingest/events`. Ingestion is idempotent, and fields the mapping does not name are
 never stored. See [docs/event-ingest.md](docs/event-ingest.md).
 
+### Groundedness
+
+Does a reply stand on what its trace actually read? Per project, off by default. The `rules` mode
+calls no model:
+- a reply that cites a source the trace never fetched is unsupported;
+- so is one that states a number its tool outputs do not contain;
+- the share of supported claims is the score.
+
+Results appear per model on Evaluations and in an Explore view. The alert metric is
+`ungrounded_rate`, and a test case can expect `groundedness >= level`. Configure it on the Privacy
+page or with `PUT /v1/projects/{id}/config/groundedness`. Without stored content the result is
+`unknown`, never a pass. The model-judge mode is not built yet. See
+[docs/groundedness.md](docs/groundedness.md).
+
 ### Ingestion reliability
 
 The Python SDK exporter retries only what can succeed later (network errors, 408/425/429/5xx) with

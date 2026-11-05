@@ -16,6 +16,9 @@ metadata), OTLP stores `metadata` (`OBSERVATORY_OTLP_CAPTURE`), and so do mapped
 (`OBSERVATORY_EVENTS_CAPTURE`, [event-ingest.md](event-ingest.md)). `OBSERVATORY_CAPTURE_DEFAULT`
 (`metadata` | `redacted` | `full`) overrides these defaults for every path.
 
+Groundedness checks ([groundedness.md](groundedness.md)) read only content already stored, so a
+`metadata` project's traces come out `unknown`; nothing is sent anywhere.
+
 ## Setting a mode and checking it
 
 * Dashboard: **Privacy** page (mode per project, what is stored, "Apply to stored data").
