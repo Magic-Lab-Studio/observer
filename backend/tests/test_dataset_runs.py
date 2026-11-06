@@ -190,7 +190,8 @@ async def test_deleting_a_dataset_removes_its_runs(client, db_session):
 def test_text_phrases_are_checked_when_the_reply_text_is_given():
     expect = {"text": {"must_contain": ["14 usd", "Equipo"], "must_not_contain": ["no encontré"]}}
     reply = "El plan Equipo cuesta 14 USD por usuario al mes."  # case and narrow space ignored
-    by = {c["name"]: c["status"] for c in check_case(expect, {"status": "ok"}, reply=reply)["checks"]}
+    checks = check_case(expect, {"status": "ok"}, reply=reply)["checks"]
+    by = {c["name"]: c["status"] for c in checks}
     assert by == {"must_contain:14 usd": "pass", "must_contain:Equipo": "pass",
                   "must_not_contain:no encontré": "pass"}
     bad = check_case(expect, {"status": "ok"}, reply="No encontré el precio del plan.")
@@ -215,8 +216,8 @@ async def test_a_run_checks_text_phrases_against_the_stored_reply(client, db_ses
     listed = (await client.get("/v1/traces/?project_id=txt")).json()["traces"]
     ids = {t["name"]: t["id"] for t in listed}  # opaque ids are stored as stable UUIDs
     ds = (await client.post("/v1/datasets", json={"name": "t", "project_id": "txt"})).json()["id"]
-    item = (await client.post(f"/v1/datasets/{ds}/items", json={
-        "trace_id": ids["txt-good"], "expect": {"text": {"must_contain": ["14 USD"]}}})).json()["id"]
+    case = {"trace_id": ids["txt-good"], "expect": {"text": {"must_contain": ["14 USD"]}}}
+    item = (await client.post(f"/v1/datasets/{ds}/items", json=case)).json()["id"]
     runs = {}
     for name, tid in (("good", ids["txt-good"]), ("bad", ids["txt-bad"])):
         r = await client.post(f"/v1/datasets/{ds}/runs",
