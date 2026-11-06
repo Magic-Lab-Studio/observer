@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Overview from the server (external evaluation B5)
+- Added: `GET /v1/analytics/overview`. It returns the activity buckets, latency histogram, slowest
+  traces and stage timings of every trace that started in the range, with the dashboard's own
+  rules (start-time placement, nearest-rank percentiles, the same histogram edges). Capped at
+  20 000 traces, and it says when it was.
+- Added: `GET /v1/analytics/environments`.
+- Changed (dashboard): the Overview's histogram, slowest list, stage card and generic activity
+  chart come from that route. Before, they came from the last 1 000 traces loaded in the browser,
+  so a busy 7-day range was a sample. The dashboard now loads only the 50 latest traces, for the
+  recent list and the "new" flash.
+
 ### External evaluation follow-up (findings P2 and P5)
 - Fixed (TypeScript SDK): every exported span now carries `service.name` (the trace's project),
   and `deployment.environment.name` when `environment` is set. Shared `attributes` behave as in

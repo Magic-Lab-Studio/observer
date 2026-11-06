@@ -7,7 +7,9 @@ import { PROJECT_KEY, PROJECT_PARAM, cleanProject, pickProject } from './helpers
 import { t } from './i18n';
 import type { ProjectInfo, Trace } from './types';
 
-export const SAMPLE_LIMIT = 1000;
+// The latest traces, for the recent list and the "new" flash on Traces. The Overview's
+// distributions come from the server over the whole range (evaluation B5), not from this sample.
+export const SAMPLE_LIMIT = 50;
 
 interface Ctx {
   hours: number;
@@ -74,8 +76,10 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   const known = useRef<Set<string>>(new Set());
   const timer = useRef<ReturnType<typeof setTimeout>>();
 
+  const [environments, setEnvironments] = useState<string[]>([]);
   const loadProjects = useCallback(() => {
     api.listProjects().then(setProjects).catch(() => setProjects((prev) => prev ?? []));
+    api.listEnvironments().then(setEnvironments).catch(() => undefined);
   }, []);
 
   const load = useCallback(async () => {
@@ -133,10 +137,6 @@ export function FilterProvider({ children }: { children: ReactNode }) {
     }, [load]),
   });
 
-  const environments = useMemo(
-    () => Array.from(new Set(sample.map((t) => t.environment).filter((e): e is string => !!e))).sort(),
-    [sample],
-  );
 
   const value = useMemo<Ctx>(() => {
     const now = Date.now();

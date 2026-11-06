@@ -11,11 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cost import EQUIVALENT_KEY, classify, estimate
 from app.db import DbSession
-from app.metrics_core import aware, percentile
+from app.metrics_core import ROW_LIMIT, aware, percentile
 from app.metrics_query import QueryError, QueryRequest, run_query
 from app.metrics_query import schema as query_schema
 from app.models.evaluation import Evaluation
 from app.models.trace import Span, Trace
+from app.overview import summarize as summarize_overview
 
 # Spans whose "model" attribute names the model that answered, best first (see manitos_quality).
 _MODEL_SPAN_PRIORITY = {"model.answered": 0, "manitos.turn.lifecycle": 1}
@@ -515,6 +516,56 @@ async def list_projects(
         }
         for project_id, count, last_at in rows
     ]
+
+
+@router.get("/overview")
+async def overview(
+    hours: int = Query(24, ge=1, le=720),
+    buckets: int = Query(48, ge=6, le=120),
+    project_id: str | None = Query(None, min_length=1, max_length=128),
+    environment: str | None = Query(None, min_length=1, max_length=64),
+    session: AsyncSession = DbSession,
+) -> dict:
+    """Activity buckets, latency histogram, slowest traces and stage timings of every trace that
+    started in the range (evaluation B5), computed with the dashboard's own rules. Without
+    ``project_id`` every project counts, like the rest of the Overview."""
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(hours=hours)
+    query = (
+        select(
+            Trace.id,
+            Trace.name,
+            Trace.turn_id,
+            Trace.status,
+            Trace.start_time,
+            Trace.end_time,
+            Trace.meta,
+        )
+        .where(Trace.start_time >= start)
+        .order_by(Trace.start_time.desc())
+        .limit(ROW_LIMIT + 1)
+    )
+    if project_id:
+        query = query.where(Trace.project_id == project_id)
+    if environment:
+        query = query.where(Trace.environment == environment)
+    rows = (await session.execute(query)).all()
+    truncated = len(rows) > ROW_LIMIT
+    return summarize_overview(
+        rows[:ROW_LIMIT], start=start, end=end, buckets=buckets, truncated=truncated
+    )
+
+
+@router.get("/environments")
+async def list_environments(
+    project_id: str | None = Query(None, min_length=1, max_length=128),
+    session: AsyncSession = DbSession,
+) -> list[str]:
+    """Environments that have traces (the dashboard's environment filter)."""
+    query = select(Trace.environment).where(Trace.environment.is_not(None)).distinct()
+    if project_id:
+        query = query.where(Trace.project_id == project_id)
+    return sorted(str(e) for e in (await session.execute(query.limit(200))).scalars() if e)
 
 
 @router.get("/query/schema")

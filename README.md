@@ -264,6 +264,8 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/sessions`          | Unique sessions with stats       |
 | `GET`    | `/v1/analytics/manitos-quality`   | Integration quality and latency   |
 | `GET`    | `/v1/analytics/projects`          | Projects with traces, newest first |
+| `GET`    | `/v1/analytics/overview`          | Overview buckets, latency histogram, slowest traces and stage timings over every trace in range |
+| `GET`    | `/v1/analytics/environments`      | Environments that have traces |
 | `GET`    | `/v1/providers/`                  | LLM provider chain statistics     |
 | `GET`    | `/v1/providers/models`            | Per-model calls, errors, latency, tokens, cost |
 | `POST`   | `/v1/providers/snapshot`          | Provider configuration snapshot   |

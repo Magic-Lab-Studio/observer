@@ -13,7 +13,7 @@ Findings, root causes and tests per finding: [observer-findings-matrix.md](obser
   M1–M6, B1, plus the parent foreign-key defect) → 3 generic analytics and dashboard (C3, M7,
   B2–B4) → A6 pricing (moved ahead of the docs milestone so the scenarios could pass end to end)
   → 4 decoupling (P1–P3) → 5 docs (D1–D5) → 6 evaluation (P4–P6) → CI gates.
-* **Deferred:** B5 (partial), D6 (assessed only).
+* **Deferred:** D6 (assessed only). B5 closed on 2026-11-05.
 
 ### Architectural decisions
 
@@ -91,7 +91,7 @@ Node 22 build that CI uses.
 |---|---|---|
 | Local development | Ready | All suites green; end-to-end scenarios pass |
 | External beta | Released (0.2.0) | Merged with CI green; the Compose Quick Start was run with Podman, not Docker |
-| Self-hosted production | Not yet | No automated UI tests; B5 sampling; authentication is optional by default |
+| Self-hosted production | Not yet | No automated UI tests; authentication is optional by default |
 | Package release | Done | 0.2.0 with `CHANGELOG.md` |
 
 ## F. Next five actions
@@ -100,7 +100,7 @@ Node 22 build that CI uses.
 2. ~~Rehearse the migration on a copy of a live database~~ — done 2026-10-19, then applied.
 3. **Run the Compose Quick Start on a clean machine** (depends on 1). Acceptance: README steps
    only, one successful and one failed trace visible with correct status and duration.
-4. **Aggregated endpoints for the histogram and top-N lists** to finish B5 (independent).
+4. ~~**Aggregated endpoints for the histogram and top-N lists** to finish B5~~: done 2026-11-05 (`/v1/analytics/overview`).
    Acceptance: the Overview makes no 1 000-trace request; numbers match the current ones.
 5. ~~**Show `incomplete` evaluations distinctly in the dashboard and send `service.name` from the
    TypeScript SDK**~~: done 2026-11-05. Acceptance: an evaluation without a judge reads

@@ -1,7 +1,7 @@
-import { parseApiDate } from '../dates';
-import { localeTag } from '../i18n';
-import type { Trace } from '../types';
-import { traceDurationMs } from './format';
+import { parseApiDate } from '../dates.ts';
+import { localeTag } from '../i18n.ts';
+import type { Trace } from '../types.ts';
+import { traceDurationMs } from './format.ts';
 
 export function percentile(sorted: number[], p: number): number | null {
   if (sorted.length === 0) return null;
@@ -60,8 +60,10 @@ export function bucketLabel(ms: number, spanMs: number): string {
 
 export const LATENCY_EDGES = [1000, 2000, 5000, 10000, 20000, 40000];
 
+export const HISTOGRAM_NAMES = ['< 1 s', '1–2 s', '2–5 s', '5–10 s', '10–20 s', '20–40 s', '> 40 s'];
+
 export function histogram(durations: number[]): { range: string; count: number; from: number }[] {
-  const names = ['< 1 s', '1–2 s', '2–5 s', '5–10 s', '10–20 s', '20–40 s', '> 40 s'];
+  const names = HISTOGRAM_NAMES;
   const counts = new Array(names.length).fill(0);
   for (const d of durations) {
     let i = LATENCY_EDGES.findIndex((e) => d < e);
@@ -69,4 +71,19 @@ export function histogram(durations: number[]): { range: string; count: number; 
     counts[i] += 1;
   }
   return names.map((range, i) => ({ range, count: counts[i], from: i === 0 ? 0 : LATENCY_EDGES[i - 1] }));
+}
+
+/** The server's histogram (same edges) with the dashboard's range names. */
+export function histogramFromServer(rows: { from: number; count: number }[]): { range: string; count: number; from: number }[] {
+  return HISTOGRAM_NAMES.map((range, i) => ({ range, count: rows[i]?.count ?? 0, from: rows[i]?.from ?? (i === 0 ? 0 : LATENCY_EDGES[i - 1]) }));
+}
+
+/** The server's activity buckets as chart rows. */
+export function bucketsFromServer(
+  rows: { t: number; total: number; err: number; p50: number | null; p95: number | null }[], spanMs: number,
+): Bucket[] {
+  return rows.map((b) => ({
+    t: b.t, label: bucketLabel(b.t, spanMs), ok: b.total - b.err, err: b.err, total: b.total,
+    p50: b.p50, p95: b.p95, errRate: b.total ? b.err / b.total : 0,
+  }));
 }

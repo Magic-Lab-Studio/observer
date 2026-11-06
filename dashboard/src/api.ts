@@ -10,6 +10,7 @@ import type {
   TraceListResponse,
   EvaluationListResponse,
   SummaryData,
+  OverviewData,
   TimelinePoint,
   CostByModel,
   ManitOSQualitySummary,
@@ -158,6 +159,15 @@ export const api = {
   // Projects with traces, the most recent first (the header's project selector)
   async listProjects(): Promise<ProjectInfo[]> {
     return request('/v1/analytics/projects');
+  },
+  async listEnvironments(): Promise<string[]> {
+    return request('/v1/analytics/environments');
+  },
+  /** The Overview's buckets, histogram, slowest traces and stages, over every trace in range (B5). */
+  async getOverview(hours: number, buckets: number, environment?: string): Promise<OverviewData> {
+    const q = new URLSearchParams({ hours: String(hours), buckets: String(buckets) });
+    if (environment) q.set('environment', environment);
+    return request(`/v1/analytics/overview?${q.toString()}`);
   },
 
   async getQuerySchema(): Promise<QuerySchema> {

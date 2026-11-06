@@ -5,8 +5,8 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart,
 } from 'recharts';
 import { api } from '../api';
-import { useFilters, SAMPLE_LIMIT } from '../context';
-import type { CostByModel, ManitOSQualitySummary, QueryResult, SummaryData } from '../types';
+import { useFilters } from '../context';
+import type { CostByModel, ManitOSQualitySummary, OverviewData, QueryResult, SummaryData } from '../types';
 import { fillBuckets } from '../helpers/query';
 import type { Bucket } from '../helpers/stats';
 import { bucketLabel } from '../helpers/stats';
@@ -15,7 +15,7 @@ import { Card, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, PALETTE, Skelet
 import IngestHealth from '../components/IngestHealth';
 import OutcomeRates from '../components/OutcomeRates';
 import { mergeModelRows } from '../helpers/chain';
-import { bucketTraces, histogram, percentile, sortedDurations } from '../helpers/stats';
+import { bucketTraces, bucketsFromServer, histogram, histogramFromServer, percentile, sortedDurations } from '../helpers/stats';
 import { fmtAxisMs, fmtInt, fmtMs, fmtPct, fmtUsd, shortId, stageLabel, stageTimings, timeAgo, traceDurationMs } from '../helpers/format';
 import { t } from '../i18n';
 
@@ -34,7 +34,7 @@ function errorTone(rate: number | null | undefined): 'bad' | 'warn' | 'good' | '
 }
 
 function Overview() {
-  const { hours, env, windowTraces, windowStart, windowEnd, sampleTruncated, totalTraces, loading, error, refresh, newIds } = useFilters();
+  const { hours, env, windowTraces, windowStart, windowEnd, totalTraces, loading, error, refresh, newIds } = useFilters();
   const [quality, setQuality] = useState<ManitOSQualitySummary | null>(null);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [costByModel, setCostByModel] = useState<CostByModel[]>([]);
@@ -89,7 +89,18 @@ function Overview() {
     return { buckets, p50: num(tot.p50_duration_ms), p95: num(tot.p95_duration_ms), errRate: num(tot.avg_error), count: num(tot.count) ?? 0 };
   }, [serverStats]);
 
-  const model = useMemo(() => {
+  // Histogram, slowest traces, stages and generic activity from every trace in range (B5); the
+  // dashboard's recent sample is only the fallback when the route fails.
+  const [overview, setOverview] = useState<OverviewData | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.getOverview(hours, hours <= 1 ? 30 : 48, env || undefined)
+      .then((o) => { if (live) setOverview(o); })
+      .catch(() => { if (live) setOverview(null); });
+    return () => { live = false; };
+  }, [hours, env, totalTraces]);
+
+  const sampleModel = useMemo(() => {
     const durations = sortedDurations(windowTraces);
     const buckets = bucketTraces(windowTraces, windowStart, windowEnd, hours <= 1 ? 30 : 48);
     const stages = new Map<string, number[]>();
@@ -113,9 +124,28 @@ function Overview() {
     return {
       durations, buckets, stageRows, slowest,
       p50: percentile(durations, 0.5), p95: percentile(durations, 0.95),
-      errors, hist: histogram(durations),
+      errors, hist: histogram(durations), total: windowTraces.length, truncated: false,
     };
   }, [windowTraces, windowStart, windowEnd, hours]);
+
+  const model = useMemo(() => {
+    if (!overview) return sampleModel;
+    const from = parseApiDate(overview.from).getTime();
+    const to = parseApiDate(overview.to).getTime();
+    const byId = new Map(windowTraces.map((tr) => [tr.id, tr]));
+    return {
+      durations: overview.durations.max != null ? [overview.durations.max] : [],
+      buckets: bucketsFromServer(overview.buckets, to - from),
+      stageRows: overview.stages,
+      slowest: overview.slowest.map((s) => ({
+        t: byId.get(s.id) ?? { id: s.id, name: s.name, turn_id: s.turn_id, status: s.status },
+        d: s.duration_ms,
+      })),
+      p50: overview.durations.p50, p95: overview.durations.p95,
+      errors: overview.errors, hist: histogramFromServer(overview.histogram),
+      total: overview.total, truncated: overview.truncated,
+    };
+  }, [overview, sampleModel, windowTraces]);
 
   if (error && windowTraces.length === 0) return <ErrorState message={error} onRetry={refresh} />;
 
@@ -127,14 +157,14 @@ function Overview() {
   // keeps the generic numbers and shows the Manitos panels beside them.
   const allTurns = isManitos && (!summary || (q?.total_turns ?? 0) >= summary.total_traces);
   const turnServer = allTurns && server && server.count > 0 ? server : null;
-  const total = turnServer ? turnServer.count : (summary?.total_traces ?? windowTraces.length);
+  const total = turnServer ? turnServer.count : (summary?.total_traces ?? model.total);
   const errRate = turnServer?.errRate ?? summary?.trace_error_rate
-    ?? (windowTraces.length ? model.errors / windowTraces.length : null);
+    ?? (model.total ? model.errors / model.total : null);
   const errCount = summary?.error_count ?? model.errors;
   const buckets = turnServer?.buckets ?? model.buckets;
   const p50v = turnServer?.p50 ?? summary?.p50_trace_duration_ms ?? model.p50;
   const p95v = turnServer?.p95 ?? summary?.p95_trace_duration_ms ?? model.p95;
-  const hasData = total > 0 || windowTraces.length > 0;
+  const hasData = total > 0 || model.total > 0 || windowTraces.length > 0;
   const modelsPie = allTurns
     ? mergeModelRows(q?.models ?? []).slice(0, 6)
     : modelRowsFromSpans(costByModel).slice(0, 6);
@@ -157,7 +187,7 @@ function Overview() {
           <h1 className="text-lg font-semibold tracking-tight">{t("Resumen")}</h1>
           <p className="text-xs text-faint">
             {env ? t('Entorno {env}', { env }) : t('Todos los entornos')}
-            {sampleTruncated && ` · ${t('histograma, etapas y listas con una muestra de las últimas {n} trazas de {total}', { n: fmtInt(SAMPLE_LIMIT), total: fmtInt(totalTraces) })}`}
+            {model.truncated && ` · ${t('histograma, etapas y listas con las {n} trazas más recientes del rango', { n: fmtInt(model.total) })}`}
           </p>
         </div>
       </div>
