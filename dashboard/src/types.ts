@@ -51,6 +51,17 @@ export interface Evaluation {
   created_at: string;
 }
 
+export interface OverviewData {
+  from: string; to: string; bucket_ms: number;
+  buckets: { t: number; total: number; err: number; p50: number | null; p95: number | null }[];
+  total: number; errors: number;
+  durations: { count: number; p50: number | null; p95: number | null; max: number | null };
+  histogram: { from: number; count: number }[];
+  slowest: { id: string; name: string; turn_id: string | null; status: string; duration_ms: number }[];
+  stages: { stage: string; avg: number; p95: number; n: number }[];
+  samples: number; truncated: boolean;
+}
+
 export interface SummaryData {
   total_traces: number;
   total_spans: number;
