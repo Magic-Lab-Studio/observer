@@ -96,7 +96,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
 
   build-npm:
-    if: ${{ inputs.target == 'all' || inputs.target == 'npm' }}
+    if: ${{ inputs.target == 'npm' }}  # not in 'all' while npm access is lost (docs/releasing.md)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -137,7 +137,7 @@ jobs:
           retention-days: 7
 
   publish-npm:
-    if: ${{ inputs.target == 'all' || inputs.target == 'npm' }}
+    if: ${{ inputs.target == 'npm' }}  # not in 'all' while npm access is lost (docs/releasing.md)
     needs: build-npm
     runs-on: ubuntu-latest
     timeout-minutes: 10

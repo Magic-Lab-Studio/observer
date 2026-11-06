@@ -9,6 +9,12 @@ Observer publishes four distributions from one source tag:
 | PyPI | `magic-lab-observer-backend` |
 | npm | `@magic-lab-studio/observer` |
 
+**npm is suspended.** The maintainers lost access to the npm account that owns
+`@magic-lab-studio/observer` (recovery requested from npm support), and the 2026-10-26 `0.2.0`
+publish failed with `E404` at the trusted-publishing step. The `all` target publishes the Python
+distributions only; `npm` stays available as an explicit target for when access is restored. Until
+then the TypeScript SDK is installed from source (`npm pack`, see the README).
+
 Publishing uses GitHub Actions trusted publishing. Registry credentials must
 not be stored as repository secrets.
 
