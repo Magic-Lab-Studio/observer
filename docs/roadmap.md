@@ -373,6 +373,11 @@ premium route can drive most of the spend.
   view, case expectation, editor). Groundedness results got their own evaluator type, because
   four readers took every `rule_based` row as a turn-health score. Learned: a URL at the end of a
   sentence kept its full stop and read as a citation the trace never fetched.
+- 2026-11-06: OTLP spans carry their input and output. Found with a synthetic agent instrumented
+  with plain OpenTelemetry and OpenInference (as teams coming from Phoenix or Langfuse arrive): the
+  receiver kept only attributes, so groundedness was always `unknown` (`no_reply_text`) even under
+  `full` capture. Content is read from `input.value`/`output.value`, `gen_ai.*.messages`, GenAI tool
+  calls and the deprecated prompt/completion keys; `metadata` still keeps none.
 
 ## Later
 
