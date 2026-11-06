@@ -40,6 +40,47 @@ outcome (`outcome_source`: `attribute`, `close`, `status`, `flags`, `evidence`, 
 **Abstained with evidence:** a turn that abstained although its retrieval returned passages. It
 is usually a gate that is too strict. It is flagged on the turn and has its own alert metric.
 
+## Declaring an abstention
+
+A model that answers "I could not find that" and finishes with `stop` is, by rule 5, an
+`answered` turn: Observer does not read the reply to guess what it meant. That keeps outcomes
+working under the `metadata` capture mode and in any language, but it means an abstention is only
+seen when the agent says so. **Declare it where the agent decides it**, with `agent.close("abstain",
+reason)` (or `agent.outcome("abstained", reason)` on the root span). Three places to do it:
+
+1. **A gate before the model.** The agent checks its evidence first and does not ask the model
+   when it is not enough:
+
+   ```python
+   with agent.retrieval("kb") as r:
+       passages = search(question)
+       r.found(len(passages), sources=[p.id for p in passages])
+   with agent.gate("coverage") as g:
+       if not passages:
+           g.stop("no_passages")
+           agent.close("abstain", "no_passages")
+           return NO_ANSWER_TEXT
+   ```
+
+2. **A tool the model calls when it cannot answer.** Offer a `cannot_answer(reason)` tool next to
+   the others and tell the model to call it instead of writing a refusal; the agent closes the
+   turn when it does:
+
+   ```python
+   for call in reply.tool_calls:
+       if call.function.name == "cannot_answer":
+           reason = json.loads(call.function.arguments).get("reason", "no_source")
+           agent.close("abstain", reason[:40])
+           return NO_ANSWER_TEXT
+   ```
+
+3. **A field in a structured reply.** When the model already returns JSON, add
+   `"answered": true|false` and close with `abstain` when it is false.
+
+The reason is a short code (`no_passages`, `price_not_in_docs`), not a sentence. Declared
+abstentions feed `outcome_abstained_rate`, and one whose retrieval did return passages is flagged
+**abstained with evidence**, the usual sign of a retrieval or gate defect.
+
 ## Agent spans
 
 The span type comes from the transport's span type (SDK batch, ManitOS envelope). OTLP has no
