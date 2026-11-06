@@ -388,6 +388,11 @@ premium route can drive most of the spend.
   Found writing an adapter for a synthetic agent: opening a turn's root without a decorator needed
   the private `_current_span`; Phoenix and Langfuse both have this.
 
+- 2026-11-06: how to declare an abstention (`docs/agent-spans.md`). A synthetic support agent whose
+  models answered "I could not find the price" showed every such turn as `answered`: rule 5 does
+  not read the reply. Decision: keep it that way (works under `metadata`, any language) and document
+  three places an agent declares it (a gate before the model, a `cannot_answer` tool, a structured
+  field).
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.
