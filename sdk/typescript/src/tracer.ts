@@ -42,8 +42,31 @@ export function getCurrentSpan(): Span | undefined {
   return spanStorage.getStore();
 }
 
+// Tracers with exporters, shut down once before the process exits (evaluation C2).
+const liveTracers = new Set<WeakRef<Tracer>>();
+let exitHookInstalled = false;
+
+function installExitHook(tracer: Tracer): void {
+  liveTracers.add(new WeakRef(tracer));
+  if (exitHookInstalled || typeof process === "undefined" || !process.on) return;
+  exitHookInstalled = true;
+  process.on("beforeExit", () => {
+    for (const ref of liveTracers) {
+      void ref.deref()?.shutdown();
+    }
+    liveTracers.clear();
+  });
+}
+
+/** Spans kept for `export()`; the oldest are forgotten beyond this. */
+export const MAX_KEPT_SPANS = 10_000;
+
 export class Tracer {
   private spans: Span[] = [];
+  /** Started and not yet ended: sent as partial at shutdown. */
+  private open = new Map<string, Span>();
+  private ended = new WeakSet<Span>();
+  private isShutdown = false;
   private exporters: SpanExporter[] = [];
   private serviceName: string;
   private environment?: string;
@@ -79,6 +102,13 @@ export class Tracer {
 
   addExporter(exporter: SpanExporter): void {
     this.exporters.push(exporter);
+    installExitHook(this);
+  }
+
+  private keep(span: Span): void {
+    this.spans.push(span);
+    if (this.spans.length > MAX_KEPT_SPANS) this.spans.splice(0, this.spans.length - MAX_KEPT_SPANS);
+    this.open.set(span.id, span);
   }
 
   removeExporter(exporter: SpanExporter): void {
@@ -97,7 +127,7 @@ export class Tracer {
       metadata: {},
       attributes,
     };
-    this.spans.push(span);
+    this.keep(span);
     return span;
   }
 
@@ -121,7 +151,7 @@ export class Tracer {
       metadata: {},
       attributes: options.attributes || {},
     };
-    this.spans.push(span);
+    this.keep(span);
     return span;
   }
 
@@ -141,10 +171,33 @@ export class Tracer {
 
   /** Mark a span as ended and trigger export. */
   endSpan(span: Span): void {
+    if (this.ended.has(span)) return; // exported once, like the Python SDK
+    this.ended.add(span);
+    this.open.delete(span.id);
     if (!span.endTime) {
       span.endTime = Date.now() / 1000;
     }
     this.onSpanEnd(span);
+  }
+
+  /**
+   * Send every span still open as a partial one (no end time, status `unset`,
+   * `observer.unfinished: true`), then flush the exporters. Called once before the process exits
+   * when an exporter was added (evaluation C2); calling it again does nothing.
+   */
+  async shutdown(): Promise<void> {
+    if (this.isShutdown) return;
+    this.isShutdown = true;
+    for (const span of this.open.values()) {
+      if (span.endTime) continue;
+      this.onSpanEnd({
+        ...span,
+        status: "unset",
+        attributes: { ...span.attributes, "observer.unfinished": true },
+      });
+    }
+    this.open.clear();
+    await this.flush();
   }
 
   export(): Record<string, unknown>[] {

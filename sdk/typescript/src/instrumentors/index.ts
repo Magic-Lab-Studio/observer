@@ -8,14 +8,19 @@ import { instrument as instrumentAnthropic, uninstrument as uninstrumentAnthropi
 export interface InstrumentOptions {
   openai?: boolean;
   anthropic?: boolean;
+  /**
+   * The provider modules, for ES modules and bundlers where `require` is not available:
+   * `instrument({ openai: true, modules: { openai: await import("openai") } })`.
+   */
+  modules?: { openai?: unknown; anthropic?: unknown };
 }
 
 export function instrument(options: InstrumentOptions = {}): void {
   if (options.openai === true) {
-    instrumentOpenAI();
+    instrumentOpenAI(options.modules?.openai);
   }
   if (options.anthropic === true) {
-    instrumentAnthropic();
+    instrumentAnthropic(options.modules?.anthropic);
   }
 }
 

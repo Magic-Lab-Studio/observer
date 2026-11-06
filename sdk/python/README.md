@@ -50,8 +50,17 @@ set_tracer(tracer)
 * Finished spans wait in a bounded queue (`max_queue_size`; overflow is counted in
   `dropped_spans`) and are sent from a background thread. The exporter retries with backoff and,
   with `spool_dir`, keeps undelivered batches on disk; `OTLPExporter.stats()` reports them.
-* `tracer.shutdown()` (also run at exit) flushes what is pending. A span still open at exit is not
-  exported.
+* `tracer.shutdown()` (also run at exit) flushes what is pending. A span still open at exit is
+  sent as partial (no end time, status `unset`, `observer.unfinished = true`), and the backend
+  completes it if the finished span arrives later.
+* Streamed calls (`stream=True`, OpenAI and Anthropic, sync and async) return a wrapper around the
+  provider's stream. The span ends when the stream does, with the text, finish reason and tokens
+  seen:
+  - `ok` when the stream is exhausted;
+  - `error` if it fails;
+  - `unset` with `observer.stream.incomplete` if it is closed early or dropped.
+
+  OpenAI reports tokens on a stream only with `stream_options={"include_usage": True}`.
 
 ## License
 

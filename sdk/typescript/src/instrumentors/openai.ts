@@ -1,159 +1,53 @@
 /**
- * OpenAI auto-instrumentation
+ * OpenAI auto-instrumentation: patches `OpenAI.Chat.Completions.prototype.create`, so every client
+ * (created before or after) is traced, streamed calls included.
  */
 
-import { getTracer, type Span } from "../tracer";
-import { calculateCost } from "../pricing";
+import type { Span } from "../tracer";
+import { OpenAIAccumulator, patchCreate, setTokens } from "./shared";
 
-let originalSyncCreate: ((...args: unknown[]) => unknown) | null = null;
-let originalAsyncCreate: ((...args: unknown[]) => unknown) | null = null;
+type Proto = { create?: (...args: unknown[]) => unknown };
+let patchedProto: Proto | null = null;
+let original: ((...args: unknown[]) => unknown) | null = null;
 
-function buildSpan(
-  model: string,
-  messages: unknown[]
-): Span {
-  const tracer = getTracer();
-  const span = tracer.startSpan("openai.chat.completions.create", {
-    spanType: "llm",
-    attributes: {
-      "gen_ai.system": "openai",
-      "gen_ai.request.model": model,
-      model,
-      messages,
-    },
-  });
-  span.input = { model, messages };
-  return span;
+function finish(span: Span, result: unknown, model: string): void {
+  const r = (result && typeof result === "object" ? result : {}) as Record<string, any>;
+  const usage = r.usage;
+  if (usage) setTokens(span, model, usage.prompt_tokens || 0, usage.completion_tokens || 0);
+  const choices = Array.isArray(r.choices) ? r.choices : [];
+  const message = choices[0]?.message;
+  if (message) span.output = { content: message.content, role: message.role };
+  const reasons = choices.map((c: any) => c?.finish_reason).filter((x: unknown) => typeof x === "string");
+  if (reasons.length) span.attributes["gen_ai.response.finish_reasons"] = reasons;
+  if (typeof r.model === "string") span.attributes["gen_ai.response.model"] = r.model;
+  if (typeof r.id === "string") span.attributes["response_id"] = r.id;
 }
 
-function finishSpan(span: Span, result: unknown, model: string): void {
-  if (result && typeof result === "object") {
-    const obj = result as Record<string, unknown>;
-
-    // Extract token usage
-    const usage = obj.usage as Record<string, unknown> | undefined;
-    if (usage) {
-      const inputTokens = (usage.prompt_tokens as number) || 0;
-      const outputTokens = (usage.completion_tokens as number) || 0;
-      span.tokens = {
-        input: inputTokens,
-        output: outputTokens,
-        total: (usage.total_tokens as number) || 0,
-      };
-
-      // Calculate cost
-      const cost = calculateCost(model, inputTokens, outputTokens);
-      if (cost !== null) {
-        span.costUsd = cost;
-      }
-    }
-
-    // Extract output
-    const choices = obj.choices as Array<Record<string, unknown>> | undefined;
-    if (choices && choices.length > 0) {
-      const choice = choices[0];
-      const message = choice.message as Record<string, unknown> | undefined;
-      if (message) {
-        span.output = {
-          content: message.content,
-          role: message.role,
-        };
-      }
-    }
-
-    span.attributes["response_id"] = obj.id;
-    span.status = "ok";
-  }
-
-  span.endTime = Date.now() / 1000;
+function completionsProto(mod: any): Proto | null {
+  const Completions = mod?.OpenAI?.Chat?.Completions ?? mod?.default?.Chat?.Completions;
+  return Completions?.prototype ?? null;
 }
 
-export function instrument(): void {
+/** `mod`: the `openai` module; loaded with `require` when omitted (CommonJS). */
+export function instrument(mod?: unknown): void {
   try {
-    // Dynamic import to avoid hard dependency
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const openai = require("openai");
-    if (openai?.OpenAI) {
-      const OpenAI = openai.OpenAI;
-
-      // Patch the prototype so ALL instances are instrumented
-      const proto = OpenAI.prototype;
-      if (proto?.chat?.completions?.create) {
-        originalSyncCreate = proto.chat.completions.create;
-        proto.chat.completions.create = function (
-          this: unknown,
-          ...args: unknown[]
-        ) {
-          const options = args[0] as Record<string, unknown> | undefined;
-          const model = (options?.model as string) || "unknown";
-          const messages = (options?.messages as unknown[]) || [];
-
-          const span = buildSpan(model, messages);
-
-          try {
-            const result = originalSyncCreate!.apply(this, args);
-            finishSpan(span, result, model);
-            return result;
-          } catch (error) {
-            span.status = "error";
-            span.attributes["error.message"] =
-              error instanceof Error ? error.message : String(error);
-            span.endTime = Date.now() / 1000;
-            throw error;
-          }
-        };
-      }
-
-      // Patch async client if available
-      if (openai.AsyncOpenAI) {
-        const asyncProto = openai.AsyncOpenAI.prototype;
-        if (asyncProto?.chat?.completions?.create) {
-          originalAsyncCreate = asyncProto.chat.completions.create;
-          asyncProto.chat.completions.create = function (
-            this: object,
-            ...args: unknown[]
-          ) {
-            const options = args[0] as Record<string, unknown> | undefined;
-            const model = (options?.model as string) || "unknown";
-            const messages = (options?.messages as unknown[]) || [];
-
-            const span = buildSpan(model, messages);
-            const ctx = this;
-
-            return (originalAsyncCreate!.apply(ctx, args) as Promise<unknown>).then(
-              (result: unknown) => {
-                finishSpan(span, result, model);
-                return result;
-              },
-              (error: Error) => {
-                span.status = "error";
-                span.attributes["error.message"] = error.message;
-                span.endTime = Date.now() / 1000;
-                throw error;
-              }
-            );
-          };
-        }
-      }
-    }
+    const proto = completionsProto(mod ?? require("openai"));
+    if (!proto || patchedProto) return;
+    original = patchCreate(proto, {
+      spanName: "openai.chat.completions.create",
+      system: "openai",
+      finish,
+      accumulator: (model) => new OpenAIAccumulator(model),
+    });
+    if (original) patchedProto = proto;
   } catch {
-    // OpenAI not available, skip instrumentation
+    // openai not installed: nothing to instrument
   }
 }
 
 export function uninstrument(): void {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const openai = require("openai");
-    if (openai?.OpenAI && originalSyncCreate) {
-      openai.OpenAI.prototype.chat.completions.create = originalSyncCreate;
-    }
-    if (openai?.AsyncOpenAI && originalAsyncCreate) {
-      openai.AsyncOpenAI.prototype.chat.completions.create = originalAsyncCreate;
-    }
-  } catch {
-    // Ignore
-  }
-  originalSyncCreate = null;
-  originalAsyncCreate = null;
+  if (patchedProto && original) patchedProto.create = original;
+  patchedProto = null;
+  original = null;
 }

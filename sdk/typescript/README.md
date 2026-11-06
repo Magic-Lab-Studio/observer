@@ -12,7 +12,7 @@ Optional peer dependencies for auto-instrumentation:
 
 ```bash
 npm install openai      # for OpenAI auto-instrumentation
-npm install anthropic   # for Anthropic auto-instrumentation
+npm install @anthropic-ai/sdk   # for Anthropic auto-instrumentation
 ```
 
 ## Quick Start
@@ -58,10 +58,30 @@ Auto-instruments LLM libraries to capture traces automatically.
 
 ```typescript
 instrument({
-  openai: true,      // patches OpenAI SDK
-  anthropic: true,   // patches Anthropic SDK
+  openai: true,      // patches OpenAI.Chat.Completions.prototype.create
+  anthropic: true,   // patches Anthropic.Messages.prototype.create (@anthropic-ai/sdk)
 });
+
+// ES modules or bundlers, where `require` is not available: pass the modules
+import * as openai from "openai";
+instrument({ openai: true, modules: { openai } });
 ```
+
+Every client is traced, created before or after `instrument()`. The returned promise is still the
+provider's, so `.withResponse()` keeps working. With `stream: true` the span ends when the
+stream does, with the text, finish reason and tokens seen:
+- status `ok` when the stream is exhausted;
+- `error` if it fails;
+- `unset` with `observer.stream.incomplete` if you break out early.
+
+OpenAI reports tokens on a stream only with `stream_options: { include_usage: true }`.
+
+### `tracer.shutdown()`
+
+Sends every span still open as a partial one: no end time, status `unset` and
+`observer.unfinished: true`. Then it flushes the exporters. It runs once on its own before the
+process exits (`beforeExit`) for every tracer with an exporter. Each span is exported once, even
+if `endSpan` is called twice. `tracer.export()` keeps the last 10 000 spans.
 
 ### `uninstrument(options)`
 

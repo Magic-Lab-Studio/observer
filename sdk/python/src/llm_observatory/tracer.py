@@ -161,6 +161,9 @@ class Tracer:
         self.environment = environment
         self.attributes = dict(attributes or {})
         self._spans: deque[Span] = deque(maxlen=max_kept_spans)
+        # Spans started and not yet ended, sent as partial at shutdown (evaluation C2). Weak: a
+        # span the caller dropped without ending is not kept alive by this.
+        self._open: weakref.WeakValueDictionary[str, Span] = weakref.WeakValueDictionary()
         self._exporters: list[Any] = []
         self._buffer: list[dict[str, Any]] = []
         self._lock = threading.Lock()
@@ -231,6 +234,7 @@ class Tracer:
             _tracer=self,
         )
         self._spans.append(span)
+        self._open[span.id] = span
         return span
 
     def start_span(
@@ -261,13 +265,17 @@ class Tracer:
             _tracer=self,
         )
         self._spans.append(span)
+        self._open[span.id] = span
         return span
 
     def _on_end(self, span: Span) -> None:
         """Queue a finished span; a full batch wakes the flush thread."""
+        self._open.pop(span.id, None)
         if not self._exporters:
             return
-        span_dict = self._span_to_dict(span)
+        self._enqueue(self._span_to_dict(span))
+
+    def _enqueue(self, span_dict: dict[str, Any]) -> None:
         with self._lock:
             if len(self._buffer) >= self.max_queue_size:
                 self.dropped_spans += 1
@@ -334,11 +342,20 @@ class Tracer:
         self._spans.clear()
 
     def shutdown(self) -> None:
-        """Shutdown the tracer, sending every finished span still queued. Spans that were never
-        ended are not sent: they have no end time or final status."""
+        """Shutdown the tracer, sending every finished span still queued, and every span still
+        open as a partial one (evaluation C2): no end time, status ``unset`` and
+        ``observer.unfinished = true``, so a turn cut short by an exit is visible instead of
+        missing. If the same span is sent finished later, the backend completes it."""
         if self._shutdown:
             return
         self._shutdown = True
+        if self._exporters:
+            for span in list(self._open.values()):
+                if span.end_time is None:
+                    partial = self._span_to_dict(span)
+                    partial["status"] = SpanStatus.UNSET.value
+                    partial["attributes"] = {**partial["attributes"], "observer.unfinished": True}
+                    self._enqueue(partial)
         self._wake.set()
         thread = self._flush_thread
         if thread is not None and thread is not threading.current_thread():
