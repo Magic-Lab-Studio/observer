@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Dashboard browser tests (external evaluation B3)
+- Added: Playwright tests of the dashboard (`dashboard/e2e`, `npm run e2e`) and the CI job
+  `dashboard-e2e`. They load every page in Spanish and English and fail on any JavaScript error,
+  and walk the main flows: the overview shows traces, a trace opens with its «why did it end»
+  panel, an evaluation the judge could not complete reads «Incomplete», the groundedness mode is
+  saved and survives a reload, Explore runs a query. The backend is loaded with the test bed;
+  the tests plant their own project `e2e`. Before, the dashboard had unit tests of its helpers
+  only.
+
 ### ISO timestamps, verified prices, loop alert (external evaluation A1, A6, P6)
 - Fixed (backend): ISO 8601 timestamps are read by one parser, `parse_iso8601`, with the same
   result on Python 3.10 and later. Before, 3.10 refused `Z` in event mappings, a fraction other

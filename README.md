@@ -733,6 +733,10 @@ cd cli && pytest
 # Dashboard (official Node 22.12+ build; some distribution builds lack TypeScript stripping)
 cd dashboard && npm test
 
+# Dashboard in a browser (Playwright): needs a backend at OBSERVER_API_URL (default :8000),
+# ideally loaded with examples/orchestrator/run_bed.py; plants its own project `e2e`
+cd dashboard && npx playwright install chromium && npm run build && npm run e2e
+
 # End-to-end scenarios against a running backend
 python scripts/agent_scenarios.py --endpoint http://127.0.0.1:8000
 ```
