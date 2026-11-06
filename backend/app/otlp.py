@@ -156,7 +156,8 @@ def _safe_attributes(raw: dict[str, Any], mode: str) -> dict[str, Any]:
 # (`input.value`), OpenTelemetry GenAI messages, GenAI tool calls, and the deprecated
 # `gen_ai.prompt` / `gen_ai.completion`.
 _CONTENT_KEYS = {
-    "input": ("input.value", "gen_ai.input.messages", "gen_ai.tool.call.arguments", "gen_ai.prompt"),
+    "input": ("input.value", "gen_ai.input.messages", "gen_ai.tool.call.arguments",
+              "gen_ai.prompt"),
     "output": ("output.value", "gen_ai.output.messages", "gen_ai.tool.call.result",
                "gen_ai.completion"),
 }

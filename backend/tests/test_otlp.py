@@ -110,7 +110,8 @@ def _content_demo():
                                    "output.value": "The Team plan is 14 USD per user."}),
         _span(CHILD, "search", parent=ROOT, start=10_000_000,
               attrs={"openinference.span.kind": "TOOL", "tool.name": "search",
-                     "input.value": '{"query": "team plan price"}', "input.mime_type": "application/json",
+                     "input.value": '{"query": "team plan price"}',
+                     "input.mime_type": "application/json",
                      "output.value": '{"results": [{"text": "Team: 14 USD per user"}]}',
                      "output.mime_type": "application/json"}),
         _span("eee19b7ec3c1b176", "chat", parent=ROOT, start=20_000_000,
@@ -134,9 +135,11 @@ def test_span_input_and_output_come_from_openinference_and_gen_ai_attributes():
     assert spans["turn"]["output"] == {"text": "The Team plan is 14 USD per user."}
     assert spans["search"]["input"] == {"query": "team plan price"}  # JSON mime type parsed
     assert spans["search"]["output"]["results"][0]["text"] == "Team: 14 USD per user"
-    assert spans["chat"]["input"]["messages"][0]["parts"][0]["content"] == "How much is the Team plan?"
+    chat_in = spans["chat"]["input"]["messages"][0]["parts"][0]["content"]
+    assert chat_in == "How much is the Team plan?"
     assert spans["chat"]["output"]["messages"][0]["parts"][0]["content"] == "14 USD"
-    assert spans["calc"]["input"] == {"expr": "14*12"} and spans["calc"]["output"] == {"text": "168"}
+    assert spans["calc"]["input"] == {"expr": "14*12"}
+    assert spans["calc"]["output"] == {"text": "168"}
     assert spans["legacy"]["input"] == {"text": "old prompt"}
     assert spans["legacy"]["output"] == {"text": "old reply"}
     # metadata keeps no content anywhere
@@ -303,11 +306,14 @@ async def test_a_failed_root_stays_failed_when_a_later_batch_is_all_ok(client, d
 
 
 @pytest.mark.anyio
-async def test_otlp_content_is_stored_under_full_capture_only_and_feeds_groundedness(client, db_session):
+async def test_otlp_content_is_stored_under_full_capture_only_and_feeds_groundedness(
+    client, db_session
+):
     body = json.dumps(_content_demo())
     r = await _post(client, body)
     assert r.status_code == 200
-    spans = (await db_session.execute(select(Span).where(Span.trace_id == trace_uuid(TID)))).scalars().all()
+    query = select(Span).where(Span.trace_id == trace_uuid(TID))
+    spans = (await db_session.execute(query)).scalars().all()
     assert all(s.inp is None and s.out is None for s in spans)  # OTLP default: metadata
     await client.put("/v1/privacy/projects/my-agent", json={"capture_mode": "full"})
     other = json.loads(body.replace(TID, "6b8efff798038103d269b633813fc60c"))
