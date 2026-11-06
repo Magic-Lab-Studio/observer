@@ -384,6 +384,9 @@ premium route can drive most of the spend.
   receiver kept only attributes, so groundedness was always `unknown` (`no_reply_text`) even under
   `full` capture. Content is read from `input.value`/`output.value`, `gen_ai.*.messages`, GenAI tool
   calls and the deprecated prompt/completion keys; `metadata` still keeps none.
+- 2026-11-06: Python SDK `span()` / `Tracer.span()`, a `with` block that makes the span current.
+  Found writing an adapter for a synthetic agent: opening a turn's root without a decorator needed
+  the private `_current_span`; Phoenix and Langfuse both have this.
 
 ## Later
 
