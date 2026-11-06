@@ -46,9 +46,35 @@ export class Tracer {
   private spans: Span[] = [];
   private exporters: SpanExporter[] = [];
   private serviceName: string;
+  private environment?: string;
+  private attributes: Record<string, unknown>;
 
-  constructor(options: { serviceName?: string } = {}) {
+  /**
+   * @param options.serviceName exported as `service.name`; the backend fills the trace's project
+   *   from it (default "llm-observatory").
+   * @param options.environment exported as `deployment.environment.name`.
+   * @param options.attributes attributes every span carries; a value the span sets itself wins.
+   */
+  constructor(
+    options: { serviceName?: string; environment?: string; attributes?: Record<string, unknown> } = {}
+  ) {
     this.serviceName = options.serviceName || "llm-observatory";
+    this.environment = options.environment;
+    this.attributes = { ...(options.attributes ?? {}) };
+  }
+
+  /** The span's attributes plus the tracer's service, environment and shared attributes, as the
+   * Python SDK sends them (the span is not modified). */
+  private exportedAttributes(span: Span): Record<string, unknown> {
+    const out: Record<string, unknown> = {
+      "service.name": this.serviceName,
+      ...this.attributes,
+      ...span.attributes,
+    };
+    if (this.environment && out["deployment.environment.name"] === undefined) {
+      out["deployment.environment.name"] = this.environment;
+    }
+    return out;
   }
 
   addExporter(exporter: SpanExporter): void {
@@ -102,9 +128,10 @@ export class Tracer {
   /** Called when a span ends - auto-exports to all registered exporters. */
   private onSpanEnd(span: Span): void {
     if (this.exporters.length > 0) {
+      const exported = { ...span, attributes: this.exportedAttributes(span) };
       for (const exporter of this.exporters) {
         try {
-          exporter.export([span]);
+          exporter.export([exported]);
         } catch {
           // Don't let exporter errors break tracing
         }
@@ -136,7 +163,7 @@ export class Tracer {
       tokens_output: span.tokens?.output ?? null,
       cost_usd: span.costUsd,
       metadata: span.metadata,
-      attributes: span.attributes,
+      attributes: this.exportedAttributes(span),
     }));
   }
 

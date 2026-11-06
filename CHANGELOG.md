@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### External evaluation follow-up (findings P2 and P5)
+- Fixed (TypeScript SDK): every exported span now carries `service.name` (the trace's project),
+  and `deployment.environment.name` when `environment` is set. Shared `attributes` behave as in
+  the Python SDK: a value the span sets itself wins. Before, `serviceName` was stored and never
+  sent, so TypeScript traces had no project.
+- Fixed (dashboard): an evaluation the judge could not finish (`passed: null`) reads "Incomplete"
+  in the list, and its detail lists the skipped criteria with their reason. The pass rate counts
+  decided evaluations only. Before, a high score on the criteria that were judged showed it as
+  passed.
+
 ### Groundedness (roadmap step 9, `rules` mode)
 - Added: per-project configuration sections in a new table `project_configs` (migration
   `20261106_configs`); `GET /v1/projects/{id}/config` and `GET|PUT|DELETE

@@ -24,7 +24,8 @@ import { instrument, trace, asyncTrace, Tracer, OTLPExporter } from '@magic-lab-
 instrument({ openai: true, anthropic: true });
 
 // Set up exporter to send traces to the backend
-const tracer = new Tracer({ serviceName: 'my-app' });
+// serviceName becomes the trace's project, environment its environment
+const tracer = new Tracer({ serviceName: 'my-app', environment: 'production' });
 tracer.addExporter(new OTLPExporter({
   endpoint: 'http://localhost:8000',
   apiKey: 'your-api-key',

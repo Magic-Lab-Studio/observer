@@ -210,7 +210,6 @@ export const EN: Record<string, string> = {
   'LLM judge': 'LLM judge',
   Reglas: 'Rules',
   Humana: 'Human',
-  '{n} evaluaciones · {p} % ≥ 0.8': '{n} evaluations · {p} % ≥ 0.8',
   'Distribución de puntajes': 'Score distribution',
   'en total': 'in total',
   Evaluador: 'Evaluator',
@@ -592,4 +591,10 @@ export const EN: Record<string, string> = {
   'No se encontró respaldo en las fuentes': 'No support found in the sources',
   '{s} de {n} afirmaciones con sustento': '{s} of {n} claims supported',
   '{n} fuentes': '{n} sources',
+  // incomplete evaluations (finding P5)
+  'Incompleta': 'Incomplete',
+  '{n} incompletas': '{n} incomplete',
+  'Puntaje de los criterios que sí se evaluaron': 'Score of the criteria that were judged',
+  'Incompleta: el evaluador no pudo juzgar todos los criterios, así que no cuenta como aprobada.': 'Incomplete: the evaluator could not judge every criterion, so it does not count as passed.',
+  'reintentar puede servir': 'retrying may help',
 };

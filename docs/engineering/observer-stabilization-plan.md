@@ -102,6 +102,6 @@ Node 22 build that CI uses.
    only, one successful and one failed trace visible with correct status and duration.
 4. **Aggregated endpoints for the histogram and top-N lists** to finish B5 (independent).
    Acceptance: the Overview makes no 1 000-trace request; numbers match the current ones.
-5. **Show `incomplete` evaluations distinctly in the dashboard and send `service.name` from the
-   TypeScript SDK** (independent). Acceptance: an evaluation without a judge reads
+5. ~~**Show `incomplete` evaluations distinctly in the dashboard and send `service.name` from the
+   TypeScript SDK**~~: done 2026-11-05. Acceptance: an evaluation without a judge reads
    "incomplete", never "passed"; a TS trace shows its project.
