@@ -4,7 +4,7 @@
  * groundedness mode saved, Explore query). External evaluation B3.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { PROJECT } from './global-setup';
+import { DATASET, PROJECT } from './global-setup';
 
 type Lang = 'es' | 'en';
 const LANGS: Lang[] = ['es', 'en'];
@@ -54,6 +54,11 @@ for (const lang of LANGS) {
         expect(errors).toEqual([]);
       });
     }
+
+    test("the cases page lists the selected project's datasets", async ({ page }) => {
+      await open(page, lang, '/datasets');
+      await expect(page.getByText(DATASET)).toBeVisible();
+    });
 
     test('the overview shows the planted traces', async ({ page }) => {
       await open(page, lang, '/');

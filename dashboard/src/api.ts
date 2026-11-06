@@ -178,11 +178,14 @@ export const api = {
   },
 
   // Datasets (test cases saved from traces; metadata only)
-  async listDatasets(): Promise<DatasetSummary[]> {
-    return request('/v1/datasets');
+  /** The datasets of one project (the backend's default project when none is given). */
+  async listDatasets(project?: string): Promise<DatasetSummary[]> {
+    return request(project ? `/v1/datasets?project_id=${encodeURIComponent(project)}` : '/v1/datasets');
   },
-  async createDataset(name: string): Promise<DatasetSummary> {
-    return request('/v1/datasets', { method: 'POST', body: JSON.stringify({ name }) });
+  async createDataset(name: string, project?: string): Promise<DatasetSummary> {
+    return request('/v1/datasets', {
+      method: 'POST', body: JSON.stringify(project ? { name, project_id: project } : { name }),
+    });
   },
   async getDataset(id: string): Promise<DatasetDetail> {
     return request(`/v1/datasets/${id}`);

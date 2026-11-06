@@ -399,6 +399,10 @@ premium route can drive most of the spend.
   it was never built. A run now reads the stored reply (root output, else the last LLM output) only
   to check, case-insensitive with whitespace collapsed; cases stay metadata only. Found building a
   version comparison (v1 with a defect, v2 fixed) for a course video.
+- 2026-11-06: the Cases page follows the project selector, and "Save as case" saves into the
+  trace's own project. The dashboard listed `/v1/datasets` without a project, so the backend's
+  default (`manitos`) applied: another project's datasets were invisible, and a case saved from its
+  trace landed in a `manitos` dataset. Found building a course video on a non-Manitos agent.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.
