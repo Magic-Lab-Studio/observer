@@ -373,6 +373,9 @@ premium route can drive most of the spend.
   view, case expectation, editor). Groundedness results got their own evaluator type, because
   four readers took every `rule_based` row as a turn-health score. Learned: a URL at the end of a
   sentence kept its full stop and read as a citation the trace never fetched.
+- 2026-11-06: Python SDK `span()` / `Tracer.span()`, a `with` block that makes the span current.
+  Found writing an adapter for a synthetic agent: opening a turn's root without a decorator needed
+  the private `_current_span`; Phoenix and Langfuse both have this.
 
 ## Later
 
