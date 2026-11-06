@@ -407,7 +407,8 @@ Any agent can say how a turn ended and why with the agent span contract `observe
 `unknown` when there is no evidence. `/v1/agent/turns` lists outcomes and reasons, Explore groups
 by outcome, and the alert metrics `outcome_<outcome>_rate` and `abstained_with_evidence_rate`
 (an abstention whose retrieval did find passages) watch them. Keys are metadata only, so they
-survive the `metadata` capture mode.
+survive the `metadata` capture mode. A reply that only says "I could not find it" counts as `answered` unless the agent
+declares the abstention ([how](docs/agent-spans.md#declaring-an-abstention)).
 
 ### Events a system already emits
 
