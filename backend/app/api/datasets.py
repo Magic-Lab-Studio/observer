@@ -164,6 +164,21 @@ async def _observed(session: AsyncSession, trace_id: str) -> tuple[dict[str, Any
     return observed, signals.intent or None
 
 
+async def _reply_text(session: AsyncSession, trace_id: str) -> str | None:
+    """The trace's reply as stored (the root span's output, else the last LLM span's), or None when
+    the capture mode kept no content. Read for a run's text checks only; never stored in a case."""
+    spans = list((await session.execute(select(Span).where(Span.trace_id == trace_id))).scalars())
+    root = next((s for s in spans if s.parent_span_id is None and s.out), None)
+    if root is not None:
+        text = groundedness.text_of(root.out)
+        if text.strip():
+            return text
+    llms = sorted((s for s in spans if s.span_type == "llm" and s.out),
+                  key=lambda s: s.end_time or s.start_time)
+    text = groundedness.text_of(llms[-1].out) if llms else ""
+    return text if text.strip() else None
+
+
 async def _groundedness(session: AsyncSession, trace: Trace, signals: Any) -> dict[str, Any]:
     """Status and score only (the claims stay in the evaluation): computed now under the
     project's configuration, so a run can check it without waiting for the sweep."""

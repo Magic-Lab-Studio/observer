@@ -1,12 +1,13 @@
 """Check a test case's expectations against what a trace shows (pure, no I/O).
 
 Each check is ``pass``, ``fail`` or ``unknown``. ``unknown`` means the data to decide is not there
-(never silently a pass): Manitos does not export tool-call spans or reply text yet, so tool and
-text expectations stay unknown until it does.
+(never silently a pass): tool expectations need tool spans, and text phrases need the reply text,
+which exists only when the project's capture mode stores content (Manitos exports metadata only).
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 LEVELS = ("ungrounded", "partial", "grounded")  # groundedness levels, worst to best
@@ -16,8 +17,17 @@ def _check(kind: str, name: str, status: str, detail: str = "") -> dict[str, str
     return {"kind": kind, "name": name, "status": status, "detail": detail}
 
 
-def check_case(expect: dict[str, Any], observed: dict[str, Any]) -> dict[str, Any]:
-    """``{status, checks, unverified}`` for one case against one trace's observed metadata."""
+def _plain(text: str) -> str:
+    """Lower case with every run of whitespace (narrow and non-breaking spaces too) as one space."""
+    return re.sub(r"\s+", " ", text).casefold().strip()
+
+
+def check_case(
+    expect: dict[str, Any], observed: dict[str, Any], reply: str | None = None
+) -> dict[str, Any]:
+    """``{status, checks, unverified}`` for one case against one trace's observed metadata.
+    ``reply``: the trace's reply text, when its capture mode stored it; it is only read here, never
+    kept in the case."""
     checks: list[dict[str, str]] = []
     health = expect.get("health") or {}
     failed_run = observed.get("status") == "error" or observed.get("tool_error") is True
@@ -54,9 +64,17 @@ def check_case(expect: dict[str, Any], observed: dict[str, Any]) -> dict[str, An
             checks.append(_check("tools", f"forbidden:{name}", "fail" if name in seen else "pass"))
 
     text = expect.get("text") or {}
+    plain = _plain(reply) if reply and reply.strip() else None
     for key in ("must_contain", "must_not_contain"):
         for phrase in text.get(key) or []:
-            checks.append(_check("text", f"{key}:{phrase}", "unknown", "reply text not exported"))
+            if plain is None:
+                checks.append(_check("text", f"{key}:{phrase}", "unknown", "no reply text stored"))
+                continue
+            found = _plain(phrase) in plain
+            ok = found if key == "must_contain" else not found
+            checks.append(_check("text", f"{key}:{phrase}", "pass" if ok else "fail",
+                                 "" if ok else ("not in the reply" if key == "must_contain" else
+                                                "in the reply")))
 
     minimum = (expect.get("groundedness") or {}).get("min_level")
     if minimum:

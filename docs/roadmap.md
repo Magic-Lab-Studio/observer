@@ -393,6 +393,12 @@ premium route can drive most of the spend.
   not read the reply. Decision: keep it that way (works under `metadata`, any language) and document
   three places an agent declares it (a gate before the model, a `cannot_answer` tool, a structured
   field).
+- 2026-11-06: test cases check their text phrases. `case_check` answered `unknown` ("reply text not
+  exported") for every `must_contain` / `must_not_contain`, even when the project stored the reply
+  (`full` or `redacted` capture): the README promised the check "when reply text is available" and
+  it was never built. A run now reads the stored reply (root output, else the last LLM output) only
+  to check, case-insensitive with whitespace collapsed; cases stay metadata only. Found building a
+  version comparison (v1 with a defect, v2 fixed) for a course video.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.
