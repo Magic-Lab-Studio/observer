@@ -3,7 +3,6 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml/badge.svg)](https://github.com/Magic-Lab-Studio/observer/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/magic-lab-observer.svg)](https://pypi.org/project/magic-lab-observer/)
-[![npm](https://img.shields.io/npm/v/%40magic-lab-studio%2Fobserver.svg)](https://www.npmjs.com/package/@magic-lab-studio/observer)
 
 Observer is a local-first, self-hosted observability and evaluation platform for
 LLM and agentic systems. It stores traces in SQLite or PostgreSQL that you
@@ -222,7 +221,7 @@ observer/
 │       └── types.ts          # Shared TypeScript interfaces
 ├── sdk/
 │   ├── python/               # magic-lab-observer PyPI package
-│   └── typescript/           # @magic-lab-studio/observer npm package
+│   └── typescript/           # @magic-lab-studio/observer (built from source; not on npm for now)
 ├── cli/                      # llm-observatory CLI
 ├── compose.yaml
 └── .github/workflows/ci.yml
@@ -610,8 +609,16 @@ def answer(question):
 
 ## TypeScript SDK
 
+**npm is not an installation channel for now.** The maintainers lost access to the npm account
+that owns `@magic-lab-studio/observer`, so `0.2.0` was never published there and the registry still
+serves an outdated `0.1.1` (no `service.name`, no `shutdown()`). Do not install it from npm; build
+the package from source instead (Node.js 22.12 or newer). The import name is the same.
+
 ```bash
-npm install @magic-lab-studio/observer
+git clone --depth 1 https://github.com/Magic-Lab-Studio/observer.git
+cd observer/sdk/typescript && npm ci && npm run build && npm pack
+# then, in your project:
+npm install /path/to/observer/sdk/typescript/magic-lab-studio-observer-0.2.0.tgz
 ```
 
 ```typescript

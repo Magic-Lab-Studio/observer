@@ -120,18 +120,24 @@ canonical package distribution names are:
 | Python CLI | `magic-lab-observer-cli` | `llm-observatory` command |
 | Python backend | `magic-lab-observer-backend` | `app` package and existing entry points |
 
-The published SDKs and CLI are available from their registries:
+The Python SDK and CLI are available from PyPI:
 
 ```bash
-npm install @magic-lab-studio/observer@0.2.0
 python -m pip install magic-lab-observer==0.2.0
 python -m pip install magic-lab-observer-cli==0.2.0
 ```
 
-The npm registry still serves `0.1.1`: the `0.2.0` npm publication has not completed, so
-`npm install @magic-lab-studio/observer@0.2.0` fails with `ETARGET`. Until it does, install
-`@magic-lab-studio/observer` (0.1.1); its traces carry no project (`service.name` is sent from
-0.2.0 on) and its tracer has `flush()` but not `shutdown()`.
+**npm is not an installation channel for now.** The maintainers lost access to the npm account
+that owns `@magic-lab-studio/observer`, so `0.2.0` was never published there and the registry still
+serves an outdated `0.1.1` (no `service.name`, no `shutdown()`). Do not install it from npm; build
+the package from source instead (Node.js 22.12 or newer). The import name is the same.
+
+```bash
+git clone --depth 1 https://github.com/Magic-Lab-Studio/observer.git
+cd observer/sdk/typescript && npm ci && npm run build && npm pack
+# then, in your project:
+npm install /path/to/observer/sdk/typescript/magic-lab-studio-observer-0.2.0.tgz
+```
 
 ### Your first SDK trace
 
@@ -149,7 +155,7 @@ span.end()
 tracer.shutdown()  # sends what is still queued
 ```
 
-TypeScript (in a new project: `npm init -y && npm install @magic-lab-studio/observer`), saved as
+TypeScript (in a new project: `npm init -y`, then install the package you built above), saved as
 `first-trace.mjs` and run with `node first-trace.mjs`:
 
 ```javascript
@@ -161,7 +167,7 @@ const span = tracer.startSpan("hello-observer", { spanType: "llm" });
 span.input = { text: "Say hello" };
 span.output = { text: "Hello" };
 tracer.endSpan(span);
-await tracer.flush(); // sends what is still queued
+await tracer.shutdown(); // sends what is still queued
 ```
 
 Both appear in the Traces view as `hello-observer`, and in `curl http://localhost:8000/v1/traces/`.
