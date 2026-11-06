@@ -592,4 +592,6 @@ export const EN: Record<string, string> = {
   'No se encontró respaldo en las fuentes': 'No support found in the sources',
   '{s} de {n} afirmaciones con sustento': '{s} of {n} claims supported',
   '{n} fuentes': '{n} sources',
+  // overview computed on the server (evaluation B5)
+  'histograma, etapas y listas con las {n} trazas más recientes del rango': 'histogram, stages and lists from the {n} most recent traces in range',
 };
