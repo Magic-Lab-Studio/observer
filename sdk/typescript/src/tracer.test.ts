@@ -270,3 +270,33 @@ describe("Pricing", () => {
     }
   });
 });
+
+describe("Service and environment travel with every span (finding P2)", () => {
+  it("sends service.name, the environment and shared attributes; the span's own value wins", () => {
+    const sent: Span[] = [];
+    const tracer = new Tracer({
+      serviceName: "billing-agent",
+      environment: "staging",
+      attributes: { "observer.task": "refunds", "vcs.commit": "abc" },
+    });
+    tracer.addExporter({ export: (spans) => sent.push(...spans) });
+    const span = tracer.startSpan("lookup", { attributes: { "vcs.commit": "def" } });
+    tracer.endSpan(span);
+    expect(sent[0].attributes).toEqual({
+      "service.name": "billing-agent",
+      "deployment.environment.name": "staging",
+      "observer.task": "refunds",
+      "vcs.commit": "def",
+    });
+    expect(span.attributes).toEqual({ "vcs.commit": "def" }); // the span itself is not changed
+    expect(tracer.export()[0].attributes).toEqual(sent[0].attributes);
+  });
+
+  it("defaults to llm-observatory without an environment", () => {
+    const sent: Span[] = [];
+    const tracer = new Tracer();
+    tracer.addExporter({ export: (spans) => sent.push(...spans) });
+    tracer.endSpan(tracer.startSpan("x"));
+    expect(sent[0].attributes).toEqual({ "service.name": "llm-observatory" });
+  });
+});

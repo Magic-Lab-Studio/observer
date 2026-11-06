@@ -8,6 +8,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { CRITERION_LABEL, rubricLabel } from '../helpers/alerts';
 import { Card, Chip, ChartTooltip, EmptyState, ErrorState, Kpi, Meter, Segmented, Skeleton } from '../components/ui';
 import { fmtInt, fmtPct, timeAgo } from '../helpers/format';
+import { passStats, skippedCriteria, verdictOf } from '../helpers/evaluations';
 import { t } from '../i18n';
 
 const LIMIT = 50;
@@ -103,9 +104,10 @@ function Evaluations() {
     const items = evaluations.filter((e) => e.evaluator_type === k);
     // Rule-based turn evaluations: totals for the whole range come from the backend, not the visible page.
     if (k === 'rule_based' && byModel && byModel.count > 0) {
-      return { key: k, count: byModel.count, avg: byModel.avg_score, passRate: byModel.pass_rate, passed: true };
+      return { key: k, count: byModel.count, avg: byModel.avg_score, passRate: byModel.pass_rate, passed: true, incomplete: 0 };
     }
-    return { key: k, count: items.length, avg: avg(items), passRate: items.length ? items.filter((e) => (e.score ?? 0) >= 0.8).length / items.length : null, passed: false };
+    const stats = passStats(items);
+    return { key: k, count: items.length, avg: avg(items), passRate: stats.passRate, passed: true, incomplete: stats.incomplete };
   }), [evaluations, byModel]);
 
   const hist = useMemo(() => {
@@ -129,8 +131,8 @@ function Evaluations() {
       <dl className="grid gap-3 sm:grid-cols-3">
         {groups.map((g) => (
           <Kpi key={g.key} label={t(TYPE_NAME[g.key])} value={g.avg != null ? g.avg.toFixed(2) : '–'}
-            hint={g.count ? (g.passed ? t('{n} evaluaciones · {p} % aprobadas', { n: fmtInt(g.count), p: ((g.passRate ?? 0) * 100).toFixed(0) }) : t('{n} evaluaciones · {p} % ≥ 0.8', { n: g.count, p: ((g.passRate ?? 0) * 100).toFixed(0) })) : t('Sin datos')}
-            tone={g.avg == null ? 'neutral' : g.avg >= 0.8 ? 'good' : g.avg >= 0.5 ? 'warn' : 'bad'} />
+            hint={g.count ? t('{n} evaluaciones · {p} % aprobadas', { n: fmtInt(g.count), p: g.passRate != null ? (g.passRate * 100).toFixed(0) : '–' }) + (g.incomplete ? ` · ${t('{n} incompletas', { n: fmtInt(g.incomplete) })}` : '') : t('Sin datos')}
+            tone={g.avg == null || g.passRate == null ? 'neutral' : g.avg >= 0.8 ? 'good' : g.avg >= 0.5 ? 'warn' : 'bad'} />
         ))}
       </dl>
 
@@ -225,9 +227,12 @@ function Evaluations() {
                       </td>
                       <td className="px-3 py-2.5"><Chip tone="accent">{t(TYPE_NAME[e.evaluator_type] ?? e.evaluator_type)}</Chip></td>
                       <td className="px-3 py-2.5">
-                        {e.score != null ? (
+                        {verdictOf(e) === 'incomplete' ? (
+                          <div className="flex items-center gap-2"><Chip tone="warn">{t('Incompleta')}</Chip>
+                            {e.score != null && <span className="text-faint" title={t('Puntaje de los criterios que sí se evaluaron')}>{e.score.toFixed(2)}</span>}</div>
+                        ) : e.score != null ? (
                           <div className="flex items-center gap-2"><span className="w-9 font-medium text-ink">{e.score.toFixed(2)}</span>
-                            <Meter rate={e.score} tone={e.score >= 0.8 ? 'accent' : 'warn'} /></div>
+                            <Meter rate={e.score} tone={verdictOf(e) === 'passed' ? 'accent' : 'warn'} /></div>
                         ) : '–'}
                       </td>
                       <td className="px-3 py-2.5 text-dim">{criteriaText(e)}</td>
@@ -252,6 +257,18 @@ function Evaluations() {
             {selected ? (
               <Card title={t("Detalle de evaluación")} subtitle={<span className="font-mono">{selected.id}</span>}>
                 <p className="mb-3 text-xs text-dim">{t("Puntaje:")} <span className="font-medium text-ink">{selected.score != null ? selected.score.toFixed(4) : 'N/D'}</span></p>
+                {verdictOf(selected) === 'incomplete' && (
+                  <div className="mb-3 rounded-lg border border-warn/40 p-2.5 text-xs">
+                    <p className="text-warn">{t('Incompleta: el evaluador no pudo juzgar todos los criterios, así que no cuenta como aprobada.')}</p>
+                    {skippedCriteria(selected).length > 0 && (
+                      <ul className="mt-1.5 space-y-0.5 text-dim">
+                        {skippedCriteria(selected).map((c) => (
+                          <li key={c.criterion}><span className="font-mono text-ink">{c.criterion}</span> · {c.reason}{c.retryable ? ` (${t('reintentar puede servir')})` : ''}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 {turnCriteria(selected) && (
                   <div className="mb-4">
                     {turnCriteria(selected)?.rubric && (

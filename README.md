@@ -621,7 +621,7 @@ const result = await asyncTrace("summarize", async (span) => {
 });
 
 // Custom tracer with OTLP exporter
-const tracer = new Tracer({ serviceName: "my-app" });
+const tracer = new Tracer({ serviceName: "my-app", environment: "production" }); // project and environment
 import { OTLPExporter } from "@magic-lab-studio/observer";
 tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
 
