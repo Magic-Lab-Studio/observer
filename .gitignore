@@ -73,3 +73,7 @@ backend/providers_snapshot.json
 # SQLite WAL side files (the backend enables WAL per connection since 2026-10-17)
 *.db-wal
 *.db-shm
+
+# Playwright (dashboard/e2e)
+dashboard/test-results/
+dashboard/playwright-report/
