@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.datasets import _dataset, _observed
+from app.api.datasets import _dataset, _observed, _reply_text
 from app.case_check import check_case, compare_results
 from app.db import DbSession
 from app.evaluators.manitos_turn import RUBRIC
@@ -115,7 +115,11 @@ async def create_run(
     stored: list[RunResult] = []
     for entry in body.results:
         observed, _ = await _observed(session, entry.trace_id)
-        checked = check_case(items[entry.item_id].expect, observed)
+        expect = items[entry.item_id].expect or {}
+        text = expect.get("text") or {}
+        reply = (await _reply_text(session, entry.trace_id)
+                 if text.get("must_contain") or text.get("must_not_contain") else None)
+        checked = check_case(expect, observed, reply=reply)
         result = RunResult(
             run_id=run.id,
             item_id=entry.item_id,
