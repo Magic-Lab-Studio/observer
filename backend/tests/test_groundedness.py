@@ -51,6 +51,34 @@ def test_citations_must_point_to_what_the_trace_fetched():
     assert bad["unsupported"][0]["detail"] == "https://elsewhere.example/policy"
 
 
+def test_a_decimal_number_from_a_tool_matches_the_reply_however_it_is_written():
+    # a JSON float in a tool's output (1492650.0) used to lose its decimal point and gain a digit
+    ctx = str({"resultado": 1492650.0, "tasa": 4012.5, "total": 372.0})
+    for reply in ("Serían 1.492.650 COP al mes en total.", "Serían 1,492,650 COP al mes en total.",
+                  "Serían 1492650 COP al mes en total.", "La tasa usada es de 4.012,5 pesos hoy.",
+                  "La tasa usada es de 4,012.5 pesos hoy.", "El total mensual es de 372 USD."):
+        got = score_reply(reply, ctx, fetched=set(), sources=1)
+        assert got["status"] == "grounded", (reply, got["unsupported"])
+    bad = score_reply("Serían 1.500.000 COP al mes en total.", ctx, fetched=set(), sources=1)
+    assert bad["reason"] == "invented_number" and bad["unsupported"][0]["detail"] == "1.500.000"
+    # a decimal is not a thousands group: 3.72 is not 372
+    assert score_reply("El total mensual es de 3.72 USD.", ctx, fetched=set(), sources=1)[
+        "reason"] == "invented_number"
+
+
+def test_a_number_the_user_gave_is_not_invented():
+    ctx = "Plan Empresa: 31 USD por usuario al mes."
+    reply = "Para 12 personas con el plan Empresa a 31 USD cada una, son 372 USD al mes."
+    assert score_reply(reply, ctx + " total 372", fetched=set(), sources=1)["reason"] == (
+        "invented_number")  # 12 is in no evidence
+    got = score_reply(reply, ctx + " total 372", fetched=set(), sources=1,
+                      given="Somos 12 personas, ¿cuánto pagaríamos?")
+    assert got["status"] == "grounded", got["unsupported"]
+    # the user's numbers count for numbers only: they do not make a sentence supported by words
+    assert score_reply("Nuestros robots del almacén son de color verde.", ctx, fetched=set(),
+                       sources=1, given="robots almacén color verde")["status"] != "grounded"
+
+
 def test_unsupported_wording_is_partial_or_ungrounded_by_threshold():
     reply = ("Order 4471 shipped on 3 March. The refund for order 4471 is 120 USD. "
              "Our warehouse robots are painted green.")

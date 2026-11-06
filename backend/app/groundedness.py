@@ -127,12 +127,40 @@ def urls_in(text: str) -> list[str]:
     return [u.rstrip(".,;:!?") for u in _URL.findall(text)]
 
 
-def _norm_number(raw: str) -> str:
-    return re.sub(r"[.,]", "", raw)
+def _canon(integer: str, fraction: str = "") -> str:
+    integer = integer.lstrip("0") or "0"
+    fraction = fraction.rstrip("0")
+    return f"{integer}.{fraction}" if fraction else integer
+
+
+def number_values(raw: str) -> set[str]:
+    """The values a written number can mean, as canonical strings (``1492650.0`` and ``1.492.650``
+    are both ``1492650``). The last separator is the decimal one when both kinds appear, or when
+    it is followed by other than three digits; a repeated separator groups thousands. A single
+    separator before exactly three digits (``1.492``, ``4,012``) is ambiguous: both readings."""
+    seps = [c for c in raw if c in ".,"]
+    if not seps:
+        return {_canon(raw)}
+    digits = re.split(r"[.,]", raw)
+    if len(set(seps)) == 2:  # 1.492.650,5 / 1,492,650.5: the last one is the decimal separator
+        return {_canon("".join(digits[:-1]), digits[-1])}
+    if len(seps) > 1:  # 1.492.650 / 1,492,650: thousands groups
+        return {_canon("".join(digits))}
+    head, tail = digits
+    decimal = _canon(head, tail)
+    if len(tail) == 3 and 1 <= len(head) <= 3:
+        return {decimal, _canon(head + tail)}
+    return {decimal}
 
 
 def numbers_in(text: str) -> set[str]:
-    return {_norm_number(n) for n in _NUMBER.findall(text)}
+    """Every value the numbers in ``text`` can mean."""
+    return {v for n in _NUMBER.findall(text) for v in number_values(n)}
+
+
+def _stated_numbers(text: str) -> list[str]:
+    """Numbers a claim states, as written; one-digit numbers are not checked."""
+    return [n for n in _NUMBER.findall(text) if sum(c.isdigit() for c in n) >= 2]
 
 
 def _words(text: str) -> set[str]:
@@ -177,13 +205,15 @@ def score_reply(
     fetched: set[str],
     sources: int,
     threshold: float = 0.8,
+    given: str = "",
 ) -> dict[str, Any]:
     """Score one reply against its context (pure). ``fetched``: URLs and source ids the trace
-    really read; ``sources``: how many evidence spans the context came from."""
+    really read; ``sources``: how many evidence spans the context came from; ``given``: what the
+    user said (the root span's input), whose numbers a reply may repeat without inventing them."""
     claims = split_claims(reply)
     if not claims:
         return {"status": "not_applicable", "reason": "no_claims", "score": None, "claims": 0}
-    context_numbers = numbers_in(context)
+    context_numbers = numbers_in(context) | numbers_in(given)
     context_words = _words(context)
     fetched_norm = {f.rstrip("/").lower() for f in fetched}
     supported = cited_ok = 0
@@ -193,8 +223,8 @@ def score_reply(
         cited, rest = _citations(claim)
         bad_cites = [c for c in cited if c.rstrip("/").lower() not in fetched_norm
                      and not c.isdigit()]
-        numbers = {n for n in numbers_in(rest) if len(n) >= 2}
-        missing = sorted(numbers - context_numbers)
+        numbers = _stated_numbers(rest)
+        missing = [n for n in numbers if not number_values(n) & context_numbers]
         why = detail = ""
         if bad_cites:
             why, detail = "unfetched_source", bad_cites[0][:80]
@@ -308,8 +338,10 @@ async def evaluate_trace(
     if not context.strip():
         return {**base, "status": "unknown", "reason": "no_context", "score": None,
                 "sources": 0}
+    top = next((s for s in spans if s.parent_span_id is None and s.inp), None)
+    given = text_of(top.inp)[: ctx.max_chars_per_span] if top is not None else ""
     scored = score_reply(reply, context, fetched=fetched, sources=sources,
-                         threshold=cfg.threshold)
+                         threshold=cfg.threshold, given=given)
     return {**base, **scored, "context_chars": used, "dropped_chars": dropped}
 
 

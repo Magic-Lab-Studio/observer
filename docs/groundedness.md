@@ -29,7 +29,8 @@ names so stored configurations stay valid when it is.
 A claim is **supported** when:
 - it cites a source the trace really fetched: a URL found in an evidence span's input or output,
   or an id from `retrieval.sources`;
-- or every number it states (two digits or more) appears in the context;
+- or every number it states (two digits or more) appears in the context or in what the user said
+  (the root span's input: a reply may repeat "12 people" without inventing it);
 - or at least 60 % of its content words appear in the context.
 
 It is **unsupported** when:
@@ -105,5 +106,8 @@ that whole row.
 
 - Rules catch invented figures and citations to sources that were never read; they do not catch a
   plausible sentence that reuses the context's words to say something false. That needs the judge.
-- Numbers are compared as digits (`1,234.5` and `1234.5` match). One-digit numbers are not checked.
+- Numbers are compared as values, however they are written: a tool's `1492650.0` matches
+  `1.492.650`, `1,492,650` and `1492650`; `4012.5` matches `4.012,5`. A single separator before
+  exactly three digits (`1.492`) counts both ways. One-digit numbers are not checked.
+- The user's numbers only clear the number check: they never make a sentence supported by its words.
 - The `judge` modes are not built yet.
