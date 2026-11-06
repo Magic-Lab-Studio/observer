@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+LEVELS = ("ungrounded", "partial", "grounded")  # groundedness levels, worst to best
+
 
 def _check(kind: str, name: str, status: str, detail: str = "") -> dict[str, str]:
     return {"kind": kind, "name": name, "status": status, "detail": detail}
@@ -55,6 +57,18 @@ def check_case(expect: dict[str, Any], observed: dict[str, Any]) -> dict[str, An
     for key in ("must_contain", "must_not_contain"):
         for phrase in text.get(key) or []:
             checks.append(_check("text", f"{key}:{phrase}", "unknown", "reply text not exported"))
+
+    minimum = (expect.get("groundedness") or {}).get("min_level")
+    if minimum:
+        g = observed.get("groundedness") or {}
+        status = g.get("status")
+        name = f"groundedness>={minimum}"
+        if status in LEVELS:
+            ok = LEVELS.index(status) >= LEVELS.index(minimum)
+            detail = f"{status} ({g.get('score')})"
+            checks.append(_check("groundedness", name, "pass" if ok else "fail", detail))
+        else:
+            checks.append(_check("groundedness", name, "unknown", g.get("reason") or "not scored"))
 
     statuses = [c["status"] for c in checks]
     if "fail" in statuses:

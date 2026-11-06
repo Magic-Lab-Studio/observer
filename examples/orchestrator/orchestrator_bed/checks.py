@@ -68,5 +68,35 @@ async def check_structure(api: Any, episodes: list[Episode], project: str,
     return out
 
 
-CHECKS: dict[str, Callable[..., Awaitable[list[Result]]]] = {"10": check_outcomes,
+async def check_groundedness(api: Any, episodes: list[Episode], project: str,
+                             run: str) -> list[Result]:
+    """Step 9, rules mode: with the replies stored (batch), the invented refund is ungrounded with
+    that number listed and its twin is grounded; formats that carry no content stay unknown."""
+    from .model import GROUNDEDNESS_TRUTH
+
+    out: list[Result] = []
+    planted = {trace_id(project, run, e): e.key for e in episodes if e.key in GROUNDEDNESS_TRUTH}
+    put = await api.put(f"/v1/projects/{project}/config/groundedness", json={"mode": "rules"})
+    out.append((f"{project}: groundedness switched to rules", put.status_code == 200,
+                put.text[:200]))
+    r = await api.post(f"/v1/projects/{project}/groundedness/evaluate",
+                       json={"trace_ids": list(planted), "force": True})
+    results = {row["trace_id"]: row for row in r.json().get("results", [])} if (
+        r.status_code == 200) else {}
+    for tid, key in planted.items():
+        got = results.get(tid, {})
+        if project == "bed-batch":
+            status, number = GROUNDEDNESS_TRUTH[key]
+            listed = [u.get("detail") for u in got.get("unsupported", [])]
+            ok = got.get("status") == status and (number is None or number in listed)
+            out.append((f"{project} {key}: groundedness {status}", ok,
+                        f"{got.get('status')} {listed}"))
+        else:
+            out.append((f"{project} {key}: no content stored, groundedness unknown",
+                        got.get("status") == "unknown", str(got.get("status"))))
+    return out
+
+
+CHECKS: dict[str, Callable[..., Awaitable[list[Result]]]] = {"9": check_groundedness,
+                                                              "10": check_outcomes,
                                                               "11": check_structure}

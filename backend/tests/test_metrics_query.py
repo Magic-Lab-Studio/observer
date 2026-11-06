@@ -259,7 +259,7 @@ async def test_evaluations_view_and_schema(client, db_session):
     ).json()
     assert r["rows"] == [{"grade": "A", "avg_score": pytest.approx(0.9), "avg_passed": 1.0}]
     schema = (await client.get("/v1/analytics/query/schema")).json()
-    assert set(schema["views"]) == {"turns", "provider_attempts", "evaluations"}
+    assert set(schema["views"]) == {"turns", "provider_attempts", "evaluations", "groundedness"}
     assert "session_id" in {f["id"] for f in schema["views"]["turns"]["filter_only"]}
 
 

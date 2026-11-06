@@ -166,10 +166,27 @@ export interface ScoreGroup {
   key: string; count: number; avg_score: number | null; avg_health: number | null;
   pass_rate: number | null; correctness_known: number;
 }
+export interface GroundednessBlock {
+  count: number; scored: number; avg_score: number | null; ungrounded_rate: number | null;
+  unknown: number; not_applicable: number;
+}
 export interface EvaluationsByModel {
   hours: number; project_id: string; count: number; avg_score: number | null; avg_health: number | null;
   pass_rate: number | null; correctness_known: number;
   models: ScoreGroup[]; providers: ScoreGroup[]; grades: { grade: string; count: number }[];
+  groundedness?: GroundednessBlock & { models: (GroundednessBlock & { key: string })[] };
+}
+
+export type GroundednessMode = 'off' | 'rules' | 'judge' | 'rules+judge';
+export interface GroundednessConfig {
+  mode: GroundednessMode;
+  context: { span_types: string[]; name_patterns: string[]; include_input: boolean; max_chars_per_span: number; max_chars_per_trace: number };
+  applies_to: string[];
+  threshold: number;
+}
+export interface GroundednessSection {
+  project_id: string; section: 'groundedness'; value: GroundednessConfig; source: 'setting' | 'default';
+  built_modes: GroundednessMode[];
 }
 export interface TurnCriterion { name: string; weight: number; score: number; detail: string }
 

@@ -22,6 +22,7 @@ from app.api import governance as governance_api
 from app.api import ingest_health as ingest_health_api
 from app.api import otlp as otlp_api
 from app.api import privacy as privacy_api
+from app.api import project_config as project_config_api
 from app.auth import API_KEY, require_api_key
 from app.db.postgres import engine
 from app.limits import BodyLimitMiddleware
@@ -184,6 +185,12 @@ app.include_router(
     event_ingest_api.router,
     prefix="/v1/ingest/events",
     tags=["event-ingest"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    project_config_api.router,
+    prefix="/v1/projects",
+    tags=["project-config"],
     dependencies=[_app_auth],
 )
 

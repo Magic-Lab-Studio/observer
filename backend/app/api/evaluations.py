@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import groundedness
 from app.db import DbSession
 from app.evaluators import EvaluationCriteria, EvaluatorType, create_evaluator
 from app.models.evaluation import Evaluation
@@ -384,7 +385,54 @@ async def evaluations_by_model(
         .limit(20000)
     )
     rows = [(score, result) for score, result in (await session.execute(query)).all()]
-    return {"hours": hours, "project_id": project_id, **summarize_scores(rows)}
+    grounded = (
+        await session.execute(
+            select(Evaluation.result)
+            .join(Trace, Trace.id == Evaluation.trace_id)
+            .where(
+                Evaluation.evaluator_type == groundedness.EVALUATOR_TYPE,
+                Trace.project_id == project_id,
+                Trace.created_at >= cutoff,
+            )
+            .limit(20000)
+        )
+    ).scalars()
+    return {
+        "hours": hours,
+        "project_id": project_id,
+        **summarize_scores(rows),
+        "groundedness": summarize_groundedness(list(grounded)),
+    }
+
+
+def summarize_groundedness(results: list[Any]) -> dict[str, Any]:
+    """Groundedness per model: scored replies, average score, ungrounded share, and how many
+    could not be judged (``unknown``: no reply text or no context in the trace)."""
+
+    def block(items: list[dict[str, Any]]) -> dict[str, Any]:
+        scored = [r for r in items if r.get("status") in groundedness.LEVELS]
+        scores = [float(r["score"]) for r in scored if isinstance(r.get("score"), (int, float))]
+        return {
+            "count": len(items),
+            "scored": len(scored),
+            "avg_score": sum(scores) / len(scores) if scores else None,
+            "ungrounded_rate": (
+                sum(1 for r in scored if r["status"] == "ungrounded") / len(scored)
+                if scored
+                else None
+            ),
+            "unknown": sum(1 for r in items if r.get("status") == "unknown"),
+            "not_applicable": sum(1 for r in items if r.get("status") == "not_applicable"),
+        }
+
+    items = [r for r in results if isinstance(r, dict)]
+    models: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in items:
+        models[str(r.get("model") or "?")].append(r)
+    listing = sorted(
+        ({"key": k, **block(v)} for k, v in models.items()), key=lambda x: (-x["count"], x["key"])
+    )
+    return {**block(items), "models": listing}
 
 
 @router.get("/{evaluation_id}", response_model=EvaluationResponse)

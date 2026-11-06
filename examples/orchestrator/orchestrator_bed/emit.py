@@ -42,6 +42,8 @@ def to_batch(episodes: list[Episode], *, project: str, run: str, base_s: float) 
                 "end_time": t0 + s.end_ms / 1000,
                 "status": s.status,
                 "attributes": {"service.name": project, **s.attrs},
+                **({"input": s.inp} if s.inp is not None else {}),
+                **({"output": s.out} if s.out is not None else {}),
             })
     return {"spans": spans}
 

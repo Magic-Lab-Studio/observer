@@ -178,7 +178,7 @@ def test_migration_adds_and_removes_the_span_type_index(tmp_path):
 
     alembic("upgrade", "head")
     assert "ix_spans_span_type_start_time" in indexes()
-    alembic("downgrade", "-1")
+    alembic("downgrade", "20261019_parent_ref")  # below the index, whatever came after it
     assert "ix_spans_span_type_start_time" not in indexes()
     alembic("upgrade", "head")
     assert "ix_spans_span_type_start_time" in indexes()

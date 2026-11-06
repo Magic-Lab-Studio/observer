@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.groundedness import EVALUATOR_TYPE as GROUNDEDNESS_TYPE
 from app.metrics_core import (
     ROW_LIMIT,
     TurnSignals,
@@ -30,7 +31,7 @@ from app.metrics_core import (
 from app.models.evaluation import Evaluation
 from app.models.trace import Trace
 
-View = Literal["turns", "provider_attempts", "evaluations"]
+View = Literal["turns", "provider_attempts", "evaluations", "groundedness"]
 Aggregation = Literal["count", "sum", "avg", "min", "max", "p50", "p95", "p99"]
 Granularity = Literal["auto", "minute", "hour", "day"]
 
@@ -103,6 +104,23 @@ VIEWS: dict[str, ViewSpec] = {
             "provider": "Proveedor",
             "model": "Modelo",
             "grade": "Nota",
+            "environment": "Entorno",
+        },
+        filter_only={},
+    ),
+    "groundedness": ViewSpec(
+        label="Sustento de las respuestas",
+        measures={
+            "score": "Afirmaciones con sustento (proporción)",
+            "ungrounded": "Sin sustento (0/1)",
+            "claims": "Afirmaciones",
+            "unsupported_count": "Afirmaciones sin sustento",
+        },
+        dimensions={
+            "model": "Modelo",
+            "provider": "Proveedor",
+            "status": "Sustento",
+            "reason": "Razón",
             "environment": "Entorno",
         },
         filter_only={},
@@ -308,6 +326,54 @@ async def evaluation_records(
     return out
 
 
+async def groundedness_records(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    since: datetime,
+    limit: int,
+    until: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """One record per groundedness evaluation (``rules`` mode); the score is null when the reply
+    could not be judged, so averages skip those."""
+    query = (
+        select(Evaluation.result, Trace.created_at, Trace.environment)
+        .join(Trace, Trace.id == Evaluation.trace_id)
+        .where(
+            Evaluation.evaluator_type == GROUNDEDNESS_TYPE,
+            Trace.project_id == project_id,
+            Trace.created_at >= since,
+        )
+        .order_by(Trace.created_at.desc())
+        .limit(limit)
+    )
+    if until is not None:
+        query = query.where(Trace.created_at <= until)
+    out = []
+    for result, created, env in (await session.execute(query)).all():
+        data = result if isinstance(result, dict) else {}
+        status = str(data.get("status") or "")
+        score = data.get("score")
+        judged = status in ("grounded", "partial", "ungrounded")
+        out.append(
+            {
+                "time": aware(created),
+                "environment": str(env or ""),
+                "provider": str(data.get("provider") or ""),
+                "model": str(data.get("model") or ""),
+                "status": status,
+                "reason": str(data.get("reason") or ""),
+                "score": float(score) if isinstance(score, (int, float)) else None,
+                "ungrounded": (1.0 if status == "ungrounded" else 0.0) if judged else None,
+                "claims": float(data["claims"]) if isinstance(data.get("claims"), int) else None,
+                "unsupported_count": float(data["unsupported_count"])
+                if isinstance(data.get("unsupported_count"), int)
+                else None,
+            }
+        )
+    return out
+
+
 def _matches(record: dict[str, Any], f: FilterSpec) -> bool:
     value = str(record.get(f.field) or "")
     if f.op == "in":
@@ -372,6 +438,11 @@ async def run_query(session: AsyncSession, req: QueryRequest) -> dict[str, Any]:
     granularity = resolve_granularity(req, start, end)
     if req.view == "evaluations":
         records = await evaluation_records(
+            session, project_id=req.project_id, since=start, limit=ROW_LIMIT, until=end
+        )
+        loaded = len(records)
+    elif req.view == "groundedness":
+        records = await groundedness_records(
             session, project_id=req.project_id, since=start, limit=ROW_LIMIT, until=end
         )
         loaded = len(records)

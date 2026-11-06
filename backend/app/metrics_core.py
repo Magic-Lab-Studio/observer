@@ -75,6 +75,12 @@ METRICS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "kind": "turns",
     },
+    # groundedness evaluations (roadmap step 9), not turn signals: alerts.evaluate_rules reads them
+    "ungrounded_rate": {
+        "label": "Respuestas sin sustento",
+        "unit": "ratio",
+        "kind": "groundedness",
+    },
 }
 
 

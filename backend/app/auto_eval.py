@@ -163,6 +163,17 @@ async def evaluate_new_turns(
     return len(created)
 
 
+async def evaluate_groundedness(session: AsyncSession, *, days: float = 7.0) -> int:
+    """Groundedness (``rules``) of the recent traces of every project that switched it on."""
+    from app import groundedness
+
+    count = 0
+    for project_id in await groundedness.configured_projects(session):
+        count += len(await groundedness.evaluate_project(session, project_id, days=days))
+    await session.commit()
+    return count
+
+
 async def auto_eval_loop(factory: async_sessionmaker[AsyncSession]) -> None:
     """Background loop (same shape as ``retention_loop``); the session factory is injected."""
     if not auto_eval_enabled():
@@ -175,6 +186,10 @@ async def auto_eval_loop(factory: async_sessionmaker[AsyncSession]) -> None:
                 count = await evaluate_new_turns(session, days=days)
             if count:
                 logger.info("auto-eval: scored %d turns", count)
+            async with factory() as session:
+                grounded = await evaluate_groundedness(session, days=days)
+            if grounded:
+                logger.info("auto-eval: groundedness of %d replies", grounded)
         except Exception:
             logger.warning("auto-eval pass failed", exc_info=True)
         await asyncio.sleep(interval)

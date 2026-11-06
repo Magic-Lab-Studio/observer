@@ -13,12 +13,14 @@ export const CRITERION_LABEL: Record<string, string> = {
   fallback: 'Vía alterna',
   latency: 'Latencia',
   ttft: 'Primer token',
+  groundedness: 'Sustento',
 };
 
 /** Labels (Spanish keys) of the rule-based rubrics, by id without the "@version" suffix. */
 export const RUBRIC_LABEL: Record<string, string> = {
   manitos_turn: 'Turno de Manitos',
   generic_turn: 'Salud operativa genérica',
+  groundedness: 'Sustento de la respuesta',
 };
 
 /** "generic_turn@1" -> "Salud operativa genérica (v1)"; an unknown rubric keeps its id. */

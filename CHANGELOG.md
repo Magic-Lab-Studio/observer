@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Groundedness (roadmap step 9, `rules` mode)
+- Added: per-project configuration sections in a new table `project_configs` (migration
+  `20261106_configs`); `GET /v1/projects/{id}/config` and `GET|PUT|DELETE
+  /v1/projects/{id}/config/groundedness` with a closed schema. Mode `off` by default.
+- Added: groundedness in `rules` mode, no model. Each claim of a reply is checked against the
+  outputs of the trace's tool and retrieval spans:
+  - a citation to a source the trace never fetched is unsupported;
+  - so is a number the sources do not contain, and one such number makes the reply `ungrounded`;
+  - without reply text or context the result is `unknown`.
+  Results are evaluations of type `groundedness` (rubric `groundedness@1`), scored by the
+  automatic sweep or on demand with `POST /v1/projects/{id}/groundedness/evaluate`. See
+  `docs/groundedness.md`.
+- Added: alert metric `ungrounded_rate`, Explore view `groundedness`, "Groundedness by model" on
+  Evaluations (`/v1/evaluations/by-model` gains `groundedness`), case expectation
+  `expect.groundedness.min_level`, and the editor on the Privacy page.
+- Added: the test bed's step 9 check: an invented refund amount is `ungrounded` with that number
+  listed, its twin is `grounded`, and formats that carry no content stay `unknown`.
+- Not built: the `judge` and `rules+judge` modes (the API answers 422).
+
 ### Event ingestion (roadmap step 11)
 - Added: `POST /v1/ingest/events` and the `observer-ingest` command (`--dry-run`). A system's own
   JSON events become traces through a closed YAML mapping: event pairs make spans, a field holds

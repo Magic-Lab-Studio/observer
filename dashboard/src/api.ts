@@ -28,6 +28,8 @@ import type {
   RunComparison,
   CaptureMode,
   PrivacyOverview,
+  GroundednessConfig,
+  GroundednessSection,
   IngestHealth,
   ProjectInfo,
   GovernanceKind,
@@ -209,6 +211,14 @@ export const api = {
   },
   async enforceCaptureMode(project: string): Promise<{ spans_scanned: number; spans_changed: number }> {
     return request(`/v1/privacy/projects/${encodeURIComponent(project)}/enforce`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+  },
+
+  // Groundedness configuration per project (/v1/projects/{id}/config/groundedness)
+  async getGroundedness(project: string): Promise<GroundednessSection> {
+    return request(`/v1/projects/${encodeURIComponent(project)}/config/groundedness`);
+  },
+  async setGroundedness(project: string, value: GroundednessConfig): Promise<GroundednessSection> {
+    return request(`/v1/projects/${encodeURIComponent(project)}/config/groundedness`, { method: 'PUT', body: JSON.stringify(value) });
   },
 
   // Governance: decisions, denials, approvals and skills (read-only)
