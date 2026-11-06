@@ -11,7 +11,8 @@ import time
 import uuid
 import weakref
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
@@ -268,6 +269,24 @@ class Tracer:
         self._open[span.id] = span
         return span
 
+    @contextmanager
+    def span(self, name: str, span_type: str = "generic", **attributes: Any) -> Iterator[Span]:
+        """Open a span for the ``with`` block and make it the current one, so spans opened inside
+        (instrumented model calls, ``agent.*`` helpers, nested blocks) become its children. Ends it
+        when the block ends; an exception marks it as an error and propagates unchanged."""
+        opened = self.start_span(name, span_type=span_type, **attributes)
+        token = _current_span.set(opened)
+        try:
+            yield opened
+            if opened.status is not SpanStatus.ERROR:
+                opened.set_status(SpanStatus.OK)
+        except BaseException as exc:
+            _record_error(opened, exc)
+            raise
+        finally:
+            opened.end()
+            _current_span.reset(token)
+
     def _on_end(self, span: Span) -> None:
         """Queue a finished span; a full batch wakes the flush thread."""
         self._open.pop(span.id, None)
@@ -455,6 +474,11 @@ def _get_global_tracer() -> Tracer:
     if _global_tracer is None:
         _global_tracer = Tracer()
     return _global_tracer
+
+
+def span(name: str, span_type: str = "generic", **attributes: Any):
+    """``with span("turn", span_type="agent") as s:`` on the global tracer (see ``Tracer.span``)."""
+    return _get_global_tracer().span(name, span_type=span_type, **attributes)
 
 
 def current_span() -> Span | None:

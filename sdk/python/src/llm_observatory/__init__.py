@@ -12,6 +12,7 @@ from llm_observatory.tracer import (
     current_span,
     get_tracer,
     set_tracer,
+    span,
     trace,
 )
 
@@ -24,6 +25,7 @@ __all__ = [
     "SpanStatus",
     "TokenUsage",
     "trace",
+    "span",
     "current_span",
     "get_tracer",
     "set_tracer",

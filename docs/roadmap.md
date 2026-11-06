@@ -373,6 +373,20 @@ premium route can drive most of the spend.
   view, case expectation, editor). Groundedness results got their own evaluator type, because
   four readers took every `rule_based` row as a turn-health score. Learned: a URL at the end of a
   sentence kept its full stop and read as a citation the trace never fetched.
+- 2026-11-06: step 9 numbers compared as values. Found with a synthetic support agent on six
+  providers: a tool's `1492650.0` lost its decimal point and became `14926500`, so every faithful
+  reply ("1.492.650 COP") read as an invented number (4 of 5 false positives on correct answers).
+  A number the user gave ("12 people") no longer counts as invented either. Learned: compare what a
+  number means, not its digits; a single separator before three digits is ambiguous, so both
+  readings count.
+- 2026-11-06: OTLP spans carry their input and output. Found with a synthetic agent instrumented
+  with plain OpenTelemetry and OpenInference (as teams coming from Phoenix or Langfuse arrive): the
+  receiver kept only attributes, so groundedness was always `unknown` (`no_reply_text`) even under
+  `full` capture. Content is read from `input.value`/`output.value`, `gen_ai.*.messages`, GenAI tool
+  calls and the deprecated prompt/completion keys; `metadata` still keeps none.
+- 2026-11-06: Python SDK `span()` / `Tracer.span()`, a `with` block that makes the span current.
+  Found writing an adapter for a synthetic agent: opening a turn's root without a decorator needed
+  the private `_current_span`; Phoenix and Langfuse both have this.
 
 ## Later
 

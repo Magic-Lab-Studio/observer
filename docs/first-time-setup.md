@@ -98,10 +98,11 @@ curl -X POST http://localhost:8000/v1/traces/batch \
   }'
 ```
 
-Confirm that Observer stored it:
+Confirm that Observer stored it (keep the trailing slash: without it the API answers a `307`
+redirect with an empty body, and `curl` prints nothing unless you add `-L`):
 
 ```bash
-curl http://localhost:8000/v1/traces
+curl http://localhost:8000/v1/traces/
 ```
 
 If `OBSERVATORY_API_KEY` is configured, include
@@ -126,6 +127,44 @@ npm install @magic-lab-studio/observer@0.2.0
 python -m pip install magic-lab-observer==0.2.0
 python -m pip install magic-lab-observer-cli==0.2.0
 ```
+
+The npm registry still serves `0.1.1`: the `0.2.0` npm publication has not completed, so
+`npm install @magic-lab-studio/observer@0.2.0` fails with `ETARGET`. Until it does, install
+`@magic-lab-studio/observer` (0.1.1); its traces carry no project (`service.name` is sent from
+0.2.0 on) and its tracer has `flush()` but not `shutdown()`.
+
+### Your first SDK trace
+
+Python (`python -m pip install magic-lab-observer==0.2.0`), saved as `first_trace.py`:
+
+```python
+from llm_observatory import OTLPExporter, Tracer
+
+tracer = Tracer(service_name="first-trace")
+tracer.add_exporter(OTLPExporter(endpoint="http://localhost:8000"))
+span = tracer.start_span("hello-observer", span_type="llm", model="example-model")
+span.set_input({"text": "Say hello"})
+span.set_output({"text": "Hello"})
+span.end()
+tracer.shutdown()  # sends what is still queued
+```
+
+TypeScript (in a new project: `npm init -y && npm install @magic-lab-studio/observer`), saved as
+`first-trace.mjs` and run with `node first-trace.mjs`:
+
+```javascript
+import { OTLPExporter, Tracer } from "@magic-lab-studio/observer";
+
+const tracer = new Tracer({ serviceName: "first-trace" });
+tracer.addExporter(new OTLPExporter({ endpoint: "http://localhost:8000" }));
+const span = tracer.startSpan("hello-observer", { spanType: "llm" });
+span.input = { text: "Say hello" };
+span.output = { text: "Hello" };
+tracer.endSpan(span);
+await tracer.flush(); // sends what is still queued
+```
+
+Both appear in the Traces view as `hello-observer`, and in `curl http://localhost:8000/v1/traces/`.
 
 Install the backend distribution separately when embedding or operating the
 API outside the Compose quickstart:

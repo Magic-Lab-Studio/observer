@@ -152,6 +152,41 @@ def _safe_attributes(raw: dict[str, Any], mode: str) -> dict[str, Any]:
     return filter_attributes(out, mode) or {}
 
 
+# Where a span's content travels, by convention, most specific first: OpenInference
+# (`input.value`), OpenTelemetry GenAI messages, GenAI tool calls, and the deprecated
+# `gen_ai.prompt` / `gen_ai.completion`.
+_CONTENT_KEYS = {
+    "input": ("input.value", "gen_ai.input.messages", "gen_ai.tool.call.arguments",
+              "gen_ai.prompt"),
+    "output": ("output.value", "gen_ai.output.messages", "gen_ai.tool.call.result",
+               "gen_ai.completion"),
+}
+_MAX_CONTENT = 32_000
+
+
+def _content(raw: dict[str, Any], side: str) -> dict[str, Any] | None:
+    """The span's input or output as a JSON object (what the SDK batch path stores), or None.
+    A JSON object or list in the string is parsed (lists go under ``messages``); anything else is
+    kept as ``{"text": ...}``. The project's capture mode is applied later, at ingestion."""
+    for key in _CONTENT_KEYS[side]:
+        value = raw.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        value = value[:_MAX_CONTENT]
+        stripped = value.lstrip()
+        if stripped[:1] in "[{":
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                return parsed
+            if isinstance(parsed, list):
+                return {"messages": parsed}
+        return {"text": value}
+    return None
+
+
 def _span_type(attrs: dict[str, Any]) -> str:
     declared = contract_type(None, attrs)
     if declared:
@@ -261,6 +296,8 @@ def translate(
                     "end_time": end,
                     "status": _status(span),
                     "attributes": attrs or None,
+                    "input": _content(raw, "input") if mode != "metadata" else None,
+                    "output": _content(raw, "output") if mode != "metadata" else None,
                     "tokens_input": int(tokens_in) if tokens_in is not None else None,
                     "tokens_output": int(tokens_out) if tokens_out is not None else None,
                     "_root": not parent.strip("0"),

@@ -30,6 +30,7 @@ deflate-compressed, and answers with an `ExportTraceServiceResponse` in the same
 | root span (no parent) | names the trace; the trace spans the earliest start to the latest end |
 | `gen_ai.usage.input_tokens` (or `prompt_tokens`) / `output_tokens` (or `completion_tokens`) | `tokens_input` / `tokens_output` |
 | `gen_ai.response.model` / `gen_ai.request.model` | attribute `model` |
+| `input.value` / `output.value` (OpenInference; JSON when `*.mime_type` is `application/json`), else `gen_ai.input.messages` / `gen_ai.output.messages`, else `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result`, else the deprecated `gen_ai.prompt` / `gen_ai.completion` | the span's input / output, only when the project's capture mode keeps content (`full` or `redacted`); a JSON object is stored as is, a list under `messages`, other text as `{"text": ...}` (up to 32,000 characters) |
 
 Span type comes from `openinference.span.kind` (`LLM`, `TOOL`, `AGENT`, `CHAIN`, `RETRIEVER`,
 `EMBEDDING`, `RERANKER`) or from `gen_ai.operation.name`: `chat`, `text_completion`,
@@ -51,7 +52,9 @@ what is stored for it; without one, `OBSERVATORY_OTLP_CAPTURE` (`metadata` by de
   `key`, `secret`, `authorization`, `cookie`, and similar). Standard GenAI attributes that are not
   content (`gen_ai.usage.*`, model, operation, tool and agent names, finish reasons) are kept. Strings
   are cut at 200 characters.
-* `full`: attributes are stored as sent (strings up to 4000 characters). Use it only for data you
+* `full`: attributes are stored as sent (strings up to 4000 characters), and the span's input and
+  output are filled from the content attributes above, so groundedness and text checks of test
+  cases can read them. Use it only for data you
   are willing to keep in the Observer database.
 
 The filter looks at attribute **names**, not values, so a name that does not look like content can

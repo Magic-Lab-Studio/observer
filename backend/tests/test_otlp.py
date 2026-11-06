@@ -103,6 +103,51 @@ def test_full_capture_keeps_content_attributes():
     assert "PRIVATE PROMPT" in json.dumps(env)
 
 
+def _content_demo():
+    return _request([
+        _span(ROOT, "turn", attrs={"openinference.span.kind": "AGENT",
+                                   "input.value": "How much is the Team plan?",
+                                   "output.value": "The Team plan is 14 USD per user."}),
+        _span(CHILD, "search", parent=ROOT, start=10_000_000,
+              attrs={"openinference.span.kind": "TOOL", "tool.name": "search",
+                     "input.value": '{"query": "team plan price"}',
+                     "input.mime_type": "application/json",
+                     "output.value": '{"results": [{"text": "Team: 14 USD per user"}]}',
+                     "output.mime_type": "application/json"}),
+        _span("eee19b7ec3c1b176", "chat", parent=ROOT, start=20_000_000,
+              attrs={"gen_ai.operation.name": "chat",
+                     "gen_ai.input.messages": json.dumps([{"role": "user", "parts": [
+                         {"type": "text", "content": "How much is the Team plan?"}]}]),
+                     "gen_ai.output.messages": json.dumps([{"role": "assistant", "parts": [
+                         {"type": "text", "content": "14 USD"}]}])}),
+        _span("eee19b7ec3c1b177", "execute_tool calc", parent=ROOT, start=30_000_000,
+              attrs={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "calc",
+                     "gen_ai.tool.call.arguments": '{"expr": "14*12"}',
+                     "gen_ai.tool.call.result": "168"}),
+        _span("eee19b7ec3c1b178", "legacy", parent=ROOT, start=40_000_000,
+              attrs={"gen_ai.prompt": "old prompt", "gen_ai.completion": "old reply"}),
+    ])
+
+
+def test_span_input_and_output_come_from_openinference_and_gen_ai_attributes():
+    spans = {s["name"]: s for s in translate(_content_demo(), mode="full").envelopes[0]["spans"]}
+    assert spans["turn"]["input"] == {"text": "How much is the Team plan?"}
+    assert spans["turn"]["output"] == {"text": "The Team plan is 14 USD per user."}
+    assert spans["search"]["input"] == {"query": "team plan price"}  # JSON mime type parsed
+    assert spans["search"]["output"]["results"][0]["text"] == "Team: 14 USD per user"
+    chat_in = spans["chat"]["input"]["messages"][0]["parts"][0]["content"]
+    assert chat_in == "How much is the Team plan?"
+    assert spans["chat"]["output"]["messages"][0]["parts"][0]["content"] == "14 USD"
+    assert spans["calc"]["input"] == {"expr": "14*12"}
+    assert spans["calc"]["output"] == {"text": "168"}
+    assert spans["legacy"]["input"] == {"text": "old prompt"}
+    assert spans["legacy"]["output"] == {"text": "old reply"}
+    # metadata keeps no content anywhere
+    meta = translate(_content_demo(), mode="metadata").envelopes[0]["spans"]
+    assert all("input" not in s and "output" not in s for s in meta)
+    assert "Team plan" not in json.dumps(meta)
+
+
 def test_invalid_spans_are_rejected_not_fatal():
     bad = _request([_span("zz", "x"), _span(ROOT, "ok")])
     out = translate(bad)
@@ -258,3 +303,28 @@ async def test_a_failed_root_stays_failed_when_a_later_batch_is_all_ok(client, d
     trace = await db_session.get(Trace, trace_uuid(TID))
     await db_session.refresh(trace)
     assert trace.status == "error"
+
+
+@pytest.mark.anyio
+async def test_otlp_content_is_stored_under_full_capture_only_and_feeds_groundedness(
+    client, db_session
+):
+    body = json.dumps(_content_demo())
+    r = await _post(client, body)
+    assert r.status_code == 200
+    query = select(Span).where(Span.trace_id == trace_uuid(TID))
+    spans = (await db_session.execute(query)).scalars().all()
+    assert all(s.inp is None and s.out is None for s in spans)  # OTLP default: metadata
+    await client.put("/v1/privacy/projects/my-agent", json={"capture_mode": "full"})
+    other = json.loads(body.replace(TID, "6b8efff798038103d269b633813fc60c"))
+    assert (await _post(client, json.dumps(other))).status_code == 200
+    tid = trace_uuid("6b8efff798038103d269b633813fc60c")
+    db_session.expire_all()
+    stored = {s.name: s for s in (await db_session.execute(
+        select(Span).where(Span.trace_id == tid))).scalars()}
+    assert stored["search"].inp == {"query": "team plan price"}
+    assert stored["turn"].out == {"text": "The Team plan is 14 USD per user."}
+    await client.put("/v1/projects/my-agent/config/groundedness", json={"mode": "rules"})
+    out = (await client.post("/v1/projects/my-agent/groundedness/evaluate",
+                             json={"trace_ids": [tid]})).json()
+    assert out["results"][0]["status"] == "grounded", out

@@ -562,6 +562,14 @@ def summarize(text: str) -> str:
         messages=[{"role": "user", "content": text}]
     )
 
+# Or open a span as a block: spans started inside (model calls, agent helpers) nest under it
+from llm_observatory import span
+
+with span("turn", span_type="agent") as turn:
+    turn.set_input({"text": question})
+    reply = answer(question)
+    turn.set_output({"text": reply})
+
 # Custom tracer with OTLP exporter
 tracer = Tracer(service_name="my-app")
 from llm_observatory.exporters.otlp import OTLPExporter
