@@ -207,6 +207,15 @@ async def evaluate_rules(session: AsyncSession, *, now: datetime | None = None) 
                 environment=rule.environment,
                 since=now - timedelta(minutes=int(rule.window_minutes)),
             )
+        elif spec["kind"] == "loops":
+            from app.loop_detection import loop_rate
+
+            value, samples = await loop_rate(
+                session,
+                project_id=rule.project_id,
+                environment=rule.environment,
+                since=now - timedelta(minutes=int(rule.window_minutes)),
+            )
         elif spec["kind"] == "quota":
             value, samples, details = _quota_value(rule.scope or "")
             if value is None:

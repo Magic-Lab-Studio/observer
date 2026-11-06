@@ -15,12 +15,13 @@ import argparse
 import os
 import re
 from collections.abc import Mapping
-from datetime import datetime
 from typing import Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
+
+from app.ingest_validation import parse_iso8601
 
 DEFAULT_URL = "http://127.0.0.1:8100"
 MAX_SPANS = 200
@@ -171,7 +172,7 @@ def _ms(start: str | None, end: str | None) -> float | None:
     if not start or not end:
         return None
     try:
-        delta = datetime.fromisoformat(end) - datetime.fromisoformat(start)
+        delta = parse_iso8601(end) - parse_iso8601(start)
     except ValueError:
         return None
     return round(delta.total_seconds() * 1000.0, 1)

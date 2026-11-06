@@ -57,7 +57,8 @@ the header (next to the environment and time range) picks it. It defaults to the
 recent trace and remembers the choice (`?project=` in the URL and the browser's storage).
 
 - **Trace detail** — a hierarchical waterfall, a per-stage time bar, a warning when the same tool call
-  repeats (possible loop) and, for `llm.chain` spans, the provider-by-provider attempts of that turn.
+  repeats (possible loop; the alert metric `loop_rate` counts the traces with one) and, for `llm.chain`
+  spans, the provider-by-provider attempts of that turn.
 
 ![Trace detail with the llm.chain attempts of one turn](docs/assets/ui-trace-detail.png)
 

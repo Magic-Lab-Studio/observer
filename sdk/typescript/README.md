@@ -138,7 +138,7 @@ const cost = calculateCost('gpt-4o', 1000, 500);
 // Returns 0.0075 or null for unknown models
 ```
 
-Supported models: GPT-4o, GPT-4o-mini, GPT-4-turbo, GPT-4, GPT-3.5-turbo, o1, o1-mini, o3, o3-mini, Claude 4 Opus/Sonnet, Claude 3.5 Sonnet/Haiku, Claude 3 Opus/Sonner/Haiku.
+The table is `src/pricing.json`, the same one the Python SDK and the backend use: every price names its official source and the day it was checked (OpenAI, Anthropic, Google Gemini, Groq, Cloudflare). A model that is not in it returns `null`, not zero; `UNPRICED` says why for known models with no published price (for example retired Claude 3.x and Gemini 1.5/2.0). Prices that change on a known date apply from that day (`ratesOn`).
 
 ## TypeScript Types
 

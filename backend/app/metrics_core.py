@@ -81,6 +81,12 @@ METRICS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "kind": "groundedness",
     },
+    # repeated tool calls (evaluation P6): app.loop_detection.loop_rate over the window's traces
+    "loop_rate": {
+        "label": "Trazas con llamadas repetidas",
+        "unit": "ratio",
+        "kind": "loops",
+    },
 }
 
 

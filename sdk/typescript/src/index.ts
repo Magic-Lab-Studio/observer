@@ -15,7 +15,7 @@ export type { Span, SpanStatus, TokenUsage, SpanExporter } from "./tracer";
 export { instrument, uninstrument } from "./instrumentors";
 export { OTLPExporter } from "./exporters";
 export type { OTLPExporterOptions } from "./exporters";
-export { calculateCost, MODEL_PRICING } from "./pricing";
+export { calculateCost, MODEL_PRICING, UNPRICED, ratesOn, resolveModel } from "./pricing";
 export type { ModelPricing } from "./pricing";
 export {
   OUTCOMES,

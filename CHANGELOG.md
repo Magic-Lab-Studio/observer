@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### ISO timestamps, verified prices, loop alert (external evaluation A1, A6, P6)
+- Fixed (backend): ISO 8601 timestamps are read by one parser, `parse_iso8601`, with the same
+  result on Python 3.10 and later. Before, 3.10 refused `Z` in event mappings, a fraction other
+  than 3 or 6 digits, `+0000` and the basic format, so those spans were a 422 there only. CI gains
+  a `python-310` job running the backend, Python SDK and CLI suites on 3.10.
+- Changed (price table): every price is checked against the provider's official page, with its
+  source and day. `o3` drops from 10/40 to 2/8 USD per 1M tokens. Models with no published price
+  now cost `null` with the reason, instead of a price nobody had verified:
+  - OpenAI `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`, `o1`, `o1-mini`, `o3-mini` (not on the page);
+  - Claude 3.x (retired by Anthropic between 2025-07 and 2026-04);
+  - Gemini 1.5 and 2.0 (2.0 Flash shut down on 2026-06-01).
+- Changed (TypeScript SDK): the price table is the shared `pricing.json`, no longer a hand-kept
+  copy. It gains the Gemini 2.5/3.8, Groq and Cloudflare prices the Python SDK had, dated price
+  changes (`ratesOn`) and `UNPRICED`.
+- Added (alerts): metric `loop_rate`, the share of the window's traces with a repeated-tool-call
+  warning (the trace page's loop detection), over the newest 500 traces per pass.
+
 ### SDK span lifecycle (external evaluation C1 and C2)
 - Fixed (Python and TypeScript SDKs): a streamed call (`stream=True`) ends its span when the
   stream does, with the text, finish reason, model, tokens and cost:

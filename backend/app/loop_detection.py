@@ -65,3 +65,60 @@ def repeated_calls(spans: list[Any], threshold: int | None = None) -> list[dict[
             }
         )
     return sorted(found, key=lambda g: -g["count"])
+
+
+MAX_TRACES_PER_PASS = 500
+
+
+async def loop_rate(
+    session: Any,
+    *,
+    project_id: str | None,
+    environment: str | None,
+    since: Any,
+    max_traces: int = MAX_TRACES_PER_PASS,
+) -> tuple[float | None, int]:
+    """Share of the window's traces with at least one repeated-call warning (alert ``loop_rate``).
+
+    The same grouping as ``GET /v1/traces/{id}/diagnostics``, over the newest ``max_traces``
+    traces of the window (bounded per alert pass); only tool spans are read. ``(None, 0)`` when
+    the window has no traces.
+    """
+    from sqlalchemy import select
+
+    from app.models.trace import Span, Trace
+
+    query = select(Trace.id).where(Trace.created_at >= since)
+    if project_id:
+        query = query.where(Trace.project_id == project_id)
+    if environment:
+        query = query.where(Trace.environment == environment)
+    ids = [
+        row[0]
+        for row in (
+            await session.execute(query.order_by(Trace.created_at.desc()).limit(max_traces))
+        ).all()
+    ]
+    if not ids:
+        return None, 0
+    spans = (
+        await session.execute(
+            select(
+                Span.id,
+                Span.trace_id,
+                Span.parent_span_id,
+                Span.name,
+                Span.span_type,
+                Span.inp,
+                Span.out,
+                Span.status,
+                Span.start_time,
+                Span.end_time,
+            ).where(Span.trace_id.in_(ids), Span.span_type == "tool")
+        )
+    ).all()
+    by_trace: dict[Any, list[Any]] = defaultdict(list)
+    for span in spans:
+        by_trace[span.trace_id].append(span)
+    looping = sum(1 for calls in by_trace.values() if repeated_calls(calls))
+    return looping / len(ids), len(ids)

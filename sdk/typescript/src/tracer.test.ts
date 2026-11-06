@@ -247,7 +247,7 @@ describe("Pricing", () => {
   });
 
   it("calculates cost for known Anthropic model", () => {
-    const cost = calculateCost("claude-3-5-sonnet", 1000, 500);
+    const cost = calculateCost("claude-sonnet-4-5", 1000, 500);
     expect(cost).toBeCloseTo(0.0105, 6);
   });
 
@@ -257,11 +257,9 @@ describe("Pricing", () => {
 
   it("has pricing for all expected models", () => {
     const expected = [
-      "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4",       "gpt-3.5-turbo",
-      "o1", "o1-mini", "o3", "o3-mini",
-      "claude-4-opus", "claude-4-sonnet", "claude-3-5-sonnet",
-      "claude-3-5-haiku", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku",
-      "gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro", "gemini-1.5-flash",
+      "gpt-4o", "gpt-4o-mini", "o3",
+      "claude-4-opus", "claude-4-sonnet", "claude-sonnet-4-5", "claude-haiku-4-5",
+      "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.8-flash",
     ];
     for (const model of expected) {
       expect(MODEL_PRICING[model]).toBeDefined();
