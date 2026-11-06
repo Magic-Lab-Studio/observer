@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Recharts 3 (external evaluation D6)
+- Changed (dashboard): `recharts` 2.15.4 → 3.10.1. Recharts 2 is no longer maintained (`npm ci`
+  warned on every install). No chart code had to change. Checked with headless screenshots of
+  every chart before and after, at 1440 and 390 px, tooltips included: on the test bed each chart
+  is identical or differs in under 0.5 % of its pixels (axis ticks, and bars of height zero that
+  Recharts 3 no longer draws). The browser tests pass.
+
 ### Dashboard browser tests (external evaluation B3)
 - Added: Playwright tests of the dashboard (`dashboard/e2e`, `npm run e2e`) and the CI job
   `dashboard-e2e`. They load every page in Spanish and English and fail on any JavaScript error,
