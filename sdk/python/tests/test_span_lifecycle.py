@@ -76,13 +76,20 @@ def test_an_error_is_never_turned_into_ok_at_end(final):
     assert span.status == SpanStatus.ERROR and sink.spans[0]["status"] == "error"
 
 
-def test_an_unfinished_span_is_never_exported():
+def test_an_unfinished_span_is_sent_partial_at_shutdown_and_marked():
+    """C2: it used to be dropped. Now it travels without an end time or final status."""
     tracer, sink = _tracer()
     tracer.start_span("still running")
     done = tracer.start_span("done")
     done.end()
     tracer.shutdown()
-    assert [s["name"] for s in sink.spans] == ["done"]
+    tracer.shutdown()  # once
+    by_name = {s["name"]: s for s in sink.spans}
+    assert sorted(by_name) == ["done", "still running"]
+    partial = by_name["still running"]
+    assert partial["end_time"] is None and partial["status"] == "unset"
+    assert partial["attributes"]["observer.unfinished"] is True
+    assert "observer.unfinished" not in by_name["done"]["attributes"]
 
 
 def test_end_does_not_wait_for_the_network_in_the_callers_thread():

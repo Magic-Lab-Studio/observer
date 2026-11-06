@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from llm_observatory.instrumentors._patching import _as_method, _unwrap, record_exception
+from llm_observatory.instrumentors._stream import (
+    AnthropicAccumulator,
+    AsyncStreamProxy,
+    SyncStreamProxy,
+)
 from llm_observatory.pricing import calculate_cost
 from llm_observatory.tracer import Span, SpanStatus, get_tracer
 
@@ -108,6 +113,8 @@ class AnthropicInstrumentor:
 
         try:
             result = self._original_sync_create(inst, *args, **kwargs)
+            if kwargs.get("stream") is True:  # C1: the span ends with the stream
+                return SyncStreamProxy(result, span, AnthropicAccumulator(model))
             self._finish_span(span, result, model)
             return result
         except BaseException as e:
@@ -123,6 +130,8 @@ class AnthropicInstrumentor:
 
         try:
             result = await self._original_async_create(inst, *args, **kwargs)
+            if kwargs.get("stream") is True:
+                return AsyncStreamProxy(result, span, AnthropicAccumulator(model))
             self._finish_span(span, result, model)
             return result
         except BaseException as e:

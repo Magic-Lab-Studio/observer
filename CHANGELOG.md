@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### SDK span lifecycle (external evaluation C1 and C2)
+- Fixed (Python and TypeScript SDKs): a streamed call (`stream=True`) ends its span when the
+  stream does, with the text, finish reason, model, tokens and cost:
+  - `ok` when exhausted;
+  - `error` if it fails;
+  - `unset` with `observer.stream.incomplete` when closed early.
+  Before, the span ended when the stream object was returned, with neither text nor tokens.
+- Fixed (Python and TypeScript SDKs): spans still open at shutdown are sent as partial (no end
+  time, `observer.unfinished`) instead of being dropped. TypeScript gains `tracer.shutdown()`,
+  run before the process exits. It exports each span once, and keeps at most 10 000 spans for
+  `export()`.
+- Fixed (TypeScript SDK): the OpenAI and Anthropic instrumentors traced nothing, because they
+  patched members that do not exist:
+  - `require("anthropic")` instead of `@anthropic-ai/sdk`;
+  - `chat` on the client prototype;
+  - their spans never reached an exporter.
+  They now patch `OpenAI.Chat.Completions.prototype.create` and
+  `Anthropic.Messages.prototype.create`, and keep the provider's `APIPromise`. `instrument()`
+  accepts `modules` for ES modules. Tests run against the real clients (`openai` 7.41.0,
+  `@anthropic-ai/sdk` 1.1.0, dev dependencies).
+
 ### Overview from the server (external evaluation B5)
 - Added: `GET /v1/analytics/overview`. It returns the activity buckets, latency histogram, slowest
   traces and stage timings of every trace that started in the range, with the dashboard's own

@@ -391,3 +391,37 @@ async def test_sdk_trace_reaches_the_backend_finished(sdk_backend):
     assert float(spans["claude"].cost_usd) == pytest.approx(0.0006)
     assert spans["claude"].parent_span_id == root.id
     assert spans["search"].status == "error"
+
+
+@pytest.mark.anyio
+async def test_c2_a_span_still_open_at_shutdown_arrives_partial_and_is_completed_later(
+    sdk_backend,
+):
+    """Evaluation C2: an exit in the middle of a turn used to drop its open spans."""
+    sdk, tracer, db = sdk_backend
+    root = tracer.start_trace("cut short")
+    done = tracer.start_span("plan", parent=root)
+    done.end()
+    open_llm = tracer.start_span("claude", span_type="llm", parent=root)
+    tracer.shutdown()
+
+    rows = (await db.execute(select(Span).where(Span.trace_id == root.trace_id))).scalars().all()
+    spans = {s.name: s for s in rows}
+    assert set(spans) == {"cut short", "plan", "claude"}
+    assert spans["claude"].end_time is None and spans["claude"].status == "unset"
+    assert spans["claude"].attributes["observer.unfinished"] is True
+    assert spans["cut short"].end_time is None
+
+    # The same span sent finished later (the exporter closed its client at shutdown, so this
+    # goes straight to the batch route) completes the stored partial one.
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    open_llm.end()
+    with TestClient(app) as http:
+        r = http.post("/v1/traces/batch", json={"spans": [tracer._span_to_dict(open_llm)]})
+        assert r.status_code == 200, r.text
+    db.expire_all()
+    claude = await db.get(Span, open_llm.id)
+    assert claude.end_time is not None and claude.status == "ok"
