@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 export const API = (process.env.OBSERVER_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 export const PROJECT = 'e2e';
+export const DATASET = 'e2e-cases';
 
 async function post(path: string, body: unknown): Promise<any> {
   const response = await fetch(`${API}${path}`, {
@@ -49,4 +50,9 @@ export default async function globalSetup(): Promise<void> {
   if (evaluation.result?.passed !== null) {
     throw new Error(`expected an incomplete evaluation, got ${JSON.stringify(evaluation.result)}`);
   }
+  // A dataset of this project (not the backend's default "manitos"): the Cases page must list it.
+  const dataset = await post('/v1/datasets', { name: DATASET, project_id: PROJECT });
+  await post(`/v1/datasets/${dataset.id}/items`, {
+    trace_id: ok.traceId, expect: { text: { must_contain: ['14 USD'] } },
+  });
 }
