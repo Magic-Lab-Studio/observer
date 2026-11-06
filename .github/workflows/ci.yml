@@ -58,6 +58,35 @@ jobs:
         run: python -m pytest tests -q
         working-directory: cli
 
+  python-310:
+    # The packages declare requires-python >=3.10; this runs the same suites on the oldest one
+    # (evaluation A1: 3.10's datetime.fromisoformat accepts fewer ISO 8601 forms than 3.11).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Install packages
+        run: >-
+          python -m pip install
+          -e "./backend[dev,sqlite]"
+          -e "./sdk/python[dev,openai,anthropic]"
+          -e ./cli
+      - name: Backend tests
+        run: python -m pytest tests -q
+        working-directory: backend
+      - name: Python SDK tests
+        run: python -m pytest tests -q
+        working-directory: sdk/python
+      - name: CLI tests
+        run: python -m pytest tests -q
+        working-directory: cli
+
   agent-scenarios:
     # Six agent scenarios through the SDK into a running backend (SQLite), read back through the
     # API: the end-to-end check of the 2026-10-18 evaluation. Model calls use a mocked transport.

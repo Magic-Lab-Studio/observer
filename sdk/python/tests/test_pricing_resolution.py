@@ -17,8 +17,6 @@ from llm_observatory.pricing import (
         ("claude-sonnet-4-5", "claude-sonnet-4-5"),
         ("claude-opus-4-1-20250805", "claude-opus-4-1"),
         ("claude-haiku-4-5-20251001", "claude-haiku-4-5"),
-        ("claude-3-5-haiku-20241022", "claude-3-5-haiku"),
-        ("claude-3-7-sonnet-20250219", "claude-3-7-sonnet"),
         ("claude-sonnet-4-20250514", "claude-sonnet-4"),
         ("claude-opus-4-20250514", "claude-opus-4"),
         ("claude-opus-4-5@20251101", "claude-opus-4-5"),
@@ -34,7 +32,8 @@ def test_real_claude_ids_resolve(model, key):
 
 @pytest.mark.parametrize(
     "model",
-    ["claude-sonnet-4-5-foo", "claude-sonnet-9", "claude", "", None, "gpt-4o-2024-05-13", "x"],
+    ["claude-3-5-haiku-20241022", "claude-3-7-sonnet-20250219",  # retired, no published price
+     "claude-sonnet-4-5-foo", "claude-sonnet-9", "claude", "", None, "gpt-4o-2024-05-13", "x"],
 )
 def test_unknown_models_stay_unpriced(model):
     assert resolve_model(model) is None

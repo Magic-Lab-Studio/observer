@@ -5,72 +5,51 @@
   "claude-4-sonnet": "claude-sonnet-4-0",
   "claude-opus-4": "claude-opus-4-0",
   "claude-sonnet-4": "claude-sonnet-4-0",
-  "claude-3-5-sonnet-latest": "claude-3-5-sonnet",
-  "claude-3-5-haiku-latest": "claude-3-5-haiku",
-  "claude-3-7-sonnet-latest": "claude-3-7-sonnet",
-  "claude-3-opus-latest": "claude-3-opus",
   "qwen3.8-27b-groq": "qwen/qwen3.8-27b",
   "gpt-oss-20b-groq": "openai/gpt-oss-20b"
  },
  "unpriced": {
+  "claude-3-5-haiku": "retired by Anthropic on 2026-02-19 and no longer on its pricing page (platform.claude.com model-deprecations, checked 2026-11-05)",
+  "claude-3-5-sonnet": "retired by Anthropic on 2025-10-28 and no longer on its pricing page (platform.claude.com model-deprecations, checked 2026-11-05)",
+  "claude-3-7-sonnet": "retired by Anthropic on 2026-02-19 and no longer on its pricing page (platform.claude.com model-deprecations, checked 2026-11-05)",
+  "claude-3-haiku": "retired by Anthropic on 2026-04-20 and no longer on its pricing page (platform.claude.com model-deprecations, checked 2026-11-05)",
+  "claude-3-opus": "retired by Anthropic on 2026-01-05 and no longer on its pricing page (platform.claude.com model-deprecations, checked 2026-11-05)",
+  "claude-3-sonnet": "retired by Anthropic on 2025-07-21 and no longer on its pricing page (platform.claude.com model-deprecations, checked 2026-11-05)",
   "command-a-03-2025": "Cohere does not list Command A on cohere.com/pricing (checked 2026-11-02)",
+  "gemini-1.5-flash": "not on the Gemini API pricing, models or deprecations pages (checked 2026-11-05); the July 2026 price was never verified",
+  "gemini-1.5-pro": "not on the Gemini API pricing, models or deprecations pages (checked 2026-11-05); the July 2026 price was never verified",
+  "gemini-2.0-flash": "shut down by Google on 2026-06-01 and no longer on the Gemini API pricing page (checked 2026-11-05)",
+  "gemini-2.0-pro": "not on the Gemini API pricing, models or deprecations pages (checked 2026-11-05); the July 2026 price was never verified",
   "google/gemma-4-31b-it": "NVIDIA NIM API keys are free for development; there is no list price (checked 2026-11-02)",
-  "nvidia/nemotron-3-super-120b-a12b": "NVIDIA NIM API keys are free for development; there is no list price (checked 2026-11-02)"
+  "gpt-3.5-turbo": "not on OpenAI's pricing page (https://developers.openai.com/api/docs/pricing, checked 2026-11-05); the July 2026 price was never verified",
+  "gpt-4": "not on OpenAI's pricing page (https://developers.openai.com/api/docs/pricing, checked 2026-11-05); the July 2026 price was never verified",
+  "gpt-4-turbo": "not on OpenAI's pricing page (https://developers.openai.com/api/docs/pricing, checked 2026-11-05); the July 2026 price was never verified",
+  "nvidia/nemotron-3-super-120b-a12b": "NVIDIA NIM API keys are free for development; there is no list price (checked 2026-11-02)",
+  "o1": "not on OpenAI's pricing page (https://developers.openai.com/api/docs/pricing, checked 2026-11-05); the July 2026 price was never verified",
+  "o1-mini": "not on OpenAI's pricing page (https://developers.openai.com/api/docs/pricing, checked 2026-11-05); the July 2026 price was never verified",
+  "o3-mini": "not on OpenAI's pricing page (https://developers.openai.com/api/docs/pricing, checked 2026-11-05); the July 2026 price was never verified"
  },
  "models": {
   "gpt-4o": {
    "provider": "openai",
    "input_per_1m": 2.5,
    "output_per_1m": 10.0,
-   "source": "unverified (carried over from the July 2026 table)"
+   "source": "https://developers.openai.com/api/docs/pricing",
+   "checked": "2026-11-05"
   },
   "gpt-4o-mini": {
    "provider": "openai",
    "input_per_1m": 0.15,
    "output_per_1m": 0.6,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "gpt-4-turbo": {
-   "provider": "openai",
-   "input_per_1m": 10.0,
-   "output_per_1m": 30.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "gpt-4": {
-   "provider": "openai",
-   "input_per_1m": 30.0,
-   "output_per_1m": 60.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "gpt-3.5-turbo": {
-   "provider": "openai",
-   "input_per_1m": 0.5,
-   "output_per_1m": 1.5,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "o1": {
-   "provider": "openai",
-   "input_per_1m": 15.0,
-   "output_per_1m": 60.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "o1-mini": {
-   "provider": "openai",
-   "input_per_1m": 3.0,
-   "output_per_1m": 12.0,
-   "source": "unverified (carried over from the July 2026 table)"
+   "source": "https://developers.openai.com/api/docs/pricing",
+   "checked": "2026-11-05"
   },
   "o3": {
    "provider": "openai",
-   "input_per_1m": 10.0,
-   "output_per_1m": 40.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "o3-mini": {
-   "provider": "openai",
-   "input_per_1m": 1.1,
-   "output_per_1m": 4.4,
-   "source": "unverified (carried over from the July 2026 table)"
+   "input_per_1m": 2.0,
+   "output_per_1m": 8.0,
+   "source": "https://developers.openai.com/api/docs/pricing",
+   "checked": "2026-11-05"
   },
   "claude-fable-5-1": {
    "provider": "anthropic",
@@ -207,67 +186,6 @@
    "output_per_1m": 5.0,
    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
    "checked": "2026-10-19"
-  },
-  "claude-3-5-haiku": {
-   "provider": "anthropic",
-   "input_per_1m": 0.8,
-   "output_per_1m": 4.0,
-   "source": "https://platform.claude.com/docs/en/about-claude/pricing",
-   "checked": "2026-10-19"
-  },
-  "claude-3-7-sonnet": {
-   "provider": "anthropic",
-   "input_per_1m": 3.0,
-   "output_per_1m": 15.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "claude-3-5-sonnet": {
-   "provider": "anthropic",
-   "input_per_1m": 3.0,
-   "output_per_1m": 15.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "claude-3-opus": {
-   "provider": "anthropic",
-   "input_per_1m": 15.0,
-   "output_per_1m": 75.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "claude-3-sonnet": {
-   "provider": "anthropic",
-   "input_per_1m": 3.0,
-   "output_per_1m": 15.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "claude-3-haiku": {
-   "provider": "anthropic",
-   "input_per_1m": 0.25,
-   "output_per_1m": 1.25,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "gemini-2.0-flash": {
-   "provider": "google",
-   "input_per_1m": 0.1,
-   "output_per_1m": 0.4,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "gemini-2.0-pro": {
-   "provider": "google",
-   "input_per_1m": 1.25,
-   "output_per_1m": 10.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "gemini-1.5-pro": {
-   "provider": "google",
-   "input_per_1m": 1.25,
-   "output_per_1m": 5.0,
-   "source": "unverified (carried over from the July 2026 table)"
-  },
-  "gemini-1.5-flash": {
-   "provider": "google",
-   "input_per_1m": 0.075,
-   "output_per_1m": 0.3,
-   "source": "unverified (carried over from the July 2026 table)"
   },
   "gemini-2.5-flash": {
    "provider": "google",

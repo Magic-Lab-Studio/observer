@@ -27,11 +27,13 @@ import math
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from app.ingest_validation import parse_iso8601
 
 _TRACE_NS = uuid.UUID("0b3f6a9e-7c41-4d2a-9e85-3f1c6d2b8a17")
 _SPAN_NS = uuid.UUID("9d27c4e1-5a3b-4f86-b0d2-6e8a1c4f7b39")
@@ -152,7 +154,7 @@ class _Instance:
 def _timestamp(value: Any, unit: str) -> float | None:
     try:
         if unit == "iso":
-            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            parsed = parse_iso8601(str(value))
             if parsed.tzinfo is None:
                 return None
             number = parsed.astimezone(timezone.utc).timestamp()

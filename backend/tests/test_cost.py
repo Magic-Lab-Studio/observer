@@ -11,7 +11,9 @@ import pytest
 from app import cost
 from app.cost import classify, estimate
 
-SDK_TABLE = Path(__file__).resolve().parents[2] / "sdk/python/src/llm_observatory/pricing.json"
+ROOT = Path(__file__).resolve().parents[2]
+SDK_TABLE = ROOT / "sdk/python/src/llm_observatory/pricing.json"
+TS_TABLE = ROOT / "sdk/typescript/src/pricing.json"
 
 # Model names as ManitOS sent them to the live Observer (2026-11-02).
 MANITOS_NAMES = {
@@ -44,6 +46,20 @@ def test_backend_table_is_the_sdk_table():
     if not SDK_TABLE.exists():
         pytest.skip("SDK not in this checkout")
     assert json.loads(cost.TABLE_PATH.read_text()) == json.loads(SDK_TABLE.read_text())
+    assert json.loads(cost.TABLE_PATH.read_text()) == json.loads(TS_TABLE.read_text())
+
+
+def test_every_price_names_an_official_source_and_a_day():
+    """A6: no "unverified" price is left; retired or unlisted models are unpriced with a reason."""
+    data = cost.table()
+    for key, entry in data["models"].items():
+        assert entry.get("checked"), key
+        assert "unverified" not in entry.get("source", ""), key
+    assert classify("o3")["status"] == "priced"
+    assert estimate("o3", 1_000_000, 1_000_000, datetime(2026, 11, 5))[1] == 10.0
+    for retired in ("claude-3-opus", "gpt-4", "gemini-1.5-flash", "gemini-2.0-flash"):
+        info = classify(retired)
+        assert info["status"] == "unpriced" and info["reason"] != "not in the price table"
 
 
 @pytest.mark.parametrize(("name", "expected"), list(MANITOS_NAMES.items()))

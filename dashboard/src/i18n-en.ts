@@ -558,6 +558,7 @@ export const EN: Record<string, string> = {
   'Se muestran {n} de {m}.': 'Showing {n} of {m}.',
   // groundedness (roadmap step 9)
   'Respuestas sin sustento': 'Ungrounded replies',
+  'Trazas con llamadas repetidas': 'Traces with repeated calls',
   'Sustento de las respuestas': 'Groundedness of replies',
   'Afirmaciones con sustento (proporción)': 'Supported claims (share)',
   'Sin sustento (0/1)': 'Ungrounded (0/1)',

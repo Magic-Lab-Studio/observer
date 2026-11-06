@@ -1,7 +1,10 @@
 """Field rules shared by the generic ingestion endpoints (``/v1/traces``, ``/batch``, ``/import``).
 
 * **Timestamps** are Unix epoch seconds (int or float) or ISO 8601 strings with a time zone
-  (``2026-10-18T12:00:00Z``); both are stored as UTC. A value must be finite, after 1970 and no
+  (``2026-10-18T12:00:00Z``); both are stored as UTC. ISO strings are read by
+  :func:`parse_iso8601`, which accepts the same forms on every supported Python (3.10's
+  ``datetime.fromisoformat`` refuses ``Z``, fractions other than 3 or 6 digits, ``+0000`` and
+  the basic format, all of which 3.11 accepts). A value must be finite, after 1970 and no
   later than 2100-01-01: milliseconds sent as seconds fall outside that range and are rejected
   with 422 instead of failing later with HTTP 500.
 * **Identifiers** of traces, spans and parents are opaque strings of 1-128 characters without
@@ -17,8 +20,9 @@
 from __future__ import annotations
 
 import math
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator
@@ -26,6 +30,42 @@ from pydantic import BeforeValidator
 MAX_TIMESTAMP = 4_102_444_800.0  # 2100-01-01T00:00:00Z
 
 SpanStatusValue = Literal["unset", "ok", "error"]
+
+
+_ISO = re.compile(
+    r"(?P<y>\d{4})-?(?P<mo>\d{2})-?(?P<d>\d{2})"
+    r"(?:[Tt ](?P<h>\d{2})(?::?(?P<mi>\d{2})(?::?(?P<s>\d{2})(?:[.,](?P<f>\d+))?)?)?)?"
+    r"\s*(?P<tz>[Zz]|[+-]\d{2}(?::?\d{2})?)?"
+)
+
+
+def parse_iso8601(text: str) -> datetime:
+    """An ISO 8601 date-time, the same on Python 3.10 and later (evaluation A1).
+
+    Extended or basic format, ``T``/``t``/space separator, any number of fraction digits
+    (``.`` or ``,``; cut to microseconds), offset ``Z``, ``+hh``, ``+hhmm`` or ``+hh:mm``. Naive
+    when the string has no offset. Raises ``ValueError`` for anything else.
+    """
+    match = _ISO.fullmatch(text.strip())
+    if match is None:
+        raise ValueError(f"not an ISO 8601 date-time: {text!r}")
+    g = match.groupdict()
+    fraction = (g["f"] or "0")[:6].ljust(6, "0")
+    tz = None
+    if g["tz"]:
+        if g["tz"] in "Zz":
+            tz = timezone.utc
+        else:
+            digits = g["tz"][1:].replace(":", "")
+            hours, minutes = int(digits[:2]), int(digits[2:] or 0)
+            if hours > 23 or minutes > 59:
+                raise ValueError(f"bad UTC offset: {g['tz']!r}")
+            offset = timedelta(hours=hours, minutes=minutes)
+            tz = timezone(-offset if g["tz"][0] == "-" else offset)
+    return datetime(
+        int(g["y"]), int(g["mo"]), int(g["d"]), int(g["h"] or 0), int(g["mi"] or 0),
+        int(g["s"] or 0), int(fraction), tzinfo=tz,
+    )
 
 
 def parse_timestamp(value: Any) -> float:
@@ -37,7 +77,7 @@ def parse_timestamp(value: Any) -> float:
             number = float(text)
         except ValueError:
             try:
-                parsed = datetime.fromisoformat(text.replace("Z", "+00:00").replace("z", "+00:00"))
+                parsed = parse_iso8601(text)
             except ValueError as exc:
                 raise ValueError(
                     "timestamp must be epoch seconds or an ISO 8601 string"
