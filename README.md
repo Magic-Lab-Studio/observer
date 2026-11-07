@@ -175,6 +175,9 @@ echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
 podman-compose up -d
 ```
 
+`compose.yaml` names its containers (`llm-observatory-postgres`, `-backend`, `-dashboard`), with
+Docker or Podman, so one stack runs per machine: stop the first before starting another copy.
+
 ### Manual Setup
 
 **1. Start PostgreSQL:**

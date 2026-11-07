@@ -31,7 +31,7 @@ and write down what was learned or changed. Keep entries short.
 | 7 | Configurable capture privacy | done | #58 |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
 | 9 | Groundedness, configurable per project (hallucinations) | in progress | `rules` mode built; the model judge not yet |
-| 10 | Outcomes and an agent span contract (why it did not answer) | in progress | 10a: contract and backend; 10b: SDK helpers and dashboard |
+| 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
 | 13 | Cost per outcome, not per token | planned | |
@@ -403,13 +403,17 @@ premium route can drive most of the spend.
   trace's own project. The dashboard listed `/v1/datasets` without a project, so the backend's
   default (`manitos`) applied: another project's datasets were invisible, and a case saved from its
   trace landed in a `manitos` dataset. Found building a course video on a non-Manitos agent.
+- 2026-11-07: the external evaluation of 2026-10-18 is closed
+  (`docs/engineering/observer-findings-matrix.md`): Recharts 3 (#106), the Compose Quick Start run
+  with `podman-compose`, the judge run live against a local Ollama, and six limits documented as
+  design decisions. The status table marks step 10 done (#88, #89); the «Later» item about phrase
+  checks staying `unknown` was removed, since #103 built them.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.
 
 - Encrypt the SDK spool on disk and give it a maximum age.
 - Drop counters reported by the sender (what never reached the Observer).
-- Reply-text phrase checks stay `unknown` by operator decision (metadata-only export).
 - OTLP over gRPC.
 - Conversations as an object: turn index, follow-ups, history state and one timeline per
   conversation (today: `session.id` only).

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### External evaluation closed (D1, P4, design limits)
+- Docs: the findings matrix has no open row. D1: the Compose Quick Start was run as written with
+  `podman-compose` on a clean clone (11/11 scenarios, a successful and a failed trace in the
+  dashboard). P4: the judge ran live with `openai-compatible` against a local Ollama and returned a
+  complete evaluation. A2, A3, A4, M6, P1 and P3 keep their limitation, now marked as a design
+  decision with its reason; D4 is closed as an environment issue.
+- Docs (README): the Compose containers have fixed names, so one stack runs per machine.
+
 ### Recharts 3 (external evaluation D6)
 - Changed (dashboard): `recharts` 2.15.4 → 3.10.1. Recharts 2 is no longer maintained (`npm ci`
   warned on every install). No chart code had to change. Checked with headless screenshots of

@@ -90,16 +90,17 @@ Node 22 build that CI uses.
 | Target | Readiness | Reasons and blockers |
 |---|---|---|
 | Local development | Ready | All suites green; end-to-end scenarios pass |
-| External beta | Released (0.2.0) | Merged with CI green; the Compose Quick Start was run with Podman, not Docker |
-| Self-hosted production | Not yet | No automated UI tests; authentication is optional by default |
+| External beta | Released (0.2.0) | Merged with CI green; the Compose Quick Start was run on a clean clone with `podman-compose` on 2026-11-06 (Docker not run) |
+| Self-hosted production | Not yet | Authentication is optional by default (browser tests run in CI since 2026-11-05) |
 | Package release | Done | 0.2.0 with `CHANGELOG.md` |
 
 ## F. Next five actions
 
 1. ~~Review and merge~~ — done 2026-10-19 (#64, #62).
 2. ~~Rehearse the migration on a copy of a live database~~ — done 2026-10-19, then applied.
-3. **Run the Compose Quick Start on a clean machine** (depends on 1). Acceptance: README steps
-   only, one successful and one failed trace visible with correct status and duration.
+3. ~~**Run the Compose Quick Start on a clean machine**~~: done 2026-11-06 with `podman-compose` on
+   a clean clone (findings matrix, D1). Acceptance: README steps only, one successful and one
+   failed trace visible with correct status and duration.
 4. ~~**Aggregated endpoints for the histogram and top-N lists** to finish B5~~: done 2026-11-05 (`/v1/analytics/overview`).
    Acceptance: the Overview makes no 1 000-trace request; numbers match the current ones.
 5. ~~**Show `incomplete` evaluations distinctly in the dashboard and send `service.name` from the
