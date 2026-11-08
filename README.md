@@ -538,7 +538,7 @@ a parent) once all of its spans have arrived; invalid input is a 422 with the re
 ## Python SDK
 
 ```bash
-pip install magic-lab-observer==0.2.0
+pip install magic-lab-observer==0.3.0
 ```
 
 For editable SDK development from a checkout:
@@ -613,7 +613,7 @@ def answer(question):
 ## TypeScript SDK
 
 **npm is not an installation channel for now.** The maintainers lost access to the npm account
-that owns `@magic-lab-studio/observer`, so `0.2.0` was never published there and the registry still
+that owns `@magic-lab-studio/observer`, so `0.2.0` and later were never published there and the registry still
 serves an outdated `0.1.1` (no `service.name`, no `shutdown()`). Do not install it from npm; build
 the package from source instead (Node.js 22.12 or newer). The import name is the same.
 
@@ -621,7 +621,7 @@ the package from source instead (Node.js 22.12 or newer). The import name is the
 git clone --depth 1 https://github.com/Magic-Lab-Studio/observer.git
 cd observer/sdk/typescript && npm ci && npm run build && npm pack
 # then, in your project:
-npm install /path/to/observer/sdk/typescript/magic-lab-studio-observer-0.2.0.tgz
+npm install /path/to/observer/sdk/typescript/magic-lab-studio-observer-0.3.0.tgz
 ```
 
 ```typescript
@@ -653,7 +653,7 @@ Object.assign(span.attributes, gateAttributes({ name: "coverage", status: "stop"
 ## CLI
 
 ```bash
-pip install magic-lab-observer-cli==0.2.0
+pip install magic-lab-observer-cli==0.3.0
 ```
 
 For editable CLI development from a checkout:

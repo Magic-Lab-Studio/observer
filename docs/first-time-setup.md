@@ -123,12 +123,12 @@ canonical package distribution names are:
 The Python SDK and CLI are available from PyPI:
 
 ```bash
-python -m pip install magic-lab-observer==0.2.0
-python -m pip install magic-lab-observer-cli==0.2.0
+python -m pip install magic-lab-observer==0.3.0
+python -m pip install magic-lab-observer-cli==0.3.0
 ```
 
 **npm is not an installation channel for now.** The maintainers lost access to the npm account
-that owns `@magic-lab-studio/observer`, so `0.2.0` was never published there and the registry still
+that owns `@magic-lab-studio/observer`, so `0.2.0` and later were never published there and the registry still
 serves an outdated `0.1.1` (no `service.name`, no `shutdown()`). Do not install it from npm; build
 the package from source instead (Node.js 22.12 or newer). The import name is the same.
 
@@ -136,12 +136,12 @@ the package from source instead (Node.js 22.12 or newer). The import name is the
 git clone --depth 1 https://github.com/Magic-Lab-Studio/observer.git
 cd observer/sdk/typescript && npm ci && npm run build && npm pack
 # then, in your project:
-npm install /path/to/observer/sdk/typescript/magic-lab-studio-observer-0.2.0.tgz
+npm install /path/to/observer/sdk/typescript/magic-lab-studio-observer-0.3.0.tgz
 ```
 
 ### Your first SDK trace
 
-Python (`python -m pip install magic-lab-observer==0.2.0`), saved as `first_trace.py`:
+Python (`python -m pip install magic-lab-observer==0.3.0`), saved as `first_trace.py`:
 
 ```python
 from llm_observatory import OTLPExporter, Tracer
@@ -178,10 +178,10 @@ API outside the Compose quickstart:
 The default backend configuration uses SQLite, so include its database driver:
 
 ```bash
-python -m pip install "magic-lab-observer-backend[sqlite]==0.2.0"
+python -m pip install "magic-lab-observer-backend[sqlite]==0.3.0"
 ```
 
-For PostgreSQL, install `magic-lab-observer-backend==0.2.0` and set
+For PostgreSQL, install `magic-lab-observer-backend==0.3.0` and set
 `DATABASE_URL` to a PostgreSQL URL before importing or starting the application.
 
 Contributors can instead install editable packages from a checkout:
