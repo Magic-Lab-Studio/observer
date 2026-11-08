@@ -1,6 +1,42 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-11-07
+
+First release since 0.2.0. It brings agent outcomes (how each turn ended and why), groundedness
+checked by rules, event ingestion and test-case runs whose text expectations are checked against the
+stored reply. The Python packages are published on PyPI; npm stays suspended (see
+`docs/releasing.md`): the TypeScript SDK is installed from source.
+
+### Groundedness numbers, OTLP content, `span()` (#100)
+- Fixed (backend): groundedness compares numbers by value. A decimal from a tool (`1492650.0`) no
+  longer reads as invented when the reply writes `1.492.650`; a repeated separator groups thousands,
+  the last of two different separators is the decimal one, and `372.0` equals `372`.
+- Fixed (backend): a number the user gave in the question counts as supported (the root span's input
+  is used for the number check only).
+- Fixed (backend): OTLP spans carry their input and output (OpenInference `input.value` /
+  `output.value`, `gen_ai.*` messages, tool arguments and results), subject to the project's capture
+  mode. Before, groundedness was always `unknown` on OTLP traces.
+- Added (Python SDK): `span(...)` as a public `with` block.
+- Docs: first-time setup gains a ready-to-run first trace from the Python SDK, and the trailing slash
+  of `/v1/traces/` is explained.
+
+### Declaring an abstention (#101)
+- Docs (`docs/agent-spans.md`): a reply that only says it could not find the answer is `answered`
+  unless the agent declares the abstention. Three places to do it, with SDK examples: a gate before
+  the model, a `cannot_answer(reason)` tool, an `answered` field in a structured reply.
+
+### Test cases check their text (#103)
+- Fixed (backend): `must_contain` / `must_not_contain` are checked against the stored reply when the
+  project stores content (case-insensitive, whitespace collapsed); without reply text they stay
+  `unknown`, never a silent pass. Cases stay metadata only: the reply is not copied into the case.
+
+### Cases follow the project (#105)
+- Fixed (dashboard): the Cases page lists the datasets of the project chosen in the header, and Save
+  as case uses the trace's own project. Before, both assumed `manitos`.
+
+### npm suspended (#104)
+- Docs and publishing: npm is no longer offered as an installation channel (access to the npm account
+  is lost); the TypeScript SDK is built from source. The `all` publishing target is Python only.
 
 ### External evaluation closed (D1, P4, design limits)
 - Docs: the findings matrix has no open row. D1: the Compose Quick Start was run as written with
