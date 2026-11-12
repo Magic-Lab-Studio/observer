@@ -18,6 +18,7 @@ test('configDiff lists only what changed', () => {
 test('regressions rank before everything else; deltas carry a sign', () => {
   assert.ok(changeRank('regressed') < changeRank('improved'));
   assert.ok(changeRank('same') < changeRank('missing'));
+  assert.ok(changeRank('regressed') < changeRank('unstable') && changeRank('unstable') < changeRank('improved'));
   assert.equal(fmtDelta(0.25), '+0.25');
   assert.equal(fmtDelta(-0.3), '-0.30');
   assert.equal(fmtDelta(null), '–');

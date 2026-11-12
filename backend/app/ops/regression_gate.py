@@ -41,6 +41,10 @@ class Thresholds:
     max_health_drop: float | None = None
     fail_on_unknown: bool = False
     allow_unverified: bool = False
+    # Cases whose repetitions disagree (step 12) are reported apart and do not fail the gate unless
+    # asked: --fail-on-unstable, or more than --max-unstable of them.
+    fail_on_unstable: bool = False
+    max_unstable: int | None = None
 
 
 @dataclass
@@ -64,6 +68,16 @@ def evaluate(
     if summary["unknown"]:
         message = f"{summary['unknown']} of {summary['cases']} cases are unknown (not verifiable)"
         (failures if limits.fail_on_unknown else notes).append(message)
+    unstable = summary.get("unstable", 0)
+    if unstable:
+        message = (
+            f"{unstable} of {summary['cases']} cases are unstable (their repetitions passed and "
+            "failed)"
+        )
+        too_many = limits.max_unstable is not None and unstable > limits.max_unstable
+        (failures if limits.fail_on_unstable or too_many else notes).append(
+            message + (f" (allowed {limits.max_unstable})" if too_many else "")
+        )
 
     max_failures = limits.max_failures
     if max_failures is None and comparison is None:
@@ -131,8 +145,9 @@ async def _resolve_dataset(client: httpx.AsyncClient, ref: str) -> dict[str, Any
     return matches[0]
 
 
-def _load_results(path: str, items: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Entries ``{item_id|case_trace, trace_id}``; ``case_trace`` is the case's source trace id."""
+def _load_results(path: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Entries ``{item_id|case_trace, trace_id[, repetition]}``; ``case_trace`` is the case's source
+    trace id; ``repetition`` numbers the runs of the same case (step 12)."""
     try:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -147,7 +162,10 @@ def _load_results(path: str, items: list[dict[str, Any]]) -> list[dict[str, str]
         item_id = entry.get("item_id") or by_source.get(entry.get("case_trace", ""))
         if not item_id:
             raise GateError(f"cannot tell which case this entry belongs to: {entry}")
-        out.append({"item_id": item_id, "trace_id": entry["trace_id"]})
+        row: dict[str, Any] = {"item_id": item_id, "trace_id": entry["trace_id"]}
+        if isinstance(entry.get("repetition"), int):
+            row["repetition"] = entry["repetition"]
+        out.append(row)
     return out
 
 
@@ -259,6 +277,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-health-drop", type=float, default=None)
     p.add_argument("--fail-on-unknown", action="store_true")
     p.add_argument("--allow-unverified", action="store_true")
+    p.add_argument("--fail-on-unstable", action="store_true",
+                   help="fail when any case's repetitions disagree")
+    p.add_argument("--max-unstable", type=int, default=None,
+                   help="fail when more cases than this are unstable")
     p.add_argument("--report", default="", help="write the JSON report here")
     return p
 
@@ -283,6 +305,8 @@ def config_from_args(args: argparse.Namespace) -> Config:
             max_health_drop=args.max_health_drop,
             fail_on_unknown=args.fail_on_unknown,
             allow_unverified=args.allow_unverified,
+            fail_on_unstable=args.fail_on_unstable,
+            max_unstable=args.max_unstable,
         ),
     )
 

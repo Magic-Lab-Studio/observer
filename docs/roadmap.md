@@ -33,7 +33,7 @@ and write down what was learned or changed. Keep entries short.
 | 9 | Groundedness, configurable per project (hallucinations) | in progress | `rules` mode built; the model judge not yet |
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
-| 12 | Non-determinism: same input, N runs | planned | |
+| 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel built; `observer-replay` not yet |
 | 13 | Cost per outcome, not per token | planned | |
 | 14 | Gate funnel and critical path | planned | |
 
@@ -266,6 +266,14 @@ a broken one.
 - Done when: a case answered correctly in 3 of 5 runs is reported as unstable with that
   distribution, not as pass or fail; a deterministic case scores 0.
 
+- **Built (2026-11-12):** `run_results.repetition` (migration `20261112_repetitions`), a run may
+  report the same case several times; `case_check.aggregate_repetitions` folds them (`unstable` with
+  the distribution and a binary entropy, 3 of 5 = 0.971); run summaries count `unstable` apart and
+  comparisons mark it as its own change; `observer-regression --fail-on-unstable / --max-unstable`
+  (unstable is not a regression by default); the runs panel shows unstable counts. **Not built:**
+  `observer-replay` (running a dataset N times against an HTTP endpoint) and the bed's planted
+  unstable case.
+
 ## Step 13: cost per outcome, not per token
 
 Problem: Observer prices every call, but a cost per token measures consumption, not results.
@@ -408,6 +416,10 @@ premium route can drive most of the spend.
   with `podman-compose`, the judge run live against a local Ollama, and six limits documented as
   design decisions. The status table marks step 10 done (#88, #89); the «Later» item about phrase
   checks staying `unknown` was removed, since #103 built them.
+- 2026-11-12: step 12 in progress: repetitions in runs and the instability of a case (unstable,
+  distribution, entropy), in run summaries, comparisons, the regression gate and the runs panel.
+  The migration was rehearsed on a copy of the live database (no runs stored there, so it checks
+  the schema only). `observer-replay` is left for a later change.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

@@ -264,7 +264,7 @@ def test_migration_adds_and_removes_project_configs(tmp_path):
 
     alembic("upgrade", "head")
     assert "project_configs" in tables()
-    alembic("downgrade", "-1")
+    alembic("downgrade", "20261102_span_type")  # the revision before project_configs
     assert "project_configs" not in tables()
     alembic("upgrade", "head")
     assert "project_configs" in tables()

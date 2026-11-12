@@ -8,11 +8,12 @@ import { t } from '../i18n';
 
 const selectCls = 'rounded-lg border border-line bg-panel px-3 py-1.5 text-xs text-ink focus:border-accent outline-none';
 const CHANGE_LABEL: Record<CaseChange, string> = {
-  regressed: 'Empeoró', improved: 'Mejoró', same: 'Igual', unknown: 'Sin datos', missing: 'No está en ambas',
+  regressed: 'Empeoró', improved: 'Mejoró', same: 'Igual', unstable: 'Inestable', unknown: 'Sin datos', missing: 'No está en ambas',
 };
 const CHANGE_TONE: Record<CaseChange, string> = {
   regressed: 'border-bad/40 bg-bad/10 text-bad', improved: 'border-ok/40 bg-ok/10 text-ok',
-  same: 'border-line-strong bg-raised text-dim', unknown: 'border-warn/40 bg-warn/10 text-warn',
+  same: 'border-line-strong bg-raised text-dim', unstable: 'border-warn/40 bg-warn/10 text-warn',
+  unknown: 'border-warn/40 bg-warn/10 text-warn',
   missing: 'border-line-strong bg-raised text-faint',
 };
 
@@ -59,6 +60,8 @@ export default function RunsPanel({ datasetId, cases }: { datasetId: string; cas
                 <Chip>{r.version.rubric ?? ''}</Chip>
                 <span className="text-dim">
                   {t('{p} aprobados', { p: fmtPct(r.summary.pass_rate, 0) })} · {r.summary.pass}/{r.summary.fail}/{r.summary.unknown} {t('ok/falla/sin datos')}
+                  {r.summary.unstable ? ` · ${t('{n} inestables', { n: r.summary.unstable })}` : ''}
+                  {r.summary.results != null && r.summary.results > r.summary.cases && ` · ${t('{n} repeticiones', { n: r.summary.results })}`}
                   {r.summary.avg_health != null && ` · ${t('salud')} ${r.summary.avg_health.toFixed(2)}`}
                 </span>
                 <span className="ml-auto text-faint">{r.created_at ? timeAgo(r.created_at) : ''}</span>
@@ -81,7 +84,7 @@ export default function RunsPanel({ datasetId, cases }: { datasetId: string; cas
               {diff && (
                 <>
                   <div className="flex flex-wrap gap-2 text-xs">
-                    {(Object.keys(CHANGE_LABEL) as CaseChange[]).map((k) => (
+                    {(Object.keys(CHANGE_LABEL) as CaseChange[]).filter((k) => k in diff.summary).map((k) => (
                       <span key={k} className={`rounded-md border px-2 py-1 ${CHANGE_TONE[k]}`}>{t(CHANGE_LABEL[k])}: {diff.summary[k]}</span>
                     ))}
                   </div>

@@ -15,7 +15,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.datasets import _dataset, _observed, _reply_text
-from app.case_check import check_case, compare_results
+from app.case_check import aggregate_repetitions, check_case, compare_results
 from app.db import DbSession
 from app.evaluators.manitos_turn import RUBRIC
 from app.models.datasets import DatasetItem
@@ -41,6 +41,8 @@ class Version(BaseModel):
 class CaseTrace(BaseModel):
     item_id: str = Field(..., max_length=36)
     trace_id: str = Field(..., max_length=36)
+    # The same case run several times in one run (step 12): 0, 1, 2, ...
+    repetition: int = Field(0, ge=0, le=99)
 
 
 class RunIn(BaseModel):
@@ -58,17 +60,24 @@ def _run_dict(run: DatasetRun, results: list[RunResult] | None = None) -> dict[s
         "created_at": run.created_at.isoformat() if run.created_at else None,
     }
     if results is not None:
-        counts = {"pass": 0, "fail": 0, "unknown": 0}
-        for r in results:
-            counts[r.status] = counts.get(r.status, 0) + 1
+        cases = _cases(results)
+        counts = {"pass": 0, "fail": 0, "unknown": 0, "unstable": 0}
+        for case in cases.values():
+            counts[case["status"]] += 1
         decided = counts["pass"] + counts["fail"]
         out["summary"] = {
             **counts,
-            "cases": len(results),
+            "cases": len(cases),
+            "results": len(results),
             "pass_rate": counts["pass"] / decided if decided else None,
             "avg_health": _mean([r.health_score for r in results]),
         }
     return out
+
+
+def _cases(results: list[RunResult]) -> dict[str, dict[str, Any]]:
+    """Per case, its repetitions folded into one status (``unstable`` when they disagree)."""
+    return aggregate_repetitions([_result_dict(r) for r in results])
 
 
 def _mean(values: list[float | None]) -> float | None:
@@ -84,6 +93,7 @@ def _result_dict(r: RunResult) -> dict[str, Any]:
         "checks": r.checks,
         "health_score": r.health_score,
         "duration_ms": r.duration_ms,
+        "repetition": r.repetition or 0,
     }
 
 
@@ -106,8 +116,10 @@ async def create_run(
     unknown = [r.item_id for r in body.results if r.item_id not in items]
     if unknown:
         raise HTTPException(status_code=422, detail=f"cases not in this dataset: {unknown[:5]}")
-    if len({r.item_id for r in body.results}) != len(body.results):
-        raise HTTPException(status_code=422, detail="a case appears more than once")
+    if len({(r.item_id, r.repetition) for r in body.results}) != len(body.results):
+        raise HTTPException(
+            status_code=422, detail="a case appears more than once with the same repetition"
+        )
     version = {**body.version.model_dump(), "rubric": RUBRIC}
     run = DatasetRun(dataset_id=dataset_id, name=body.name, version=version)
     session.add(run)
@@ -128,11 +140,21 @@ async def create_run(
             checks=checked["checks"],
             health_score=observed.get("health_score"),
             duration_ms=observed.get("duration_ms"),
+            repetition=entry.repetition,
         )
         session.add(result)
         stored.append(result)
     await session.flush()
-    return {**_run_dict(run, stored), "results": [_result_dict(r) for r in stored]}
+    return {
+        **_run_dict(run, stored),
+        "results": [_result_dict(r) for r in stored],
+        "cases": _unstable(stored),
+    }
+
+
+def _unstable(results: list[RunResult]) -> list[dict[str, Any]]:
+    """Cases whose repetitions disagreed, with their distribution (none without repetitions)."""
+    return [c for c in _cases(results).values() if c["status"] == "unstable"]
 
 
 @router.get("/{dataset_id}/runs")
@@ -166,10 +188,7 @@ async def compare_runs(
             raise HTTPException(status_code=404, detail=f"{key} run not found in this dataset")
         runs[key] = run
     results = {k: await _results(session, runs[k].id) for k in runs}
-    diff = compare_results(
-        {r.item_id: _result_dict(r) for r in results["base"]},
-        {r.item_id: _result_dict(r) for r in results["candidate"]},
-    )
+    diff = compare_results(_cases(results["base"]), _cases(results["candidate"]))
     return {
         "base": _run_dict(runs["base"], results["base"]),
         "candidate": _run_dict(runs["candidate"], results["candidate"]),
@@ -183,7 +202,11 @@ async def get_run(run_id: str, session: AsyncSession = DbSession) -> dict[str, A
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
     results = await _results(session, run_id)
-    return {**_run_dict(run, results), "results": [_result_dict(r) for r in results]}
+    return {
+        **_run_dict(run, results),
+        "results": [_result_dict(r) for r in results],
+        "cases": _unstable(results),
+    }
 
 
 @router.delete("/runs/{run_id}")
