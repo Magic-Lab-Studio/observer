@@ -559,6 +559,7 @@ export const EN: Record<string, string> = {
   // groundedness (roadmap step 9)
   'Respuestas sin sustento': 'Ungrounded replies',
   'Trazas con llamadas repetidas': 'Traces with repeated calls',
+  'Turnos fuera de presupuesto de tiempo': 'Turns over their time budget',
   'Embudo de compuertas': 'Gate funnel',
   '{n} de {m} turnos pasaron por alguna compuerta. Primero, la que más turnos frena.': '{n} of {m} turns went through a gate. The one that stops most turns comes first.',
   'frenó {n} de {m}': 'stopped {n} of {m}',

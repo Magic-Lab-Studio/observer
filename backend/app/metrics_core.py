@@ -87,6 +87,12 @@ METRICS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "kind": "loops",
     },
+    # time budget per stage (roadmap step 14): app.budgets over the window's traces
+    "over_budget_rate": {
+        "label": "Turnos fuera de presupuesto de tiempo",
+        "unit": "ratio",
+        "kind": "budget",
+    },
 }
 
 

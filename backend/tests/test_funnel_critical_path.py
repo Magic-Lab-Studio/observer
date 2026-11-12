@@ -96,3 +96,59 @@ async def test_trace_diagnostics_carry_the_critical_path(client):
     cp = (await client.get(f"/v1/traces/{stored}/diagnostics")).json()["critical_path"]
     assert cp["parallelisable"][0]["calls"] == 3
     assert cp["parallelisable"][0]["latency_share"] == pytest.approx(0.7, abs=0.01)
+
+
+async def _timed_turns(client, project):
+    """Four turns: retrieval 100/300/120/500 ms, llm.answer 400/400/900/400 ms, turn 1/1/1/1.6 s."""
+    spans = []
+    t0 = time.time() - 600
+    for i, (ret, llm, turn) in enumerate([(0.1, 0.4, 1.0), (0.3, 0.4, 1.0), (0.12, 0.9, 1.0),
+                                          (0.5, 0.4, 1.6)]):
+        tid, root = str(uuid.uuid4()), str(uuid.uuid4())
+        start = t0 + i * 5
+        spans += [
+            _span(tid, "turn", "agent", start, start + turn, sid=root,
+                  attrs={"service.name": project}),
+            _span(tid, "retrieval", "retrieval", start, start + ret, parent=root,
+                  attrs={"service.name": project}),
+            _span(tid, "llm.answer", "llm", start + 0.5, start + 0.5 + llm, parent=root,
+                  attrs={"service.name": project}),
+        ]
+    assert (await client.post("/v1/traces/batch", json={"spans": spans})).status_code == 200
+
+
+@pytest.mark.anyio
+async def test_time_budget_per_stage_counts_the_turns_over(client):
+    await _timed_turns(client, "budgeted")
+    cfg = {"stages": {"retrieval": 250, "llm.*": 800}, "turn_ms": 1500}
+    put = await client.put("/v1/projects/budgeted/config/budgets", json=cfg)
+    assert put.status_code == 200, put.text
+    data = (await client.get("/v1/agent/budgets?project_id=budgeted&hours=1")).json()
+    stages = {s["stage"]: s for s in data["stages"]}
+    assert stages["retrieval"]["over_budget"] == 2 and stages["retrieval"]["turns"] == 4
+    assert stages["llm.*"]["over_budget"] == 1
+    # turn 2 (retrieval), turn 3 (llm), turn 4 (retrieval and the whole turn): three of four
+    assert (data["turns_measured"], data["over_budget_turns"]) == (4, 3)
+    assert data["over_budget_rate"] == 0.75 and data["configured"] is True
+    assert (await client.put("/v1/projects/budgeted/config/budgets",
+                             json={"stages": {"x": -1}})).status_code == 422
+
+
+@pytest.mark.anyio
+async def test_no_budgets_means_nothing_is_over(client):
+    await _timed_turns(client, "unbudgeted")
+    data = (await client.get("/v1/agent/budgets?project_id=unbudgeted&hours=1")).json()
+    assert data["configured"] is False and data["over_budget_rate"] is None
+
+
+@pytest.mark.anyio
+async def test_over_budget_rate_alert_opens(client, db_session):
+    from app.alerts import evaluate_rules
+    from app.models.alerts import AlertRule
+
+    await _timed_turns(client, "alerted")
+    await client.put("/v1/projects/alerted/config/budgets", json={"stages": {"retrieval": 250}})
+    db_session.add(AlertRule(name="lento", metric="over_budget_rate", comparator=">=",
+                             threshold=0.5, window_minutes=60, min_samples=4, project_id="alerted"))
+    await db_session.commit()
+    assert (await evaluate_rules(db_session)).opened == 1  # 2 of 4 over

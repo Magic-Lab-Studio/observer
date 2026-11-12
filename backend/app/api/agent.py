@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query
 
-from app import agent_contract
+from app import agent_contract, budgets
 from app.critical_path import gate_funnel
 from app.db import DbSession
 from app.metrics_core import ROW_LIMIT, load_turn_signals
@@ -50,6 +50,21 @@ async def funnel(
         "truncated": len(turns) >= ROW_LIMIT,
         "gates": gate_funnel(gated),
     }
+
+
+@router.get("/budgets")
+async def budget_summary(
+    project_id: str = Query(..., min_length=1, max_length=128),
+    hours: float = Query(24, gt=0, le=24 * 90),
+    environment: str | None = Query(None, max_length=64),
+    session=DbSession,
+) -> dict[str, Any]:
+    """Time budget per stage (roadmap step 14): per budgeted stage, the turns over budget and the
+    p50/p95 of its longest span per turn. Budgets live in the project's ``budgets`` section."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    return await budgets.summary(
+        session, project_id=project_id, since=since, environment=environment
+    )
 
 
 @router.get("/turns")

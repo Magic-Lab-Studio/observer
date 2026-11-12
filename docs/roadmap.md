@@ -35,7 +35,7 @@ and write down what was learned or changed. Keep entries short.
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
 | 13 | Cost per outcome, not per token | planned | |
-| 14 | Gate funnel and critical path | in progress | funnel and critical path built; time budget per stage not yet |
+| 14 | Gate funnel and critical path | done | funnel, critical path and time budgets; the bed's step-14 checks not added |
 
 ## Step 1: health vs quality
 
@@ -308,8 +308,11 @@ premium route can drive most of the spend.
   under the same parent with no `observer.depends_on` between them, with their share of the latency)
   and the trace page says they could run in parallel. Both "done when" cases pass with synthetic data
   (12 turns, verification stops 7 with `claim_unsupported`; three calls at 70% of the latency; a
-  declared dependency is not flagged). **Not built:** the time budget per stage (`budgets` section,
-  `over_budget_rate`) and the bed's checks.
+  declared dependency is not flagged). Time budget per stage: a `budgets` project section
+  (`{"stages": {"retrieval": 250, "llm.*": 800}, "turn_ms": 1500}`; a span name, `fnmatch` pattern
+  or span type, in ms), `GET /v1/agent/budgets` (per stage: turns over budget, p50/p95 of its longest
+  span per turn) and the alert metric `over_budget_rate`. **Not built:** the bed's step-14 checks
+  (`run_bed.py --check 14`).
 
 ## Reference comparison (documentation only)
 
@@ -417,8 +420,9 @@ premium route can drive most of the spend.
   with `podman-compose`, the judge run live against a local Ollama, and six limits documented as
   design decisions. The status table marks step 10 done (#88, #89); the «Later» item about phrase
   checks staying `unknown` was removed, since #103 built them.
-- 2026-11-12: step 14 in progress: gate funnel and critical path, checked in a browser at 1440 and
-  390 px; the time budget per stage is left for a later change.
+- 2026-11-12: step 14: gate funnel, critical path (checked in a browser at 1440 and 390 px) and
+  time budgets per stage. Learned: the config API returned a 500 for the first section with its own
+  validator (pydantic puts the ValueError in the error context, which is not JSON).
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

@@ -216,6 +216,18 @@ async def evaluate_rules(session: AsyncSession, *, now: datetime | None = None) 
                 environment=rule.environment,
                 since=now - timedelta(minutes=int(rule.window_minutes)),
             )
+        elif spec["kind"] == "budget":
+            if not rule.project_id:
+                continue  # budgets belong to a project
+            from app.budgets import summary as budget_summary
+
+            data = await budget_summary(
+                session,
+                project_id=rule.project_id,
+                environment=rule.environment,
+                since=now - timedelta(minutes=int(rule.window_minutes)),
+            )
+            value, samples = data["over_budget_rate"], int(data["turns_measured"])
         elif spec["kind"] == "quota":
             value, samples, details = _quota_value(rule.scope or "")
             if value is None:
