@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.capture import apply_capture, capture_mode
 from app.cost import fill_span_cost
+from app.critical_path import critical_path
 from app.db import DbSession
 from app.ingest_validation import (
     OpaqueId,
@@ -371,6 +372,13 @@ def _same_span(existing: Span, values: dict[str, Any]) -> bool:
     return True
 
 
+def _span_project(span: SpanCreate) -> str | None:
+    """The project a span names (``service.name``, as ``fill_trace_identity`` reads it), if any."""
+    attrs = span.attributes if isinstance(span.attributes, dict) else {}
+    value = attrs.get("service.name")
+    return value.strip()[:128] if isinstance(value, str) and value.strip() else None
+
+
 async def _ingest_trace_group(
     session: AsyncSession, trace_id: str, spans: list[SpanCreate], counts: dict[str, int]
 ) -> Trace:
@@ -378,6 +386,17 @@ async def _ingest_trace_group(
     version; a finished span is never overwritten (a retry of the same data is a duplicate, a
     different version a conflict). Capture mode applies to every write, updates included."""
     trace = await session.get(Trace, trace_id)
+    if trace is not None and trace.project_id:
+        # A span that names another project (``service.name``) is not added to this project's trace:
+        # a batch could append spans to any project's trace by its id (audit O-1, 2026-10-17).
+        kept = [s for s in spans if _span_project(s) in (None, trace.project_id)]
+        refused = len(spans) - len(kept)
+        if refused:
+            counts["conflict"] += refused
+            logger.warning("%d span(s) of another project not added to trace %s", refused, trace_id)
+        spans = kept
+        if not spans:
+            return trace
     if trace is None:
         first = min(spans, key=lambda s: s.start_time)
         trace = Trace(
@@ -438,7 +457,8 @@ async def create_traces_batch(
     a span already stored with the same data is a duplicate. A span stored before it finished is
     completed by the finished version; a finished span is never overwritten. After each batch the
     trace's status, interval and name are derived from all of its stored spans
-    (``app.trace_summary``). The ``X-Observer-Spans`` header reports
+    (``app.trace_summary``). A span whose ``service.name`` names another project than the stored
+    trace's is a conflict and is not stored. The ``X-Observer-Spans`` header reports
     ``accepted``, ``updated``, ``duplicate`` and ``conflict`` counts.
     """
     spans_by_trace: dict[str, list[SpanCreate]] = {}
@@ -693,8 +713,9 @@ async def get_trace_diagnostics(
     trace_id: str,
     session: AsyncSession = DbSession,
 ) -> dict:
-    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``) and how the
-    turn ended (outcome, source, reason; ``app.outcomes``)."""
+    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``), how the turn
+    ended (outcome, source, reason; ``app.outcomes``) and its critical path: sequential model calls
+    that declared no dependency on each other (``app.critical_path``)."""
     valid_id = await _resolve_trace_id(session, trace_id)
     if await session.get(Trace, valid_id) is None:
         raise HTTPException(status_code=404, detail="Trace not found")
@@ -704,6 +725,7 @@ async def get_trace_diagnostics(
         "trace_id": valid_id,
         "min_repeats": min_repeats(),
         "repeated_calls": repeated_calls(list(rows)),
+        "critical_path": critical_path(list(rows)),
         **turn_outcome(signals),
     }
 

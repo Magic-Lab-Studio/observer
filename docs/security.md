@@ -15,6 +15,22 @@ in front of it.
   when it is empty. Anyone who can reach an unauthenticated backend can read, change and delete
   data.
 
+## Projects are labels, not tenants
+
+There is one API key. Whoever holds it can write to and read from **every** project: the import
+endpoint accepts any `project_id` and `actor_id_hash`, OTLP takes the project from the
+`X-Observer-Project` header or `service.name`, and the SDKs choose their own `service.name`. A
+project separates data for reading and sets its capture mode; it does not keep one client out of
+another's data. Two things do hold:
+
+* a trace's project never changes once set, and a batch cannot add spans that name another
+  project to an existing trace (they are counted as `conflict` and not stored);
+* the capture mode of the project a trace belongs to applies to every write into it.
+
+If several teams or untrusted clients share one Observer, run one Observer per trust boundary (or
+put an authenticating proxy in front that pins the project per client). Per-project keys are not
+built. (Recorded from the 2026-10-17 audit, findings O-1 and O-11.)
+
 ## Checked (2026-10-16)
 
 * The podman stack was brought up for real (`podman-compose`, rootless podman 5.7): the backend

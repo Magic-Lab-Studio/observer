@@ -87,6 +87,20 @@ METRICS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "kind": "loops",
     },
+    # cost per outcome (roadmap step 13a): app.cost_outcomes over the window's traces
+    "spend_per_day": {"label": "Gasto por día (USD)", "unit": "count", "kind": "cost"},
+    "cost_per_outcome": {
+        "label": "Costo por turno respondido (USD)",
+        "unit": "count",
+        "kind": "cost",
+    },
+    "waste_share": {"label": "Gasto desperdiciado", "unit": "ratio", "kind": "cost"},
+    # time budget per stage (roadmap step 14): app.budgets over the window's traces
+    "over_budget_rate": {
+        "label": "Turnos fuera de presupuesto de tiempo",
+        "unit": "ratio",
+        "kind": "budget",
+    },
 }
 
 

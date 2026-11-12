@@ -30,12 +30,12 @@ and write down what was learned or changed. Keep entries short.
 | 6 | Read-only MCP server | done | #57 |
 | 7 | Configurable capture privacy | done | #58 |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
-| 9 | Groundedness, configurable per project (hallucinations) | in progress | `rules` mode built; the model judge not yet |
+| 9 | Groundedness, configurable per project (hallucinations) | done | `rules` mode, then the judge modes; see `docs/groundedness.md` |
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
-| 12 | Non-determinism: same input, N runs | planned | |
-| 13 | Cost per outcome, not per token | planned | |
-| 14 | Gate funnel and critical path | planned | |
+| 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel built; `observer-replay` not yet |
+| 13 | Cost per outcome, not per token | in progress | 13a built; owned capacity built; cost per merged change (`vcs_events`) not yet |
+| 14 | Gate funnel and critical path | done | funnel, critical path, time budgets; bed check `--check 14` (funnel) |
 
 ## Step 1: health vs quality
 
@@ -266,6 +266,14 @@ a broken one.
 - Done when: a case answered correctly in 3 of 5 runs is reported as unstable with that
   distribution, not as pass or fail; a deterministic case scores 0.
 
+- **Built (2026-11-12):** `run_results.repetition` (migration `20261112_repetitions`), a run may
+  report the same case several times; `case_check.aggregate_repetitions` folds them (`unstable` with
+  the distribution and a binary entropy, 3 of 5 = 0.971); run summaries count `unstable` apart and
+  comparisons mark it as its own change; `observer-regression --fail-on-unstable / --max-unstable`
+  (unstable is not a regression by default); the runs panel shows unstable counts. **Not built:**
+  `observer-replay` (running a dataset N times against an HTTP endpoint) and the bed's planted
+  unstable case.
+
 ## Step 13: cost per outcome, not per token
 
 Problem: Observer prices every call, but a cost per token measures consumption, not results.
@@ -291,6 +299,19 @@ premium route can drive most of the spend.
   excludes nothing silently; waste and top-5% share match a hand count on synthetic data; a local
   provider with an hourly cost is no longer shown as free.
 
+- **Built (2026-11-12, 13a, no migration):** `app/cost_outcomes.py` puts every costed span in one
+  bucket (useful, failed, error, repeated, unknown; they add up to the total), the cost per answered
+  turn, the waste share, the top-5% users' share (by `user.id`, else the actor; unattributed spend
+  reported apart) and spend and outcomes per model with its pricing status;
+  `GET /v1/costs/summary`; alert metrics `spend_per_day`, `cost_per_outcome`, `waste_share`; a
+  `/costs` dashboard page.
+- **Built (2026-11-12, 13b, owned capacity):** a project `cost` section,
+  `{"hourly_usd": {"local": 0.5}}` (keys: a model, a provider, or `local` for every local model); a
+  local call with no cost then costs its duration at that rate, computed when read and never written
+  to `cost_usd`; the summary reports `paid_usd` and `owned_usd` apart and the buckets cover both.
+  **Not built:** cost per merged change (`vcs_events`, `vcs.*` attributes, a CI hook) and rework: it
+  needs a migration, kept until #112's migration has merged so Alembic keeps one head.
+
 ## Step 14: gate funnel and critical path
 
 - **Gate funnel**: from step 10 gate spans, how many turns each gate stops (for example retrieval
@@ -301,6 +322,19 @@ premium route can drive most of the spend.
 - Done when: a synthetic orchestrator with one over-strict gate shows that gate first in the funnel
   with its reason code; a turn with sequential independent calls shows them as parallelisable with
   their share of latency.
+
+- **Built (2026-11-12):** `app/critical_path.py`; `GET /v1/agent/funnel` (per gate: turns seen,
+  passed, skipped, stopped, stop reason codes, usual position; the gate that stops most first) and a
+  "Gate funnel" card on Governance; trace diagnostics carry `critical_path` (sequential model calls
+  under the same parent with no `observer.depends_on` between them, with their share of the latency)
+  and the trace page says they could run in parallel. Both "done when" cases pass with synthetic data
+  (12 turns, verification stops 7 with `claim_unsupported`; three calls at 70% of the latency; a
+  declared dependency is not flagged). Time budget per stage: a `budgets` project section
+  (`{"stages": {"retrieval": 250, "llm.*": 800}, "turn_ms": 1500}`; a span name, `fnmatch` pattern
+  or span type, in ms), `GET /v1/agent/budgets` (per stage: turns over budget, p50/p95 of its longest
+  span per turn) and the alert metric `over_budget_rate`. The bed checks the funnel against the
+  gate stops its episodes plant (`run_bed.py --check 14`); the critical path is checked by unit
+  tests only (the bed's episodes have no sequential independent model calls).
 
 ## Reference comparison (documentation only)
 
@@ -408,6 +442,22 @@ premium route can drive most of the spend.
   with `podman-compose`, the judge run live against a local Ollama, and six limits documented as
   design decisions. The status table marks step 10 done (#88, #89); the «Later» item about phrase
   checks staying `unknown` was removed, since #103 built them.
+- 2026-11-12: step 9 done: the `judge` and `rules+judge` groundedness modes. The judge sees the
+  rules' bounded context, its failures are `unknown`, a remote judge needs `allow_remote`, a
+  `metadata` project never calls it, and `sample_rate`/`max_per_pass` bound the calls. Live with
+  `llama3.2:3b` on a local Ollama: the planted twins came out right three times in three. Learned:
+  the small judge listed the user's own question as an unsupported claim of a correct reply, so a
+  listed claim must be a quote of the reply (words and numbers: «180 USD» has no long word).
+- 2026-11-12: step 12 in progress: repetitions in runs and the instability of a case (unstable,
+  distribution, entropy), in run summaries, comparisons, the regression gate and the runs panel.
+  The migration was rehearsed on a copy of the live database (no runs stored there, so it checks
+  the schema only). `observer-replay` is left for a later change.
+- 2026-11-12: step 13a: cost per outcome without a migration. Waste and the top-5% share are
+  checked against a hand count on synthetic traces. Learned: the loop detector needs five identical
+  calls by default, so a fixture with three repeats showed no repeated spend.
+- 2026-11-12: step 14: gate funnel, critical path (checked in a browser at 1440 and 390 px) and
+  time budgets per stage. Learned: the config API returned a 500 for the first section with its own
+  validator (pydantic puts the ValueError in the error context, which is not JSON).
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

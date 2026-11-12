@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### The backend wheel carries its migrations
+
+`magic-lab-observer-backend` 0.3.0 shipped no Alembic migrations, so a backend installed with pip
+could not create or upgrade its database without a clone of the repository. The wheel now includes
+them under `app/_migrations`, and a new command, `observer-migrate`, runs them without
+`alembic.ini` (`--database-url`, `--current`, `--sql`; `DATABASE_URL` as before). A checkout keeps
+working with `alembic upgrade head` in `backend/`.
+
 ## 0.3.0 — 2026-11-07
 
 First release since 0.2.0. It brings agent outcomes (how each turn ended and why), groundedness

@@ -194,6 +194,9 @@ export interface GroundednessConfig {
   context: { span_types: string[]; name_patterns: string[]; include_input: boolean; max_chars_per_span: number; max_chars_per_trace: number };
   applies_to: string[];
   threshold: number;
+  judge: { provider: 'openai' | 'openai-compatible' | 'anthropic' | null; model: string | null; base_url: string | null; allow_remote: boolean };
+  sample_rate: number;
+  max_per_pass: number;
 }
 export interface GroundednessSection {
   project_id: string; section: 'groundedness'; value: GroundednessConfig; source: 'setting' | 'default';
@@ -240,9 +243,9 @@ export interface DatasetCase {
 export interface DatasetDetail { id: string; name: string; project_id: string; description: string | null; items: DatasetCase[] }
 
 export interface RunVersion { commit?: string | null; model?: string | null; config?: Record<string, string | number | boolean>; rubric?: string }
-export interface RunSummary { pass: number; fail: number; unknown: number; cases: number; pass_rate: number | null; avg_health: number | null }
+export interface RunSummary { pass: number; fail: number; unknown: number; cases: number; pass_rate: number | null; avg_health: number | null; unstable?: number; results?: number }
 export interface DatasetRunInfo { id: string; dataset_id: string; name: string | null; version: RunVersion; created_at: string | null; summary: RunSummary }
-export type CaseChange = 'regressed' | 'improved' | 'same' | 'unknown' | 'missing';
+export type CaseChange = 'regressed' | 'improved' | 'same' | 'unstable' | 'unknown' | 'missing';
 export interface RunComparison {
   base: DatasetRunInfo; candidate: DatasetRunInfo;
   summary: Record<CaseChange, number>;
@@ -269,7 +272,16 @@ export interface RepeatedCalls {
   tool: string; parent_span_id: string | null; count: number; errors: number;
   arguments_known: boolean; same_output: boolean; span_ids: string[]; window_ms: number | null; severity: 'warning';
 }
-export interface TraceDiagnostics extends OutcomeInfo { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }
+export interface CriticalPath {
+  llm_calls: number; sequential_calls: number; trace_ms: number | null;
+  parallelisable: { span_ids: string[]; names: string[]; calls: number; duration_ms: number; latency_share: number | null }[];
+}
+export interface TraceDiagnostics extends OutcomeInfo { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[]; critical_path?: CriticalPath }
+/** GET /v1/agent/funnel (roadmap step 14). */
+export interface GateFunnel {
+  project_id: string; hours: number; turns: number; turns_with_gates: number; truncated: boolean;
+  gates: { gate: string; turns: number; passed: number; skipped: number; stopped: number; stop_rate: number; reason_codes: { code: string; count: number }[]; position: number }[];
+}
 export interface ProjectInfo { project_id: string; trace_count: number; last_trace_at: string | null }
 
 // Governance views (/v1/governance): decision, security, approval and skill spans.
@@ -292,4 +304,15 @@ export interface GovernanceStep extends GovernanceItem { outcome: string | null 
 export interface GovernanceTurn {
   trace_id: string; session_id: string | null; turn_id: string | null; status: string;
   steps: GovernanceStep[]; unanswered_asks: string[]; complete: boolean;
+}
+
+/** GET /v1/costs/summary (roadmap step 13a). */
+export interface CostSummary {
+  project_id: string | null; since: string; traces: number; truncated: boolean; costed_spans: number;
+  total_usd: number; paid_usd: number; owned_usd: number;
+  buckets: Record<'useful' | 'failed' | 'error' | 'repeated' | 'unknown', number>;
+  waste_share: number | null; outcomes: Record<string, number>; answered_turns: number;
+  cost_per_answered: number | null;
+  concentration: { users: number; top_users: number; top5_share: number | null; unattributed_usd: number };
+  routing: { model: string; pricing: string; cost_usd: number; owned_usd: number; spans: number; outcomes: Record<string, number> }[];
 }

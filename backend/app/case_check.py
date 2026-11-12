@@ -98,20 +98,75 @@ def check_case(
     return {"status": status, "checks": checks, "unverified": statuses.count("unknown")}
 
 
+def binary_entropy(passes: int, fails: int) -> float:
+    """How split the decided repetitions are: 0 if they agree, 1 at an even split (3/5: 0.971)."""
+    decided = passes + fails
+    if not passes or not fails:
+        return 0.0
+    from math import log2
+
+    p = passes / decided
+    return round(-(p * log2(p) + (1 - p) * log2(1 - p)), 3)
+
+
+def aggregate_repetitions(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """One entry per case from its results (``{item_id, status, health_score, duration_ms}``).
+
+    A case whose decided repetitions both passed and failed is ``unstable`` (step 12): the same
+    input gave different outcomes. Otherwise its status is the decided one (``pass``/``fail``), or
+    ``unknown`` when no repetition could be checked. Health and duration are means. A case run
+    once keeps exactly its result.
+    """
+    by_case: dict[str, list[dict[str, Any]]] = {}
+    for result in results:
+        by_case.setdefault(result["item_id"], []).append(result)
+    out: dict[str, dict[str, Any]] = {}
+    for item_id, rows in by_case.items():
+        dist = {"pass": 0, "fail": 0, "unknown": 0}
+        for row in rows:
+            dist[row["status"]] = dist.get(row["status"], 0) + 1
+        if dist["pass"] and dist["fail"]:
+            status = "unstable"
+        elif dist["pass"]:
+            status = "pass"
+        elif dist["fail"]:
+            status = "fail"
+        else:
+            status = "unknown"
+
+        def mean(key: str, rows: list[dict[str, Any]] = rows) -> float | None:
+            values = [r[key] for r in rows if r.get(key) is not None]
+            return sum(values) / len(values) if values else None
+
+        out[item_id] = {
+            "item_id": item_id,
+            "status": status,
+            "repetitions": len(rows),
+            "distribution": dist,
+            "entropy": binary_entropy(dist["pass"], dist["fail"]),
+            "health_score": mean("health_score"),
+            "duration_ms": mean("duration_ms"),
+        }
+    return out
+
+
 def compare_results(
     base: dict[str, dict[str, Any]], candidate: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
     """Per-case difference between two runs (``item_id -> {status, health_score, duration_ms}``).
 
-    ``regressed``: pass -> fail. ``improved``: fail -> pass. Cases with an unknown side or missing
-    from one run are reported as such, never counted as a change.
+    ``regressed``: pass -> fail. ``improved``: fail -> pass. ``unstable``: either side gave
+    different outcomes over its repetitions (reported apart, not a regression). Cases with an
+    unknown side or missing from one run are reported as such, never counted as a change.
     """
     cases = []
-    counts = {"regressed": 0, "improved": 0, "same": 0, "unknown": 0, "missing": 0}
+    counts = {"regressed": 0, "improved": 0, "same": 0, "unstable": 0, "unknown": 0, "missing": 0}
     for item_id in sorted(set(base) | set(candidate)):
         a, b = base.get(item_id), candidate.get(item_id)
         if a is None or b is None:
             change = "missing"
+        elif "unstable" in (a["status"], b["status"]):
+            change = "unstable"
         elif a["status"] == "pass" and b["status"] == "fail":
             change = "regressed"
         elif a["status"] == "fail" and b["status"] == "pass":

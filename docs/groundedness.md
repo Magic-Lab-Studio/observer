@@ -10,11 +10,41 @@ nothing is sent anywhere.
 |---|---|---|
 | `off` | nothing | default |
 | `rules` | deterministic checks, no model | built |
-| `judge` | a model judges each claim against the context | not built yet |
-| `rules+judge` | both | not built yet |
+| `judge` | a model lists the reply's claims the context does not support | built |
+| `rules+judge` | both; the worse result wins, both kept in the detail | built |
 
-`PUT` with `judge` or `rules+judge` answers 422 until the judge is built; the schema accepts the
-names so stored configurations stay valid when it is.
+## The judge
+
+The judge gets the same bounded context as the rules (evidence spans, user message) and the reply,
+and answers JSON: how many claims the reply makes, which are unsupported (`not_in_context` or
+`contradicted`) and a level. Observer then:
+
+- drops any "unsupported claim" the reply does not contain (a quote, not a paraphrase: three quarters
+  of its words and numbers must be in the reply). A small local judge listed the user's own question
+  as a claim of a correct reply; `judge_claims_dropped` counts them;
+- scores the share of supported claims; the level is the judge's;
+- makes the result `unknown`, never a pass, when the judge fails (`judge_unavailable:<reason>`) or
+  answers something that is not the expected JSON (`judge_invalid`). In `rules+judge` a failed judge
+  makes the combined result `unknown` too.
+
+Configuration (`judge`, `sample_rate`, `max_per_pass` in the section; keys only in the server's
+environment, `OBSERVATORY_JUDGE_*`, never in the project's settings):
+
+```json
+{"mode": "judge",
+ "judge": {"provider": "openai-compatible", "model": "llama3.2:3b",
+           "base_url": "http://127.0.0.1:11434/v1", "allow_remote": false},
+ "sample_rate": 1.0, "max_per_pass": 20}
+```
+
+Unset judge fields fall back to `OBSERVATORY_JUDGE_PROVIDER`, `_MODEL`, `_BASE_URL`. `sample_rate`
+picks traces by a hash of their id (the same trace is always in or out); traces left out are
+`not_applicable` (`not_sampled`). `max_per_pass` caps the traces one pass sends to the judge.
+
+Measured on 2026-11-12 with `llama3.2:3b` on a local Ollama (CPU, no GPU), the planted twins (a refund
+of 180 USD the tool output does not contain; the same reply with the tool's 120 USD), three runs:
+the invented one `ungrounded` with «180 USD» listed every time, the twin `grounded` every time.
+`qwen3.5:4b` did not answer within the judge's 60 s on this machine.
 
 ## What `rules` checks
 
@@ -61,7 +91,15 @@ Rules read content Observer already stored, so they follow the project's capture
 - a `metadata` project keeps no input or output, so its traces come out `unknown`;
 - a `redacted` project is checked on the redacted text.
 
-Nothing leaves the machine. ManitOS exports metadata only, so its turns are `unknown` here.
+The judge adds:
+- `off` sends nothing anywhere;
+- a `metadata` project is `unknown` (`metadata_capture`) without calling the judge;
+- a judge that is not on this machine (anything but an OpenAI-compatible endpoint on loopback)
+  receives the context only when the project sets `judge.allow_remote`; otherwise the result is
+  `unknown` (`judge_remote_not_allowed`).
+
+With `rules`, or a local judge, nothing leaves the machine. ManitOS exports metadata only, so its
+turns are `unknown` here.
 
 ## Where it shows
 
@@ -90,7 +128,7 @@ Nothing leaves the machine. ManitOS exports metadata only, so its turns are `unk
   ended traces of the last 7 days that have no result yet.
 
 The automatic sweep (the same loop as turn evaluations, `OBSERVATORY_AUTO_EVAL_INTERVAL_SEC`)
-scores every project whose mode runs `rules`.
+scores every project whose mode is not `off`.
 
 ```json
 {"mode": "rules", "threshold": 0.8, "applies_to": [],
@@ -105,9 +143,9 @@ that whole row.
 ## Limits
 
 - Rules catch invented figures and citations to sources that were never read; they do not catch a
-  plausible sentence that reuses the context's words to say something false. That needs the judge.
+  plausible sentence that reuses the context's words to say something false. The judge can, as well
+  as its model reads; a small local model is a weak reader, so pair it with the rules.
 - Numbers are compared as values, however they are written: a tool's `1492650.0` matches
   `1.492.650`, `1,492,650` and `1492650`; `4012.5` matches `4.012,5`. A single separator before
   exactly three digits (`1.492`) counts both ways. One-digit numbers are not checked.
 - The user's numbers only clear the number check: they never make a sentence supported by its words.
-- The `judge` modes are not built yet.

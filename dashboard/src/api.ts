@@ -4,6 +4,7 @@
 
 import type {
   TraceDiagnostics,
+  GateFunnel,
   ProviderModelsResponse,
   Trace,
   Span,
@@ -13,6 +14,7 @@ import type {
   OverviewData,
   TimelinePoint,
   CostByModel,
+  CostSummary,
   ManitOSQualitySummary,
   ProvidersResponse,
   AlertMetric,
@@ -91,6 +93,10 @@ export const api = {
     return request(`/v1/traces/${traceId}`);
   },
 
+  async getGateFunnel(hours: number, project: string): Promise<GateFunnel> {
+    return request(`/v1/agent/funnel?project_id=${encodeURIComponent(project)}&hours=${hours}`);
+  },
+
   async getTraceDiagnostics(traceId: string): Promise<TraceDiagnostics> {
     return request(`/v1/traces/${encodeURIComponent(traceId)}/diagnostics`);
   },
@@ -127,6 +133,12 @@ export const api = {
 
   async getTimeline(hours = 168, intervalMinutes = 360): Promise<TimelinePoint[]> {
     return request(`/v1/analytics/timeline?hours=${hours}&interval_minutes=${intervalMinutes}`);
+  },
+
+  async getCostSummary(hours = 168, projectId?: string): Promise<CostSummary> {
+    const qs = new URLSearchParams({ hours: String(hours) });
+    if (projectId) qs.set('project_id', projectId);
+    return request(`/v1/costs/summary?${qs.toString()}`);
   },
 
   async getCostByModel(hours = 168): Promise<CostByModel[]> {

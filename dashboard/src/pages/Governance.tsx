@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useFilters } from '../context';
-import type { GovernanceKind, GovernanceListing, GovernanceSummary, GovernanceTurn } from '../types';
+import type { GateFunnel, GovernanceKind, GovernanceListing, GovernanceSummary, GovernanceTurn } from '../types';
 import { Card, EmptyState, ErrorState, Segmented, Skeleton } from '../components/ui';
 import { KINDS, STEP_LABEL, describe, outcomeTone, pathLabels, rowOutcome, type Tone } from '../helpers/governance';
-import { fmtInt, fmtMs, shortId, timeAgo } from '../helpers/format';
+import { fmtInt, fmtMs, fmtPct, shortId, timeAgo } from '../helpers/format';
 import { t } from '../i18n';
 
 const TONE_CLASS: Record<Tone, string> = {
@@ -70,6 +70,39 @@ function TurnPath({ traceId, onClose }: { traceId: string; onClose: () => void }
   );
 }
 
+/** Gate funnel (roadmap step 14): the gate that stops most turns first, with its reason codes. */
+function Funnel({ hours, project }: { hours: number; project: string }) {
+  const [data, setData] = useState<GateFunnel | null>(null);
+  useEffect(() => {
+    if (!project) return;
+    let live = true;
+    api.getGateFunnel(hours, project).then((d) => { if (live) setData(d); }).catch(() => { if (live) setData(null); });
+    return () => { live = false; };
+  }, [hours, project]);
+  if (!data || data.gates.length === 0) return null;
+  return (
+    <Card title={t('Embudo de compuertas')} bodyClass="p-4"
+      subtitle={t('{n} de {m} turnos pasaron por alguna compuerta. Primero, la que más turnos frena.', { n: fmtInt(data.turns_with_gates), m: fmtInt(data.turns) })}>
+      <ul className="space-y-2 text-xs">
+        {data.gates.map((g) => (
+          <li key={g.gate} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[12rem_1fr_9rem]">
+            <span className="font-mono text-ink">{g.gate}</span>
+            <span className="col-span-2 row-start-2 h-2 overflow-hidden rounded bg-raised sm:col-span-1 sm:row-start-auto">
+              <span className="block h-full bg-bad/70" style={{ width: `${g.stop_rate * 100}%` }} />
+            </span>
+            <span className="text-right text-dim sm:col-start-3 sm:row-start-1">{t('frenó {n} de {m}', { n: fmtInt(g.stopped), m: fmtInt(g.turns) })} · {fmtPct(g.stop_rate, 0)}</span>
+            {g.reason_codes.length > 0 && (
+              <span className="col-span-2 flex flex-wrap gap-1 sm:col-span-3">
+                {g.reason_codes.map((r) => <span key={r.code} className="rounded bg-bad/10 px-1 font-mono text-[10px] text-bad">{r.code} {r.count}</span>)}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function Governance() {
   const { hours, project } = useFilters();
   const [kind, setKind] = useState<GovernanceKind>('denials');
@@ -109,6 +142,8 @@ function Governance() {
           ))}
         </dl>
       )}
+
+      <Funnel hours={hours} project={project} />
 
       <Segmented label={t('Vista')} options={KINDS.map((k) => ({ value: k.value, label: t(k.label) }))} value={kind} onChange={(k) => { setKind(k); setSelected(null); }} />
 

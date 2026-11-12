@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import type { DatasetDetail, DatasetSummary } from '../types';
@@ -17,10 +17,14 @@ function Datasets() {
   const { project } = useFilters();
 
   // a project's own datasets: without it the backend lists only its default project ("manitos")
+  // Only the newest request may set the list: the first loads (before the project list arrives) ask
+  // without a project and can answer after the project's own request, leaving "No datasets yet".
+  const latest = useRef(0);
   const load = useCallback(() => {
+    const request = ++latest.current;
     api.listDatasets(project || undefined)
-      .then((d) => { setDatasets(d); setError(false); setOpen(null); })
-      .catch(() => setError(true));
+      .then((d) => { if (request === latest.current) { setDatasets(d); setError(false); setOpen(null); } })
+      .catch(() => { if (request === latest.current) setError(true); });
   }, [project]);
   useEffect(() => { load(); }, [load]);
 

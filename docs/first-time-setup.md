@@ -127,6 +127,17 @@ python -m pip install magic-lab-observer==0.3.0
 python -m pip install magic-lab-observer-cli==0.3.0
 ```
 
+A backend installed from PyPI (from the release after 0.3.0) creates and upgrades its database with
+`observer-migrate`, which runs the migrations shipped in the wheel; no clone is needed:
+
+```bash
+python -m pip install "magic-lab-observer-backend[sqlite]"
+DATABASE_URL=sqlite+aiosqlite:////var/lib/observer/observatory.db observer-migrate
+```
+
+The 0.3.0 backend wheel does not include the migrations: with 0.3.0, run `alembic upgrade head`
+from `backend/` in a checkout of the same version.
+
 **npm is not an installation channel for now.** The maintainers lost access to the npm account
 that owns `@magic-lab-studio/observer`, so `0.2.0` and later were never published there and the registry still
 serves an outdated `0.1.1` (no `service.name`, no `shutdown()`). Do not install it from npm; build

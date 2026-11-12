@@ -261,6 +261,9 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/summary`           | Trace analytics                  |
 | `GET`    | `/v1/analytics/timeline`          | Trace counts over time           |
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost by model: paid, paid-price equivalent, tokens, price status |
+| `GET`    | `/v1/costs/summary`               | Cost per outcome: spend by bucket (useful, failed, error, repeated, unknown), per answered turn, top-5% users, per model |
+| `GET`    | `/v1/agent/funnel`                | Gate funnel: per gate, turns seen, passed and stopped, stop reason codes |
+| `GET`    | `/v1/agent/budgets`               | Time budget per stage (project section `budgets`): turns over budget, p50/p95 |
 | `GET`    | `/v1/governance/{decisions,denials,approvals,skills}` | Governance spans of an agent (contract attributes only) |
 | `GET`    | `/v1/governance/summary`          | Governance span counts by outcome |
 | `GET`    | `/v1/governance/turns/{trace_id}` | One turn's path: decision, permission, answer, tool, skill |
@@ -467,8 +470,14 @@ version is added by Observer) and the trace each case produced. Observer checks 
 its trace: health conditions are verified; tool expectations are verified only when the trace has
 tool spans, and text phrases only when reply text is available. Anything it cannot decide is
 **unknown**, never a silent pass, and a run's pass rate counts decided cases only. The Cases page
-lists the runs of a dataset and compares two of them case by case (regressed, improved, same, no
-data, missing), with the difference in health score, duration and configuration.
+lists the runs of a dataset and compares two of them case by case (regressed, improved, same,
+unstable, no data, missing), with the difference in health score, duration and configuration.
+
+A run may repeat a case: give each result a `repetition` (0, 1, 2, …). A case whose repetitions
+both passed and failed is **unstable** (the same input, different outcomes): the run reports it with
+its distribution (`{"pass": 3, "fail": 2, "unknown": 0}`) and an entropy (0 when the repetitions
+agree, 1 at an even split; 3 of 5 is 0.971), counts it apart from passes and failures, and a
+comparison marks it `unstable`, not regressed. A run without repetitions reads as before.
 
 ### Regression gate for CI
 
@@ -482,7 +491,8 @@ observer-regression --dataset regresiones \
 ```
 
 `results.json` is a list of `{"case_trace": "<trace the case was saved from>", "trace_id":
-"<trace this run produced>"}` (or `item_id` instead of `case_trace`). Without `--results` it gates
+"<trace this run produced>"}` (or `item_id` instead of `case_trace`; add `"repetition": n` when a
+case ran more than once). Without `--results` it gates
 an already recorded run (`--candidate latest` by default). Exit codes: `0` passes, `1` regression or
 threshold failure (reasons on stderr, JSON on stdout, optional `observer.regression.v1` report),
 `2` it could not decide (Observer unreachable, unknown dataset or run, bad arguments).
@@ -491,7 +501,9 @@ Rules: with a baseline, more than `--max-regressions` cases going pass → fail 
 without one, any failed case blocks (`--max-failures` changes it). `--min-pass-rate` and
 `--max-health-drop` add thresholds. Cases it cannot verify are **unknown** and reported apart;
 `--fail-on-unknown` blocks on them, and a run where nothing could be verified **fails** unless
-`--allow-unverified` is given, so the gate never goes green on no evidence. `OBSERVER_URL` and
+`--allow-unverified` is given, so the gate never goes green on no evidence. Unstable cases are
+reported apart too and do not block by default; `--fail-on-unstable` blocks on any, and
+`--max-unstable N` on more than N. `OBSERVER_URL` and
 `OBSERVATORY_API_KEY` supply the address and key.
 
 ### Alerts

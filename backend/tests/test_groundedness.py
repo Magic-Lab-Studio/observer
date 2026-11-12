@@ -1,4 +1,5 @@
-"""Step 9: groundedness in ``rules`` mode (no model), configured per project."""
+"""Step 9: groundedness in ``rules`` mode (no model), configured per project; the judge modes are in
+``test_groundedness_judge.py``."""
 
 import os
 import sqlite3
@@ -128,13 +129,16 @@ async def _seed(client, project: str) -> dict[str, str]:
 
 
 @pytest.mark.anyio
-async def test_the_config_is_closed_off_by_default_and_judge_is_not_offered_yet(client):
+async def test_the_config_is_closed_and_off_by_default(client):
     base = "/v1/projects/g1/config"
     first = (await client.get(f"{base}/groundedness")).json()
     assert first["source"] == "default" and first["value"]["mode"] == "off"
     assert (await client.put(f"{base}/groundedness", json={"mode": "rules", "x": 1})
             ).status_code == 422
-    assert (await client.put(f"{base}/groundedness", json={"mode": "judge"})).status_code == 422
+    # the judge modes are built since step 9's judge (test_groundedness_judge.py)
+    assert (await client.put(f"{base}/groundedness", json={"mode": "judge"})).status_code == 200
+    assert (await client.put(f"{base}/groundedness",
+                             json={"mode": "judge", "judge": {"api_key": "x"}})).status_code == 422
     assert (await client.put(f"{base}/costs", json={})).status_code == 404
     saved = (await client.put(f"{base}/groundedness",
                               json={"mode": "rules", "threshold": 0.7,
@@ -264,7 +268,7 @@ def test_migration_adds_and_removes_project_configs(tmp_path):
 
     alembic("upgrade", "head")
     assert "project_configs" in tables()
-    alembic("downgrade", "-1")
+    alembic("downgrade", "20261102_span_type")  # the revision before project_configs
     assert "project_configs" not in tables()
     alembic("upgrade", "head")
     assert "project_configs" in tables()
