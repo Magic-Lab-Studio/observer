@@ -19,6 +19,7 @@ const Providers = lazy(() => import('./pages/Providers'));
 const Alerts = lazy(() => import('./pages/Alerts'));
 const Explore = lazy(() => import('./pages/Explore'));
 const Datasets = lazy(() => import('./pages/Datasets'));
+const Costs = lazy(() => import('./pages/Costs'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const Governance = lazy(() => import('./pages/Governance'));
 
@@ -26,6 +27,7 @@ const NAV = [
   { to: '/', label: 'Resumen', icon: 'overview', end: true },
   { to: '/traces', label: 'Trazas', icon: 'traces', end: false },
   { to: '/providers', label: 'Proveedores', icon: 'providers', end: false },
+  { to: '/costs', label: 'Costos', icon: 'providers', end: false },
   { to: '/explore', label: 'Explorar', icon: 'explore', end: false },
   { to: '/alerts', label: 'Alertas', icon: 'bell', end: false },
   { to: '/evaluations', label: 'Evaluaciones', icon: 'evals', end: false },
@@ -173,6 +175,7 @@ function Shell() {
                 <Route path="/traces" element={<Traces />} />
                 <Route path="/traces/:traceId" element={<TraceDetail />} />
                 <Route path="/providers" element={<Providers />} />
+                <Route path="/costs" element={<Costs />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/explore" element={<Explore />} />
                 <Route path="/evaluations" element={<Evaluations />} />

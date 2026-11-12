@@ -216,6 +216,17 @@ async def evaluate_rules(session: AsyncSession, *, now: datetime | None = None) 
                 environment=rule.environment,
                 since=now - timedelta(minutes=int(rule.window_minutes)),
             )
+        elif spec["kind"] == "cost":
+            from app.cost_outcomes import alert_value
+
+            value, samples = await alert_value(
+                session,
+                rule.metric,
+                project_id=rule.project_id,
+                environment=rule.environment,
+                since=now - timedelta(minutes=int(rule.window_minutes)),
+                window_minutes=int(rule.window_minutes),
+            )
         elif spec["kind"] == "quota":
             value, samples, details = _quota_value(rule.scope or "")
             if value is None:
