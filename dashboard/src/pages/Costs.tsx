@@ -4,6 +4,7 @@ import { useFilters } from '../context';
 import type { CostSummary } from '../types';
 import { Card, EmptyState, ErrorState, Kpi, Skeleton } from '../components/ui';
 import { fmtInt, fmtPct, fmtUsd } from '../helpers/format';
+import { OUTCOME_LABEL } from '../helpers/outcomes';
 import { t } from '../i18n';
 
 const BUCKET_LABEL: Record<string, string> = {
@@ -50,13 +51,13 @@ function Costs() {
         <Card title={t('A dónde fue el gasto')} bodyClass="p-4">
           <ul className="space-y-2 text-xs">
             {Object.entries(data.buckets).map(([k, v]) => (
-              <li key={k} className="flex items-center gap-3">
-                <span className="w-56 shrink-0 text-dim">{t(BUCKET_LABEL[k] ?? k)}</span>
-                <span className="h-2 flex-1 overflow-hidden rounded bg-raised">
+              <li key={k} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[14rem_1fr_6rem]">
+                <span className="text-dim">{t(BUCKET_LABEL[k] ?? k)}</span>
+                <span className="col-span-2 row-start-2 h-2 overflow-hidden rounded bg-raised sm:col-span-1 sm:row-start-auto">
                   <span className={`block h-full ${k === 'useful' ? 'bg-ok' : k === 'unknown' ? 'bg-line-strong' : 'bg-warn'}`}
                     style={{ width: `${total > 0 ? (v / total) * 100 : 0}%` }} />
                 </span>
-                <span className="w-20 shrink-0 text-right text-ink">{fmtUsd(v)}</span>
+                <span className="text-right text-ink sm:col-start-3 sm:row-start-1">{fmtUsd(v)}</span>
               </li>
             ))}
           </ul>
@@ -84,7 +85,7 @@ function Costs() {
                     <td className="px-3 py-2 text-dim">{t(PRICING_LABEL[m.pricing] ?? m.pricing)}</td>
                     <td className="px-3 py-2 text-right">{fmtUsd(m.cost_usd)}</td>
                     <td className="px-3 py-2 text-right">{fmtInt(m.spans)}</td>
-                    <td className="px-4 py-2 text-dim">{Object.entries(m.outcomes).map(([o, n]) => `${o} ${n}`).join(' · ')}</td>
+                    <td className="px-4 py-2 text-dim">{Object.entries(m.outcomes).map(([o, n]) => `${t(OUTCOME_LABEL[o] ?? o)} ${n}`).join(' · ')}</td>
                   </tr>
                 ))}
               </tbody>

@@ -27,7 +27,7 @@ const NAV = [
   { to: '/', label: 'Resumen', icon: 'overview', end: true },
   { to: '/traces', label: 'Trazas', icon: 'traces', end: false },
   { to: '/providers', label: 'Proveedores', icon: 'providers', end: false },
-  { to: '/costs', label: 'Costos', icon: 'providers', end: false },
+  { to: '/costs', label: 'Costos', icon: 'coin', end: false },
   { to: '/explore', label: 'Explorar', icon: 'explore', end: false },
   { to: '/alerts', label: 'Alertas', icon: 'bell', end: false },
   { to: '/evaluations', label: 'Evaluaciones', icon: 'evals', end: false },
