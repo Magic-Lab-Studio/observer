@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import cost_outcomes, groundedness
+from app import budgets, cost_outcomes, groundedness
 from app.db import DbSession
 from app.models.settings import ProjectConfig
 
@@ -24,6 +24,7 @@ router = APIRouter()
 SECTIONS: dict[str, type[BaseModel]] = {
     groundedness.SECTION: groundedness.GroundednessConfig,
     cost_outcomes.SECTION: cost_outcomes.CostConfig,  # owned capacity (roadmap step 13b)
+    budgets.SECTION: budgets.BudgetsConfig,  # time budget per stage (roadmap step 14)
 }
 ProjectId = Path(..., min_length=1, max_length=128)
 

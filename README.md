@@ -262,6 +262,8 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/timeline`          | Trace counts over time           |
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost by model: paid, paid-price equivalent, tokens, price status |
 | `GET`    | `/v1/costs/summary`               | Cost per outcome: spend by bucket (useful, failed, error, repeated, unknown), per answered turn, top-5% users, per model |
+| `GET`    | `/v1/agent/funnel`                | Gate funnel: per gate, turns seen, passed and stopped, stop reason codes |
+| `GET`    | `/v1/agent/budgets`               | Time budget per stage (project section `budgets`): turns over budget, p50/p95 |
 | `GET`    | `/v1/governance/{decisions,denials,approvals,skills}` | Governance spans of an agent (contract attributes only) |
 | `GET`    | `/v1/governance/summary`          | Governance span counts by outcome |
 | `GET`    | `/v1/governance/turns/{trace_id}` | One turn's path: decision, permission, answer, tool, skill |

@@ -4,6 +4,7 @@
 
 import type {
   TraceDiagnostics,
+  GateFunnel,
   ProviderModelsResponse,
   Trace,
   Span,
@@ -90,6 +91,10 @@ export const api = {
 
   async getTrace(traceId: string): Promise<Trace> {
     return request(`/v1/traces/${traceId}`);
+  },
+
+  async getGateFunnel(hours: number, project: string): Promise<GateFunnel> {
+    return request(`/v1/agent/funnel?project_id=${encodeURIComponent(project)}&hours=${hours}`);
   },
 
   async getTraceDiagnostics(traceId: string): Promise<TraceDiagnostics> {

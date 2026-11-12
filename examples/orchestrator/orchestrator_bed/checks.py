@@ -97,6 +97,43 @@ async def check_groundedness(api: Any, episodes: list[Episode], project: str,
     return out
 
 
+async def check_funnel(api: Any, episodes: list[Episode], project: str, run: str) -> list[Result]:
+    """Step 14: the gate funnel counts exactly the gate stops the episodes planted, with their
+    reason codes, and lists the gate that stopped most turns first."""
+    from collections import Counter
+
+    stops: Counter[str] = Counter()
+    seen: Counter[str] = Counter()
+    codes: dict[str, Counter[str]] = {}
+    for ep in episodes:
+        for span in ep.spans:
+            if span.span_type != "gate":
+                continue
+            name = span.attrs.get("gate.name", "")
+            seen[name] += 1
+            if span.attrs.get("gate.status") == "stop":
+                stops[name] += 1
+                codes.setdefault(name, Counter()).update(span.attrs.get("gate.reason_codes") or [])
+    data = (await api.get(f"/v1/agent/funnel?project_id={project}&hours=2")).json()
+    got = {g["gate"]: g for g in data.get("gates", [])}
+    out: list[Result] = []
+    for name in seen:
+        g = got.get(name, {})
+        want_codes = {c: n for c, n in codes.get(name, Counter()).items()}
+        got_codes = {r["code"]: r["count"] for r in g.get("reason_codes", [])}
+        ok = g.get("turns") == seen[name] and g.get("stopped") == stops[name] and (
+            got_codes == want_codes)
+        out.append((f"{project} gate {name}: {stops[name]} of {seen[name]} stopped", ok,
+                    str({k: g.get(k) for k in ("turns", "stopped", "reason_codes")})))
+    if stops:
+        top = max(stops, key=lambda n: stops[n])
+        first = (data.get("gates") or [{}])[0].get("gate")
+        out.append((f"{project}: the gate that stops most comes first ({top})",
+                    stops[first] == stops[top] if first in stops else False, str(first)))
+    return out
+
+
 CHECKS: dict[str, Callable[..., Awaitable[list[Result]]]] = {"9": check_groundedness,
                                                               "10": check_outcomes,
-                                                              "11": check_structure}
+                                                              "11": check_structure,
+                                                              "14": check_funnel}

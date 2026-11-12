@@ -35,7 +35,7 @@ and write down what was learned or changed. Keep entries short.
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel built; `observer-replay` not yet |
 | 13 | Cost per outcome, not per token | in progress | 13a built; owned capacity built; cost per merged change (`vcs_events`) not yet |
-| 14 | Gate funnel and critical path | planned | |
+| 14 | Gate funnel and critical path | done | funnel, critical path, time budgets; bed check `--check 14` (funnel) |
 
 ## Step 1: health vs quality
 
@@ -323,6 +323,19 @@ premium route can drive most of the spend.
   with its reason code; a turn with sequential independent calls shows them as parallelisable with
   their share of latency.
 
+- **Built (2026-11-12):** `app/critical_path.py`; `GET /v1/agent/funnel` (per gate: turns seen,
+  passed, skipped, stopped, stop reason codes, usual position; the gate that stops most first) and a
+  "Gate funnel" card on Governance; trace diagnostics carry `critical_path` (sequential model calls
+  under the same parent with no `observer.depends_on` between them, with their share of the latency)
+  and the trace page says they could run in parallel. Both "done when" cases pass with synthetic data
+  (12 turns, verification stops 7 with `claim_unsupported`; three calls at 70% of the latency; a
+  declared dependency is not flagged). Time budget per stage: a `budgets` project section
+  (`{"stages": {"retrieval": 250, "llm.*": 800}, "turn_ms": 1500}`; a span name, `fnmatch` pattern
+  or span type, in ms), `GET /v1/agent/budgets` (per stage: turns over budget, p50/p95 of its longest
+  span per turn) and the alert metric `over_budget_rate`. The bed checks the funnel against the
+  gate stops its episodes plant (`run_bed.py --check 14`); the critical path is checked by unit
+  tests only (the bed's episodes have no sequential independent model calls).
+
 ## Reference comparison (documentation only)
 
 | Product | Worth learning from |
@@ -442,6 +455,9 @@ premium route can drive most of the spend.
 - 2026-11-12: step 13a: cost per outcome without a migration. Waste and the top-5% share are
   checked against a hand count on synthetic traces. Learned: the loop detector needs five identical
   calls by default, so a fixture with three repeats showed no repeated spend.
+- 2026-11-12: step 14: gate funnel, critical path (checked in a browser at 1440 and 390 px) and
+  time budgets per stage. Learned: the config API returned a 500 for the first section with its own
+  validator (pydantic puts the ValueError in the error context, which is not JSON).
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

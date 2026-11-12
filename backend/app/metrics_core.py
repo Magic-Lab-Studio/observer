@@ -95,6 +95,12 @@ METRICS: dict[str, dict[str, Any]] = {
         "kind": "cost",
     },
     "waste_share": {"label": "Gasto desperdiciado", "unit": "ratio", "kind": "cost"},
+    # time budget per stage (roadmap step 14): app.budgets over the window's traces
+    "over_budget_rate": {
+        "label": "Turnos fuera de presupuesto de tiempo",
+        "unit": "ratio",
+        "kind": "budget",
+    },
 }
 
 

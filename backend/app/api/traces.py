@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.capture import apply_capture, capture_mode
 from app.cost import fill_span_cost
+from app.critical_path import critical_path
 from app.db import DbSession
 from app.ingest_validation import (
     OpaqueId,
@@ -712,8 +713,9 @@ async def get_trace_diagnostics(
     trace_id: str,
     session: AsyncSession = DbSession,
 ) -> dict:
-    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``) and how the
-    turn ended (outcome, source, reason; ``app.outcomes``)."""
+    """Agent diagnostics of one trace: repeated tool calls (``app.loop_detection``), how the turn
+    ended (outcome, source, reason; ``app.outcomes``) and its critical path: sequential model calls
+    that declared no dependency on each other (``app.critical_path``)."""
     valid_id = await _resolve_trace_id(session, trace_id)
     if await session.get(Trace, valid_id) is None:
         raise HTTPException(status_code=404, detail="Trace not found")
@@ -723,6 +725,7 @@ async def get_trace_diagnostics(
         "trace_id": valid_id,
         "min_repeats": min_repeats(),
         "repeated_calls": repeated_calls(list(rows)),
+        "critical_path": critical_path(list(rows)),
         **turn_outcome(signals),
     }
 

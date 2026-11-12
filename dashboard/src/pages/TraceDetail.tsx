@@ -7,7 +7,7 @@ import SpanDetail from '../components/SpanDetail';
 import SaveAsCase from '../components/SaveAsCase';
 import WhyPanel from '../components/WhyPanel';
 import { Card, Chip, EmptyState, ErrorState, Icon, Kpi, Skeleton, StatusPill } from '../components/ui';
-import { fmtInt, fmtMs, fmtUsd, stageLabel, stageTimings, traceDurationMs } from '../helpers/format';
+import { fmtInt, fmtMs, fmtPct, fmtUsd, stageLabel, stageTimings, traceDurationMs } from '../helpers/format';
 import { parseApiDate } from '../dates';
 import { parseAttempts, resultLabel, resultTone } from '../helpers/chain';
 import { localeTag, t } from '../i18n';
@@ -109,6 +109,15 @@ function TraceDetail() {
           {g.same_output ? ` · ${t('siempre con la misma respuesta')}` : ''}
           {g.errors ? ` · ${t('{n} con error', { n: g.errors })}` : ''}
           {!g.arguments_known ? ` · ${t('sin argumentos registrados: se agrupan por nombre')}` : ''}
+        </div>
+      ))}
+
+      {diagnostics?.critical_path?.parallelisable.map((run) => (
+        <div key={run.span_ids.join('/')} role="status"
+          className="rounded-xl border border-accent/30 bg-accent/5 p-3 text-xs text-dim">
+          {t('{n} llamadas al modelo en serie sin dependencia declarada ({names}): {share} de la duración. Podrían ir en paralelo.', {
+            n: run.calls, names: run.names.join(' → '), share: fmtPct(run.latency_share, 0),
+          })}
         </div>
       ))}
 
