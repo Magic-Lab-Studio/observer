@@ -34,7 +34,7 @@ and write down what was learned or changed. Keep entries short.
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel built; `observer-replay` not yet |
-| 13 | Cost per outcome, not per token | planned | |
+| 13 | Cost per outcome, not per token | in progress | 13a built (buckets, waste, concentration, routing, alerts, `/costs`); 13b (changes, owned capacity) not yet |
 | 14 | Gate funnel and critical path | planned | |
 
 ## Step 1: health vs quality
@@ -299,6 +299,14 @@ premium route can drive most of the spend.
   excludes nothing silently; waste and top-5% share match a hand count on synthetic data; a local
   provider with an hourly cost is no longer shown as free.
 
+- **Built (2026-11-12, 13a, no migration):** `app/cost_outcomes.py` puts every costed span in one
+  bucket (useful, failed, error, repeated, unknown; they add up to the total), the cost per answered
+  turn, the waste share, the top-5% users' share (by `user.id`, else the actor; unattributed spend
+  reported apart) and spend and outcomes per model with its pricing status;
+  `GET /v1/costs/summary`; alert metrics `spend_per_day`, `cost_per_outcome`, `waste_share`; a
+  `/costs` dashboard page. **Not built (13b):** cost per merged change (`vcs.*`, a CI hook), rework,
+  and the hourly cost of owned capacity (a local model still costs 0).
+
 ## Step 14: gate funnel and critical path
 
 - **Gate funnel**: from step 10 gate spans, how many turns each gate stops (for example retrieval
@@ -426,6 +434,9 @@ premium route can drive most of the spend.
   distribution, entropy), in run summaries, comparisons, the regression gate and the runs panel.
   The migration was rehearsed on a copy of the live database (no runs stored there, so it checks
   the schema only). `observer-replay` is left for a later change.
+- 2026-11-12: step 13a: cost per outcome without a migration. Waste and the top-5% share are
+  checked against a hand count on synthetic traces. Learned: the loop detector needs five identical
+  calls by default, so a fixture with three repeats showed no repeated spend.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

@@ -296,3 +296,13 @@ export interface GovernanceTurn {
   trace_id: string; session_id: string | null; turn_id: string | null; status: string;
   steps: GovernanceStep[]; unanswered_asks: string[]; complete: boolean;
 }
+
+/** GET /v1/costs/summary (roadmap step 13a). */
+export interface CostSummary {
+  project_id: string | null; since: string; traces: number; truncated: boolean; costed_spans: number;
+  total_usd: number; buckets: Record<'useful' | 'failed' | 'error' | 'repeated' | 'unknown', number>;
+  waste_share: number | null; outcomes: Record<string, number>; answered_turns: number;
+  cost_per_answered: number | null;
+  concentration: { users: number; top_users: number; top5_share: number | null; unattributed_usd: number };
+  routing: { model: string; pricing: string; cost_usd: number; spans: number; outcomes: Record<string, number> }[];
+}

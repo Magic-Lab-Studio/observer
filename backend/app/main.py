@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api import agent as agent_api
 from app.api import alerts as alerts_api
 from app.api import analytics, evaluations, manitos_ingest, providers, traces
+from app.api import costs as costs_api
 from app.api import dataset_runs as dataset_runs_api
 from app.api import datasets as datasets_api
 from app.api import event_ingest as event_ingest_api
@@ -130,6 +131,12 @@ app.include_router(
     alerts_api.router,
     prefix="/v1/alerts",
     tags=["alerts"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    costs_api.router,
+    prefix="/v1/costs",
+    tags=["costs"],
     dependencies=[_app_auth],
 )
 app.include_router(
