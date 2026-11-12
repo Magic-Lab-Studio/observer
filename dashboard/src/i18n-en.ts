@@ -575,6 +575,7 @@ export const EN: Record<string, string> = {
   'Solo para estas tareas o etiquetas (vacío: todas)': 'Only for these tasks or tags (empty: all)',
   'Contar la entrada del turno como fuente': 'Count the turn\'s input as a source',
   'Proveedor del juez': 'Judge provider',
+  'Con «Juez», un modelo (local por defecto) lista las afirmaciones que el mismo contexto no sostiene.': 'With “Judge”, a model (local by default) lists the claims the same context does not support.',
   'El del servidor (OBSERVATORY_JUDGE_*)': 'The server\'s (OBSERVATORY_JUDGE_*)',
   'Compatible con OpenAI (Ollama local)': 'OpenAI-compatible (local Ollama)',
   'Modelo del juez': 'Judge model',

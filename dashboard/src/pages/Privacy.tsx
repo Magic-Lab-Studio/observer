@@ -48,7 +48,7 @@ function GroundednessEditor({ projects }: { projects: PrivacyProject[] }) {
 
   return (
     <Card title={t('Sustento de las respuestas')} bodyClass="p-4">
-      <p className="mb-3 text-xs text-faint">{t('Con «Reglas», cada respuesta se compara con lo que su traza leyó (salidas de herramientas y búsquedas): citas a fuentes que no se leyeron y números que las fuentes no contienen cuentan como sin sustento. No llama a ningún modelo. Sin contenido guardado (modo «Solo metadatos») el resultado es «desconocido».')}</p>
+      <p className="mb-3 text-xs text-faint">{t('Con «Reglas», cada respuesta se compara con lo que su traza leyó (salidas de herramientas y búsquedas): citas a fuentes que no se leyeron y números que las fuentes no contienen cuentan como sin sustento. No llama a ningún modelo. Sin contenido guardado (modo «Solo metadatos») el resultado es «desconocido».')} {t('Con «Juez», un modelo (local por defecto) lista las afirmaciones que el mismo contexto no sostiene.')}</p>
       <div className="flex flex-wrap items-end gap-3 text-xs">
         <label className="flex flex-col gap-1 text-dim">{t('Proyecto')}
           <select className={selectCls} value={project} onChange={(e) => setProject(e.target.value)}>
@@ -80,7 +80,6 @@ function GroundednessEditor({ projects }: { projects: PrivacyProject[] }) {
               onChange={(e) => setDraft({ ...draft, context: { ...draft.context, include_input: e.target.checked } })} />
             {t('Contar la entrada del turno como fuente')}
           </label>
-          <button type="button" onClick={() => void save()} className="rounded-lg border border-accent/40 px-3 py-1.5 text-accent hover:bg-accent/10">{t('Guardar')}</button>
         </>)}
       </div>
       {draft && draft.mode.includes('judge') && (
@@ -117,6 +116,9 @@ function GroundednessEditor({ projects }: { projects: PrivacyProject[] }) {
           </label>
           <p className="w-full text-faint">{t('El juez recibe la respuesta y lo que la traza leyó, con los mismos topes. Si falla o contesta algo inválido, el resultado es «desconocido». Las claves se configuran en el servidor, nunca aquí.')}</p>
         </div>
+      )}
+      {draft && section && (
+        <button type="button" onClick={() => void save()} className="mt-3 rounded-lg border border-accent/40 px-3 py-1.5 text-xs text-accent hover:bg-accent/10">{t('Guardar')}</button>
       )}
       {section && <p className="mt-2 text-xs text-faint">{section.source === 'default' ? t('Sin configuración propia: apagado.') : t('Configuración propia del proyecto.')}</p>}
       {status && <p role="status" className="mt-1 text-xs text-dim">{status}</p>}
