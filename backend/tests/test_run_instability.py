@@ -1,9 +1,51 @@
 """Step 12: the same case run N times in one run; a case whose repetitions disagree is unstable."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.case_check import aggregate_repetitions, binary_entropy
+from app.models.trace import Span, Trace
 from app.ops.regression_gate import Thresholds, evaluate
+
+
+# Copied from test_dataset_runs.py: test modules here are not importable as a package in CI.
+async def _trace(db, *, degraded=False, status="ok", duration_ms=1000):
+    created = datetime.now(timezone.utc) - timedelta(minutes=5)
+    trace = Trace(
+        name="manitos.turn",
+        start_time=created,
+        end_time=created + timedelta(milliseconds=duration_ms),
+        status=status,
+        project_id="manitos",
+        environment="test",
+        created_at=created,
+    )
+    db.add(trace)
+    await db.flush()
+    db.add(
+        Span(
+            trace_id=trace.id,
+            name="manitos.turn.lifecycle",
+            span_type="turn",
+            start_time=created,
+            status=status,
+            attributes={"duration_ms": duration_ms, "llm_degraded": degraded},
+        )
+    )
+    await db.commit()
+    return trace
+
+
+async def _dataset_with_case(client):
+    ds = (await client.post("/v1/datasets", json={"name": "d"})).json()["id"]
+    item = (
+        await client.post(
+            f"/v1/datasets/{ds}/items",
+            json={"expect": {"health": {"no_degradation": True, "no_error": True}}},
+        )
+    ).json()
+    return ds, item["id"]
 
 
 def _r(item, status, health=None):
@@ -44,8 +86,6 @@ async def _post_run(client, ds, results):
 
 @pytest.mark.anyio
 async def test_a_run_with_repetitions_reports_the_unstable_case(client, db_session):
-    from tests.test_dataset_runs import _dataset_with_case, _trace
-
     ds, item = await _dataset_with_case(client)
     good = [await _trace(db_session) for _ in range(3)]
     bad = [await _trace(db_session, degraded=True) for _ in range(2)]
@@ -69,8 +109,6 @@ async def test_a_run_with_repetitions_reports_the_unstable_case(client, db_sessi
 
 @pytest.mark.anyio
 async def test_runs_without_repetition_unchanged(client, db_session):
-    from tests.test_dataset_runs import _dataset_with_case, _trace
-
     ds, item = await _dataset_with_case(client)
     trace = await _trace(db_session)
     run = await _post_run(client, ds, [{"item_id": item, "trace_id": trace.id}])
