@@ -35,7 +35,7 @@ and write down what was learned or changed. Keep entries short.
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
 | 13 | Cost per outcome, not per token | planned | |
-| 14 | Gate funnel and critical path | done | funnel, critical path and time budgets; the bed's step-14 checks not added |
+| 14 | Gate funnel and critical path | done | funnel, critical path, time budgets; bed check `--check 14` (funnel) |
 
 ## Step 1: health vs quality
 
@@ -311,8 +311,9 @@ premium route can drive most of the spend.
   declared dependency is not flagged). Time budget per stage: a `budgets` project section
   (`{"stages": {"retrieval": 250, "llm.*": 800}, "turn_ms": 1500}`; a span name, `fnmatch` pattern
   or span type, in ms), `GET /v1/agent/budgets` (per stage: turns over budget, p50/p95 of its longest
-  span per turn) and the alert metric `over_budget_rate`. **Not built:** the bed's step-14 checks
-  (`run_bed.py --check 14`).
+  span per turn) and the alert metric `over_budget_rate`. The bed checks the funnel against the
+  gate stops its episodes plant (`run_bed.py --check 14`); the critical path is checked by unit
+  tests only (the bed's episodes have no sequential independent model calls).
 
 ## Reference comparison (documentation only)
 
