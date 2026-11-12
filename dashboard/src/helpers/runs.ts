@@ -18,8 +18,8 @@ export function configDiff(a: RunVersion, b: RunVersion): string[] {
     .map((k) => `${k}: ${ca[k] ?? '–'} → ${cb[k] ?? '–'}`);
 }
 
-/** Worst news first: regressions, then unknowns, improvements, unchanged, missing. */
-const ORDER: CaseChange[] = ['regressed', 'unknown', 'improved', 'same', 'missing'];
+/** Worst news first: regressions, then unstable cases, unknowns, improvements, unchanged, missing. */
+const ORDER: CaseChange[] = ['regressed', 'unstable', 'unknown', 'improved', 'same', 'missing'];
 export const changeRank = (c: CaseChange): number => ORDER.indexOf(c);
 
 export function fmtDelta(v: number | null, digits = 2): string {

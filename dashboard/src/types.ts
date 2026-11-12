@@ -243,9 +243,9 @@ export interface DatasetCase {
 export interface DatasetDetail { id: string; name: string; project_id: string; description: string | null; items: DatasetCase[] }
 
 export interface RunVersion { commit?: string | null; model?: string | null; config?: Record<string, string | number | boolean>; rubric?: string }
-export interface RunSummary { pass: number; fail: number; unknown: number; cases: number; pass_rate: number | null; avg_health: number | null }
+export interface RunSummary { pass: number; fail: number; unknown: number; cases: number; pass_rate: number | null; avg_health: number | null; unstable?: number; results?: number }
 export interface DatasetRunInfo { id: string; dataset_id: string; name: string | null; version: RunVersion; created_at: string | null; summary: RunSummary }
-export type CaseChange = 'regressed' | 'improved' | 'same' | 'unknown' | 'missing';
+export type CaseChange = 'regressed' | 'improved' | 'same' | 'unstable' | 'unknown' | 'missing';
 export interface RunComparison {
   base: DatasetRunInfo; candidate: DatasetRunInfo;
   summary: Record<CaseChange, number>;

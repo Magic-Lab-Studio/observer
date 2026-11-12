@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, String
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String
 
 from app.models import Base
 
@@ -42,3 +42,5 @@ class RunResult(Base):
     checks = Column(JSON, nullable=False)
     health_score = Column(Float, nullable=True)
     duration_ms = Column(Float, nullable=True)
+    # The same case may run several times in one run (step 12): 0, 1, 2, ...
+    repetition = Column(Integer, nullable=False, default=0, server_default="0")

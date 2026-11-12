@@ -68,7 +68,8 @@ def test_compare_results_classifies_changes():
         "e": "missing",
         "f": "missing",
     }
-    assert out["summary"] == {"regressed": 1, "improved": 1, "same": 1, "unknown": 1, "missing": 2}
+    assert out["summary"] == {"regressed": 1, "improved": 1, "same": 1, "unstable": 0, "unknown": 1,
+                              "missing": 2}
     a = next(c for c in out["cases"] if c["item_id"] == "a")
     assert a["health_delta"] == -0.3 and a["duration_delta_ms"] == 3000
 
