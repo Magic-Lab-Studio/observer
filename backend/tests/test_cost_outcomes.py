@@ -131,3 +131,52 @@ async def test_waste_share_alert_stays_closed_under_its_threshold(client, db_ses
     await db_session.commit()
     result = await evaluate_rules(db_session)
     assert result.evaluated >= 1 and result.opened == 0  # 0.345 is under 0.5
+
+
+async def _owned_turn(client, project):
+    """One answered turn: a paid call (0.010) and two local calls of 36 s each, with no cost."""
+    tid, root = str(uuid.uuid4()), str(uuid.uuid4())
+    now = time.time() - 600
+
+    def local(start):
+        return {"id": str(uuid.uuid4()), "trace_id": tid, "parent_id": root, "name": "chat",
+                "span_type": "llm", "start_time": now + start, "end_time": now + start + 36,
+                "status": "ok", "attributes": {"gen_ai.request.model": "llama3.2:3b",
+                                               "gen_ai.system": "ollama",
+                                               "gen_ai.response.finish_reasons": ["stop"]}}
+    spans = [_llm(tid, root, 0.010, user="u1"), local(1), local(40),
+             {"id": root, "trace_id": tid, "parent_id": None, "name": "agent",
+              "span_type": "generic", "start_time": now, "end_time": now + 80, "status": "ok",
+              "attributes": {"service.name": project}}]
+    assert (await client.post("/v1/traces/batch", json={"spans": spans})).status_code == 200
+    return tid
+
+
+@pytest.mark.anyio
+async def test_local_with_hourly_cost_not_free(client):
+    tid = await _owned_turn(client, "own")
+    before = (await client.get("/v1/costs/summary?project_id=own&hours=1")).json()
+    assert before["total_usd"] == pytest.approx(0.010) and before["owned_usd"] == 0
+    put = await client.put("/v1/projects/own/config/cost", json={"hourly_usd": {"local": 0.5}})
+    assert put.status_code == 200, put.text
+    s = (await client.get("/v1/costs/summary?project_id=own&hours=1")).json()
+    # 72 s of local calls at 0.50 USD/h = 0.01
+    assert s["owned_usd"] == pytest.approx(0.01) and s["paid_usd"] == pytest.approx(0.010)
+    assert s["total_usd"] == pytest.approx(0.02) == pytest.approx(sum(s["buckets"].values()))
+    local = next(m for m in s["routing"] if m["model"] == "llama3.2:3b")
+    assert local["pricing"] == "local" and local["owned_usd"] == pytest.approx(0.01)
+    # computed when read, never written to the spans
+    spans = (await client.get(f"/v1/traces/{tid}/spans")).json()
+    assert all(sp["cost_usd"] is None for sp in spans if sp["name"] == "chat"
+               and (sp.get("attributes") or {}).get("gen_ai.system") == "ollama")
+
+
+@pytest.mark.anyio
+async def test_ingest_cost_unchanged_and_bad_rates_refused(client):
+    await _owned_turn(client, "own2")
+    assert (await client.put("/v1/projects/own2/config/cost",
+                             json={"hourly_usd": {"local": -1}})).status_code == 422
+    assert (await client.put("/v1/projects/own2/config/cost",
+                             json={"hourly_usd": {"local": 1}, "x": 1})).status_code == 422
+    s = (await client.get("/v1/costs/summary?project_id=own2&hours=1")).json()
+    assert s["paid_usd"] == pytest.approx(0.010) and s["owned_usd"] == 0

@@ -15,13 +15,16 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import groundedness
+from app import cost_outcomes, groundedness
 from app.db import DbSession
 from app.models.settings import ProjectConfig
 
 router = APIRouter()
 
-SECTIONS: dict[str, type[BaseModel]] = {groundedness.SECTION: groundedness.GroundednessConfig}
+SECTIONS: dict[str, type[BaseModel]] = {
+    groundedness.SECTION: groundedness.GroundednessConfig,
+    cost_outcomes.SECTION: cost_outcomes.CostConfig,  # owned capacity (roadmap step 13b)
+}
 ProjectId = Path(..., min_length=1, max_length=128)
 
 
@@ -91,7 +94,10 @@ async def put_section(
     try:
         value = schema.model_validate(body)
     except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors(include_url=False)) from None
+        # include_context=False: a custom validator puts its ValueError in ctx, which is not JSON
+        raise HTTPException(
+            status_code=422, detail=exc.errors(include_url=False, include_context=False)
+        ) from None
     if section == groundedness.SECTION and value.mode not in groundedness.BUILT_MODES:
         raise HTTPException(
             status_code=422,
