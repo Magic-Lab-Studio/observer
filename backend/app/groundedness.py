@@ -17,12 +17,22 @@ The share of supported claims is the score: ``grounded`` at or above the project
 ``partial`` from half the threshold, ``ungrounded`` below. A trace without a reply or without
 context (no evidence spans, or a capture mode that kept no content) is ``unknown`` with the reason,
 never a pass; a trace outside ``applies_to`` is ``not_applicable``. Each unsupported claim is listed
-in the result, short, as evidence. The ``judge`` modes are accepted in the schema but not built.
+in the result, short, as evidence.
+
+``judge`` mode asks a language model (``app.evaluators.judge_backends``) which claims of the reply
+the same bounded context does not support, as JSON; ``rules+judge`` runs both and keeps the worse.
+A judge that fails or answers something invalid makes the result ``unknown``, never a pass. Privacy:
+``off`` sends nothing; a project whose capture mode is ``metadata`` is ``unknown``
+(``metadata_capture``) without calling the judge; a judge that is not on this machine (loopback)
+receives the context only when the project sets ``judge.allow_remote``. A deterministic sample
+(``sample_rate`` by trace id) and ``max_per_pass`` bound how many traces a pass sends to the judge.
 """
 
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -32,7 +42,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.capture import capture_mode
 from app.case_check import LEVELS  # ("ungrounded", "partial", "grounded"), worst to best
+from app.evaluators.judge_backends import (
+    _DEFAULT_MODEL,
+    JudgeConfig,
+    JudgeUnavailableError,
+    ask_judge,
+)
 from app.metrics_core import TurnSignals, aware, load_signals_for
 from app.models.evaluation import Evaluation
 from app.models.settings import ProjectConfig
@@ -42,7 +59,9 @@ RUBRIC = "groundedness@1"
 SECTION = "groundedness"
 EVALUATOR_TYPE = "groundedness"  # its own type: turn-health readers take every "rule_based" row
 MODES = ("off", "rules", "judge", "rules+judge")
-BUILT_MODES = ("off", "rules")
+BUILT_MODES = MODES
+JUDGE_MODES = ("judge", "rules+judge")
+JUDGE_REPLY_CHARS = 8000
 OVERLAP = 0.6
 MIN_CLAIM_WORDS = 4
 MAX_LISTED = 10
@@ -60,12 +79,25 @@ class ContextConfig(BaseModel):
     max_chars_per_trace: int = Field(20_000, ge=1000, le=200_000)
 
 
+class JudgeSettings(BaseModel):
+    """The project's judge; unset fields fall back to ``OBSERVATORY_JUDGE_*`` (keys always do)."""
+
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["openai", "openai-compatible", "anthropic"] | None = None
+    model: str | None = Field(None, max_length=200)
+    base_url: str | None = Field(None, max_length=500)
+    allow_remote: bool = False  # a judge off this machine receives the trace's context
+
+
 class GroundednessConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["off", "rules", "judge", "rules+judge"] = "off"
     context: ContextConfig = Field(default_factory=ContextConfig)
     applies_to: list[str] = Field(default_factory=list, max_length=50)
     threshold: float = Field(0.8, gt=0, le=1)
+    judge: JudgeSettings = Field(default_factory=JudgeSettings)
+    sample_rate: float = Field(1.0, ge=0, le=1)  # share of traces the judge sees (by trace id)
+    max_per_pass: int = Field(20, ge=1, le=500)  # traces sent to the judge per pass
 
 
 def evaluation_id(trace_id: str) -> str:
@@ -264,6 +296,165 @@ def score_reply(
     }
 
 
+# --- judge -------------------------------------------------------------------------------------
+
+JUDGE_SYSTEM = (
+    "You check whether an assistant's reply is supported by the context it had: the output of the "
+    "tools and searches it ran, and the user's message. Only the text under REPLY TO CHECK "
+    "is checked: the user's message is never a claim. You do not use your own knowledge: a claim "
+    "that is true but not in the context is unsupported. Questions, greetings and offers are not "
+    "claims. "
+    "Quote each unsupported claim from the reply. Answer with one JSON object and nothing else: "
+    '{"claims": <number of factual claims in the reply>, '
+    '"unsupported": [{"claim": "<the claim, short>", "why": "not_in_context" | "contradicted"}], '
+    '"level": "grounded" | "partial" | "ungrounded"}. '
+    "grounded: every claim is supported; partial: some are not; ungrounded: most are not, or one "
+    "contradicts the context, or states a number the context does not contain."
+)
+
+
+def judge_config(settings: JudgeSettings) -> JudgeConfig:
+    """``OBSERVATORY_JUDGE_*`` under the project's provider, model and URL (keys: env only)."""
+    config = JudgeConfig.from_env()
+    if settings.provider and settings.provider != config.provider:
+        config.provider = settings.provider
+        config.model = _DEFAULT_MODEL.get(settings.provider)  # not the env provider's model
+    if settings.model:
+        config.model = settings.model
+    if settings.base_url:
+        config.base_url = settings.base_url.strip()
+    return config
+
+
+def judge_is_local(config: JudgeConfig) -> bool:
+    """True when the judge runs on this machine (an OpenAI-compatible endpoint on loopback)."""
+    if config.provider != "openai-compatible" or not config.base_url:
+        return False
+    from urllib.parse import urlsplit
+
+    host = (urlsplit(config.base_url).hostname or "").lower()
+    return host in ("127.0.0.1", "localhost", "::1") or host.startswith("127.")
+
+
+def sampled(trace_id: str, rate: float) -> bool:
+    """A deterministic draw: the same trace is always in or out at a given rate."""
+    if rate >= 1:
+        return True
+    if rate <= 0:
+        return False
+    draw = int(hashlib.sha256(trace_id.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+    return draw < rate
+
+
+def parse_judge_answer(raw: str, threshold: float) -> dict[str, Any]:
+    """The judge's JSON as a result, or ``ValueError`` when it is not the expected shape."""
+    text = raw.strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("no JSON object")
+    data = json.loads(text[start : end + 1])
+    if not isinstance(data, dict) or data.get("level") not in LEVELS:
+        raise ValueError("level missing or unknown")
+    items = data.get("unsupported") or []
+    if not isinstance(items, list):
+        raise ValueError("unsupported is not a list")
+    unsupported = []
+    for item in items:
+        claim = item.get("claim") if isinstance(item, dict) else item
+        if not isinstance(claim, str) or not claim.strip():
+            continue
+        why = item.get("why") if isinstance(item, dict) else ""
+        why = why if why in ("not_in_context", "contradicted") else "not_in_context"
+        unsupported.append({"claim": _short(claim.strip()), "why": why, "detail": "judge"})
+    claims = data.get("claims")
+    claims = int(claims) if isinstance(claims, (int, float)) and claims >= 0 else 0
+    claims = max(claims, len(unsupported))
+    level = str(data["level"])
+    if claims:
+        score = (claims - len(unsupported)) / claims
+    else:
+        score = {"grounded": 1.0, "partial": threshold / 2, "ungrounded": 0.0}[level]
+    return {
+        "status": level,
+        "reason": "",
+        "score": round(score, 4),
+        "claims": claims,
+        "supported": claims - len(unsupported),
+        "unsupported": unsupported[:MAX_LISTED],
+        "unsupported_count": len(unsupported),
+    }
+
+
+async def judge_reply(
+    settings: JudgeSettings, reply: str, context: str, given: str, threshold: float
+) -> dict[str, Any]:
+    """The judge's verdict on ``reply``; ``unknown`` with the reason when it gives none."""
+    config = judge_config(settings)
+    if not judge_is_local(config) and not settings.allow_remote:
+        return {"status": "unknown", "reason": "judge_remote_not_allowed", "score": None}
+    user = (
+        f"CONTEXT (what the assistant fetched):\n{context}\n\n"
+        f"USER MESSAGE:\n{given or '(none)'}\n\n"
+        f"REPLY TO CHECK:\n{reply[:JUDGE_REPLY_CHARS]}"
+    )
+    try:
+        raw = await ask_judge(config, JUDGE_SYSTEM, user)
+    except JudgeUnavailableError as exc:
+        return {"status": "unknown", "reason": f"judge_unavailable:{exc.reason}"[:120],
+                "score": None}
+    try:
+        verdict = parse_judge_answer(raw, threshold)
+    except (ValueError, TypeError):
+        return {"status": "unknown", "reason": "judge_invalid", "score": None}
+    verdict = _keep_claims_of_the_reply(verdict, reply)
+    verdict["judge_model"] = str(config.model or "")[:160]
+    return verdict
+
+
+def _keep_claims_of_the_reply(verdict: dict[str, Any], reply: str) -> dict[str, Any]:
+    """Drop "unsupported claims" the reply does not contain. A small local judge (llama3.2:3b, live
+    run) listed the user's question «where is my refund» as an unsupported claim of a correct reply
+    and called it ungrounded; with nothing left, the verdict is the judge's own claim count."""
+    def tokens(text: str) -> set[str]:  # words and the numbers stated («180 USD» is a quote too)
+        return _words(text) | set(_stated_numbers(text))
+
+    reply_tokens = tokens(reply)
+    kept, dropped = [], 0
+    for item in verdict.get("unsupported") or []:
+        claim = tokens(item["claim"])
+        if claim and len(claim & reply_tokens) / len(claim) >= 0.75:  # a quote, not a paraphrase
+            kept.append(item)
+        else:
+            dropped += 1
+    if not dropped:
+        return verdict
+    claims = int(verdict.get("claims") or 0)
+    verdict = {**verdict, "unsupported": kept, "unsupported_count": len(kept),
+               "judge_claims_dropped": dropped}
+    if not kept:
+        return {**verdict, "status": "grounded", "score": 1.0, "supported": claims}
+    if claims:
+        verdict["supported"] = claims - len(kept)
+        verdict["score"] = round((claims - len(kept)) / claims, 4)
+    return verdict
+
+
+def combine(rules: dict[str, Any], judge: dict[str, Any]) -> dict[str, Any]:
+    """``rules+judge``: the worse of the two, both kept in the detail. An unknown judge makes the
+    result unknown: a failed check is never a pass."""
+    both = {"rules_result": rules, "judge_result": judge}
+    if judge.get("status") not in LEVELS:
+        return {**rules, **both, "status": "unknown", "reason": judge.get("reason") or "judge",
+                "score": None}
+    if rules.get("status") not in LEVELS:
+        return {**judge, **both}
+    worse = rules if LEVELS.index(rules["status"]) <= LEVELS.index(judge["status"]) else judge
+    scores = [r["score"] for r in (rules, judge) if isinstance(r.get("score"), (int, float))]
+    unsupported = (rules.get("unsupported") or []) + (judge.get("unsupported") or [])
+    return {**worse, **both, "score": min(scores) if scores else None,
+            "unsupported": unsupported[:MAX_LISTED]}
+
+
 def _matches_context(span: Any, cfg: ContextConfig) -> bool:
     if str(span.span_type or "") in cfg.span_types:
         return True
@@ -289,7 +480,7 @@ async def evaluate_trace(
     signals: TurnSignals | None = None,
 ) -> dict[str, Any]:
     """The groundedness result of one stored trace under ``cfg`` (reads its spans' content)."""
-    base: dict[str, Any] = {"rubric": RUBRIC, "mode": "rules"}
+    base: dict[str, Any] = {"rubric": RUBRIC, "mode": cfg.mode}
     if signals is not None:
         base["model"] = (signals.answered_by or signals.model)[:160]
         base["provider"] = signals.provider
@@ -298,6 +489,12 @@ async def evaluate_trace(
         meta.get("tags"), list) else []
     if not _applies(cfg, signals, tags):
         return {**base, "status": "not_applicable", "reason": "outside_applies_to", "score": None}
+    uses_judge = cfg.mode in JUDGE_MODES
+    if uses_judge and await capture_mode(session, trace.project_id, "full") == "metadata":
+        # nothing of the content was kept, and nothing is sent anywhere
+        return {**base, "status": "unknown", "reason": "metadata_capture", "score": None}
+    if cfg.mode == "judge" and not sampled(str(trace.id), cfg.sample_rate):
+        return {**base, "status": "not_applicable", "reason": "not_sampled", "score": None}
     spans = list(
         (await session.execute(select(Span).where(Span.trace_id == trace.id))).scalars()
     )
@@ -340,9 +537,20 @@ async def evaluate_trace(
                 "sources": 0}
     top = next((s for s in spans if s.parent_span_id is None and s.inp), None)
     given = text_of(top.inp)[: ctx.max_chars_per_span] if top is not None else ""
-    scored = score_reply(reply, context, fetched=fetched, sources=sources,
-                         threshold=cfg.threshold, given=given)
-    return {**base, **scored, "context_chars": used, "dropped_chars": dropped}
+    extra = {"context_chars": used, "dropped_chars": dropped}
+    rules = None
+    if cfg.mode in ("rules", "rules+judge"):
+        rules = score_reply(reply, context, fetched=fetched, sources=sources,
+                            threshold=cfg.threshold, given=given)
+    skip_judge = cfg.mode == "rules+judge" and not sampled(str(trace.id), cfg.sample_rate)
+    if not uses_judge or skip_judge:
+        return {**base, **(rules or {}), **extra}
+    judged = await judge_reply(cfg.judge, reply, context, given, cfg.threshold)
+    if rules is None:
+        return {**base, **judged, "sources": sources, **extra}
+    if rules.get("status") == "not_applicable":
+        return {**base, **rules, **extra}  # nothing to judge: the reply asserts nothing
+    return {**base, **combine(rules, judged), "sources": sources, **extra}
 
 
 async def evaluate_project(
@@ -359,8 +567,10 @@ async def evaluate_project(
     ``trace_ids``; ``force`` re-scores them). Nothing happens unless the project's mode runs
     rules. Flushes, never commits."""
     cfg = await load_config(session, project_id)
-    if cfg.mode not in ("rules", "rules+judge"):
+    if cfg.mode == "off":
         return []
+    if cfg.mode in JUDGE_MODES:
+        batch = min(batch, cfg.max_per_pass)  # each trace may be a judge call
     now = now or datetime.now(timezone.utc)
     query = select(Trace).where(Trace.project_id == project_id)
     if trace_ids is not None:
@@ -411,7 +621,7 @@ async def configured_projects(session: AsyncSession) -> list[str]:
     )
     return [
         pid for pid, value in rows.all()
-        if isinstance(value, dict) and value.get("mode") in ("rules", "rules+judge")
+        if isinstance(value, dict) and value.get("mode") in ("rules", "judge", "rules+judge")
     ]
 
 

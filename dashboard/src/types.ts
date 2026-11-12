@@ -194,6 +194,9 @@ export interface GroundednessConfig {
   context: { span_types: string[]; name_patterns: string[]; include_input: boolean; max_chars_per_span: number; max_chars_per_trace: number };
   applies_to: string[];
   threshold: number;
+  judge: { provider: 'openai' | 'openai-compatible' | 'anthropic' | null; model: string | null; base_url: string | null; allow_remote: boolean };
+  sample_rate: number;
+  max_per_pass: number;
 }
 export interface GroundednessSection {
   project_id: string; section: 'groundedness'; value: GroundednessConfig; source: 'setting' | 'default';

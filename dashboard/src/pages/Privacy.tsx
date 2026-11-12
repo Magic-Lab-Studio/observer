@@ -16,7 +16,8 @@ const GROUNDED_MODE_LABEL: Record<string, string> = {
   'rules+judge': 'Reglas y juez',
 };
 
-/** Groundedness per project: off by default; ``rules`` checks each reply against what its trace fetched. */
+/** Groundedness per project: off by default; ``rules`` checks each reply against what its trace fetched,
+ * ``judge`` asks a model (local by default) the same question. */
 function GroundednessEditor({ projects }: { projects: PrivacyProject[] }) {
   const [project, setProject] = useState(projects[0]?.project_id ?? '');
   const [section, setSection] = useState<GroundednessSection | null>(null);
@@ -82,6 +83,41 @@ function GroundednessEditor({ projects }: { projects: PrivacyProject[] }) {
           <button type="button" onClick={() => void save()} className="rounded-lg border border-accent/40 px-3 py-1.5 text-accent hover:bg-accent/10">{t('Guardar')}</button>
         </>)}
       </div>
+      {draft && draft.mode.includes('judge') && (
+        <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-line pt-3 text-xs">
+          <label className="flex flex-col gap-1 text-dim">{t('Proveedor del juez')}
+            <select className={selectCls} value={draft.judge.provider ?? ''}
+              onChange={(e) => setDraft({ ...draft, judge: { ...draft.judge, provider: (e.target.value || null) as GroundednessConfig['judge']['provider'] } })}>
+              <option value="">{t('El del servidor (OBSERVATORY_JUDGE_*)')}</option>
+              <option value="openai-compatible">{t('Compatible con OpenAI (Ollama local)')}</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-dim">{t('Modelo del juez')}
+            <input className={`${inputCls} w-40`} value={draft.judge.model ?? ''} placeholder="llama3.2:3b"
+              onChange={(e) => setDraft({ ...draft, judge: { ...draft.judge, model: e.target.value || null } })} />
+          </label>
+          <label className="flex flex-col gap-1 text-dim">{t('URL del juez')}
+            <input className={`${inputCls} w-56`} value={draft.judge.base_url ?? ''} placeholder="http://127.0.0.1:11434/v1"
+              onChange={(e) => setDraft({ ...draft, judge: { ...draft.judge, base_url: e.target.value || null } })} />
+          </label>
+          <label className="flex flex-col gap-1 text-dim">{t('Muestra (0–1)')}
+            <input type="number" min={0} max={1} step={0.05} className={`${inputCls} w-20`} value={draft.sample_rate}
+              onChange={(e) => setDraft({ ...draft, sample_rate: Number(e.target.value) })} />
+          </label>
+          <label className="flex flex-col gap-1 text-dim">{t('Trazas por pasada')}
+            <input type="number" min={1} max={500} step={1} className={`${inputCls} w-20`} value={draft.max_per_pass}
+              onChange={(e) => setDraft({ ...draft, max_per_pass: Number(e.target.value) })} />
+          </label>
+          <label className="flex items-center gap-2 text-dim">
+            <input type="checkbox" checked={draft.judge.allow_remote}
+              onChange={(e) => setDraft({ ...draft, judge: { ...draft.judge, allow_remote: e.target.checked } })} />
+            {t('Permitir un juez fuera de esta máquina (recibe el contexto de la traza)')}
+          </label>
+          <p className="w-full text-faint">{t('El juez recibe la respuesta y lo que la traza leyó, con los mismos topes. Si falla o contesta algo inválido, el resultado es «desconocido». Las claves se configuran en el servidor, nunca aquí.')}</p>
+        </div>
+      )}
       {section && <p className="mt-2 text-xs text-faint">{section.source === 'default' ? t('Sin configuración propia: apagado.') : t('Configuración propia del proyecto.')}</p>}
       {status && <p role="status" className="mt-1 text-xs text-dim">{status}</p>}
     </Card>
