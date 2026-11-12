@@ -117,8 +117,18 @@ async def test_p2_service_environment_and_session_fill_the_trace(client):
     # a later batch cannot move the trace to another project
     other = {"service.name": "intruder"}
     late = _span("x", trace_id=tid, attributes=other)
-    await client.post("/v1/traces/batch", json={"spans": [late]})
+    sent = await client.post("/v1/traces/batch", json={"spans": [late]})
     assert (await client.get(f"/v1/traces/{tid}")).json()["project_id"] == "billing-agent"
+    # ... nor add its spans to it (audit O-1): the span is a conflict, not stored
+    assert "conflict=1" in sent.headers["X-Observer-Spans"]
+    names = [s["name"] for s in (await client.get(f"/v1/traces/{tid}/spans")).json()]
+    assert names == ["run"]
+    # a span that names no project, or the same one, still joins the trace
+    same = _span("y", trace_id=tid, attributes={"service.name": "billing-agent"})
+    plain = _span("z", trace_id=tid, attributes={})
+    await client.post("/v1/traces/batch", json={"spans": [same, plain]})
+    names = sorted(s["name"] for s in (await client.get(f"/v1/traces/{tid}/spans")).json())
+    assert names == ["run", "y", "z"]
 
 
 @pytest.mark.anyio
