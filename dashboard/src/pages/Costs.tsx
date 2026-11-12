@@ -40,7 +40,10 @@ function Costs() {
       </div>
       {data.costed_spans === 0 ? <EmptyState title={t('No hay llamadas con costo en esta ventana')} /> : (<>
         <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Kpi label={t('Gasto total')} value={fmtUsd(total)} hint={t('{n} trazas', { n: fmtInt(data.traces) })} />
+          <Kpi label={t('Gasto total')} value={fmtUsd(total)}
+            hint={data.owned_usd > 0
+              ? t('{p} pagado · {o} capacidad propia', { p: fmtUsd(data.paid_usd), o: fmtUsd(data.owned_usd) })
+              : t('{n} trazas', { n: fmtInt(data.traces) })} />
           <Kpi label={t('Costo por turno respondido')} value={fmtUsd(data.cost_per_answered)}
             hint={t('{n} respondidos', { n: fmtInt(data.answered_turns) })} />
           <Kpi label={t('Gasto desperdiciado')} value={fmtPct(data.waste_share, 0)}
@@ -91,7 +94,7 @@ function Costs() {
               </tbody>
             </table>
           </div>
-          <p className="px-4 py-2 text-xs text-faint">{t('Un modelo local cuesta 0 aquí: el costo por hora de la capacidad propia aún no está construido.')}</p>
+          <p className="px-4 py-2 text-xs text-faint">{t('Un modelo local cuesta 0 salvo que el proyecto fije el costo por hora de su capacidad propia (sección «cost» de su configuración): entonces cuesta su duración a esa tarifa.')}</p>
         </Card>
       </>)}
     </div>

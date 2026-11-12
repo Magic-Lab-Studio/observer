@@ -297,9 +297,10 @@ export interface GovernanceTurn {
 /** GET /v1/costs/summary (roadmap step 13a). */
 export interface CostSummary {
   project_id: string | null; since: string; traces: number; truncated: boolean; costed_spans: number;
-  total_usd: number; buckets: Record<'useful' | 'failed' | 'error' | 'repeated' | 'unknown', number>;
+  total_usd: number; paid_usd: number; owned_usd: number;
+  buckets: Record<'useful' | 'failed' | 'error' | 'repeated' | 'unknown', number>;
   waste_share: number | null; outcomes: Record<string, number>; answered_turns: number;
   cost_per_answered: number | null;
   concentration: { users: number; top_users: number; top5_share: number | null; unattributed_usd: number };
-  routing: { model: string; pricing: string; cost_usd: number; spans: number; outcomes: Record<string, number> }[];
+  routing: { model: string; pricing: string; cost_usd: number; owned_usd: number; spans: number; outcomes: Record<string, number> }[];
 }

@@ -34,7 +34,7 @@ and write down what was learned or changed. Keep entries short.
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
-| 13 | Cost per outcome, not per token | in progress | 13a built (buckets, waste, concentration, routing, alerts, `/costs`); 13b (changes, owned capacity) not yet |
+| 13 | Cost per outcome, not per token | in progress | 13a built; owned capacity built; cost per merged change (`vcs_events`) not yet |
 | 14 | Gate funnel and critical path | planned | |
 
 ## Step 1: health vs quality
@@ -296,8 +296,13 @@ premium route can drive most of the spend.
   turn, the waste share, the top-5% users' share (by `user.id`, else the actor; unattributed spend
   reported apart) and spend and outcomes per model with its pricing status;
   `GET /v1/costs/summary`; alert metrics `spend_per_day`, `cost_per_outcome`, `waste_share`; a
-  `/costs` dashboard page. **Not built (13b):** cost per merged change (`vcs.*`, a CI hook), rework,
-  and the hourly cost of owned capacity (a local model still costs 0).
+  `/costs` dashboard page.
+- **Built (2026-11-12, 13b, owned capacity):** a project `cost` section,
+  `{"hourly_usd": {"local": 0.5}}` (keys: a model, a provider, or `local` for every local model); a
+  local call with no cost then costs its duration at that rate, computed when read and never written
+  to `cost_usd`; the summary reports `paid_usd` and `owned_usd` apart and the buckets cover both.
+  **Not built:** cost per merged change (`vcs_events`, `vcs.*` attributes, a CI hook) and rework: it
+  needs a migration, kept until #112's migration has merged so Alembic keeps one head.
 
 ## Step 14: gate funnel and critical path
 

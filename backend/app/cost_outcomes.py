@@ -14,7 +14,14 @@ spend of the window by the turns that answered, so failed work raises it. ``conc
 the cost by user (``user.id`` on a span, else the trace's ``actor_id_hash``) and gives the share of
 the top 5% of users (at least one); cost no user can be named for is reported apart. ``routing``
 gives spend and outcomes per model with how the model is priced (``priced``, ``free``, ``local``,
-``unpriced``): a local model costs 0 here; an hourly cost for owned capacity is step 13b.
+``unpriced``).
+
+**Owned capacity** (step 13b): a local model's calls cost nothing per token, but the machine does. A
+project's ``cost`` configuration section can set ``hourly_usd`` per model or per provider (``local``
+covers every local model); a local call without a cost then costs its duration at that rate. It is
+computed when read and never written to ``cost_usd``; the result says ``paid_usd`` and
+``owned_usd`` apart, and the buckets and shares cover both, so owned and rented capacity compare on
+the same cost per outcome.
 """
 
 from __future__ import annotations
@@ -24,13 +31,78 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cost import classify, model_of
 from app.loop_detection import repeated_calls
 from app.metrics_core import load_signals_for
+from app.models.settings import ProjectConfig
 from app.models.trace import Span, Trace
+
+SECTION = "cost"
+LOCAL_SYSTEMS = {"ollama", "llamacpp", "llama.cpp", "local"}
+
+
+class CostConfig(BaseModel):
+    """The project's ``cost`` section: the fully loaded hourly cost of owned capacity."""
+
+    model_config = ConfigDict(extra="forbid")
+    # model name or provider ("local" for every local model) -> USD per hour of calls
+    hourly_usd: dict[str, float] = Field(default_factory=dict, max_length=50)
+
+    @field_validator("hourly_usd")
+    @classmethod
+    def _sane(cls, value: dict[str, float]) -> dict[str, float]:
+        for key, rate in value.items():
+            if not key.strip() or len(key) > 160:
+                raise ValueError("a model or provider name must be 1-160 characters")
+            if not 0 <= rate <= 10_000:
+                raise ValueError("an hourly cost must be between 0 and 10,000 USD")
+        return value
+
+
+async def load_config(session: AsyncSession, project_id: str | None) -> CostConfig:
+    if not project_id:
+        return CostConfig()
+    row = await session.get(ProjectConfig, (project_id, SECTION))
+    if row is None or not isinstance(row.value, dict):
+        return CostConfig()
+    try:
+        return CostConfig.model_validate(row.value)
+    except ValueError:
+        return CostConfig()
+
+
+def _system(span: Any) -> str:
+    attrs = span.attributes if isinstance(span.attributes, dict) else {}
+    return str(attrs.get("gen_ai.system") or attrs.get("gen_ai.provider.name") or "").lower()
+
+
+def is_local(span: Any, model: str | None) -> bool:
+    """A call served on this machine: a local provider, or a model name priced as local."""
+    return _system(span) in LOCAL_SYSTEMS or (
+        model is not None and classify(model)["status"] == "local"
+    )
+
+
+def owned_rate(span: Any, model: str | None, cfg: CostConfig) -> float | None:
+    """USD per hour for a local call under ``cfg``, or None (not local, or no rate set)."""
+    if not cfg.hourly_usd or not is_local(span, model):
+        return None
+    system = _system(span)
+    for key in (model, system, "local"):
+        if key and key in cfg.hourly_usd:
+            return cfg.hourly_usd[key]
+    return None
+
+
+def _hours(span: Any) -> float:
+    if span.start_time is None or span.end_time is None:
+        return 0.0
+    return max(0.0, (span.end_time - span.start_time).total_seconds()) / 3600
+
 
 BUCKETS = ("useful", "failed", "error", "repeated", "unknown")
 WASTE = ("failed", "error", "repeated")
@@ -78,6 +150,7 @@ async def summary(
     max_traces: int = MAX_TRACES,
 ) -> dict[str, Any]:
     """Spend of the window's traces by bucket, per answered turn, per user and per model."""
+    cfg = await load_config(session, project_id)
     query = select(Trace).where(Trace.created_at >= since)
     if project_id:
         query = query.where(Trace.project_id == project_id)
@@ -100,6 +173,7 @@ async def summary(
     unattributed = 0.0
     models: dict[str, dict[str, Any]] = {}
     costed_spans = 0
+    paid = owned = 0.0
     for trace in traces:
         tid = str(trace.id)
         outcome = signals[tid].outcome if tid in signals else "unknown"
@@ -116,20 +190,31 @@ async def summary(
         )
         trace_cost = 0.0
         for span in spans:
-            if span.cost_usd is None:
-                continue
-            cost = float(span.cost_usd)
+            model = model_of(span.attributes if isinstance(span.attributes, dict) else None)
+            span_owned = 0.0
+            if span.cost_usd is not None:
+                cost = float(span.cost_usd)
+                paid += cost
+            else:
+                rate = owned_rate(span, model, cfg)
+                if rate is None:
+                    continue
+                cost = span_owned = rate * _hours(span)
+                owned += cost
             costed_spans += 1
             trace_cost += cost
             buckets[bucket_of(span, outcome, repeated)] += cost
-            model = model_of(span.attributes if isinstance(span.attributes, dict) else None)
             if model:
                 entry = models.setdefault(
                     model,
-                    {"model": model, "pricing": classify(model)["status"], "cost_usd": 0.0,
-                     "spans": 0, "outcomes": defaultdict(int), "_traces": set()},
+                    {"model": model,
+                     "pricing": "local" if is_local(span, model) else classify(model)["status"],
+                     "cost_usd": 0.0,
+                     "owned_usd": 0.0, "spans": 0, "outcomes": defaultdict(int),
+                     "_traces": set()},
                 )
                 entry["cost_usd"] += cost
+                entry["owned_usd"] += span_owned
                 entry["spans"] += 1
                 if tid not in entry["_traces"]:
                     entry["_traces"].add(tid)
@@ -144,7 +229,8 @@ async def summary(
     share, top_users = top_share(by_user)
     routing = sorted(
         (
-            {k: (dict(v) if k == "outcomes" else round(v, 6) if k == "cost_usd" else v)
+            {k: (dict(v) if k == "outcomes" else round(v, 6) if k in ("cost_usd", "owned_usd")
+                 else v)
              for k, v in e.items() if k != "_traces"}
             for e in models.values()
         ),
@@ -157,6 +243,8 @@ async def summary(
         "truncated": len(traces) >= max_traces,
         "costed_spans": costed_spans,
         "total_usd": round(total, 6),
+        "paid_usd": round(paid, 6),
+        "owned_usd": round(owned, 6),
         "buckets": {k: round(v, 6) for k, v in buckets.items()},
         "waste_share": round(sum(buckets[k] for k in WASTE) / total, 4) if total > 0 else None,
         "outcomes": dict(outcomes),
