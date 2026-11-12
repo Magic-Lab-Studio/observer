@@ -30,7 +30,7 @@ and write down what was learned or changed. Keep entries short.
 | 6 | Read-only MCP server | done | #57 |
 | 7 | Configurable capture privacy | done | #58 |
 | 8 | Ingestion reliability (persistent queue, backoff, metrics) | done | #59 |
-| 9 | Groundedness, configurable per project (hallucinations) | in progress | `rules` mode built; the model judge not yet |
+| 9 | Groundedness, configurable per project (hallucinations) | done | `rules` mode, then the judge modes; see `docs/groundedness.md` |
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
@@ -408,6 +408,12 @@ premium route can drive most of the spend.
   with `podman-compose`, the judge run live against a local Ollama, and six limits documented as
   design decisions. The status table marks step 10 done (#88, #89); the «Later» item about phrase
   checks staying `unknown` was removed, since #103 built them.
+- 2026-11-12: step 9 done: the `judge` and `rules+judge` groundedness modes. The judge sees the
+  rules' bounded context, its failures are `unknown`, a remote judge needs `allow_remote`, a
+  `metadata` project never calls it, and `sample_rate`/`max_per_pass` bound the calls. Live with
+  `llama3.2:3b` on a local Ollama: the planted twins came out right three times in three. Learned:
+  the small judge listed the user's own question as an unsupported claim of a correct reply, so a
+  listed claim must be a quote of the reply (words and numbers: «180 USD» has no long word).
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.
