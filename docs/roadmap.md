@@ -35,7 +35,7 @@ and write down what was learned or changed. Keep entries short.
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | planned | |
 | 13 | Cost per outcome, not per token | planned | |
-| 14 | Gate funnel and critical path | planned | |
+| 14 | Gate funnel and critical path | in progress | funnel and critical path built; time budget per stage not yet |
 
 ## Step 1: health vs quality
 
@@ -302,6 +302,15 @@ premium route can drive most of the spend.
   with its reason code; a turn with sequential independent calls shows them as parallelisable with
   their share of latency.
 
+- **Built (2026-11-12):** `app/critical_path.py`; `GET /v1/agent/funnel` (per gate: turns seen,
+  passed, skipped, stopped, stop reason codes, usual position; the gate that stops most first) and a
+  "Gate funnel" card on Governance; trace diagnostics carry `critical_path` (sequential model calls
+  under the same parent with no `observer.depends_on` between them, with their share of the latency)
+  and the trace page says they could run in parallel. Both "done when" cases pass with synthetic data
+  (12 turns, verification stops 7 with `claim_unsupported`; three calls at 70% of the latency; a
+  declared dependency is not flagged). **Not built:** the time budget per stage (`budgets` section,
+  `over_budget_rate`) and the bed's checks.
+
 ## Reference comparison (documentation only)
 
 | Product | Worth learning from |
@@ -408,6 +417,8 @@ premium route can drive most of the spend.
   with `podman-compose`, the judge run live against a local Ollama, and six limits documented as
   design decisions. The status table marks step 10 done (#88, #89); the «Later» item about phrase
   checks staying `unknown` was removed, since #103 built them.
+- 2026-11-12: step 14 in progress: gate funnel and critical path, checked in a browser at 1440 and
+  390 px; the time budget per stage is left for a later change.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

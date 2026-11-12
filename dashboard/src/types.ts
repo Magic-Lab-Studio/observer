@@ -269,7 +269,16 @@ export interface RepeatedCalls {
   tool: string; parent_span_id: string | null; count: number; errors: number;
   arguments_known: boolean; same_output: boolean; span_ids: string[]; window_ms: number | null; severity: 'warning';
 }
-export interface TraceDiagnostics extends OutcomeInfo { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[] }
+export interface CriticalPath {
+  llm_calls: number; sequential_calls: number; trace_ms: number | null;
+  parallelisable: { span_ids: string[]; names: string[]; calls: number; duration_ms: number; latency_share: number | null }[];
+}
+export interface TraceDiagnostics extends OutcomeInfo { trace_id: string; min_repeats: number; repeated_calls: RepeatedCalls[]; critical_path?: CriticalPath }
+/** GET /v1/agent/funnel (roadmap step 14). */
+export interface GateFunnel {
+  project_id: string; hours: number; turns: number; turns_with_gates: number; truncated: boolean;
+  gates: { gate: string; turns: number; passed: number; skipped: number; stopped: number; stop_rate: number; reason_codes: { code: string; count: number }[]; position: number }[];
+}
 export interface ProjectInfo { project_id: string; trace_count: number; last_trace_at: string | null }
 
 // Governance views (/v1/governance): decision, security, approval and skill spans.

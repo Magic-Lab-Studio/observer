@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 
 from app import agent_contract
+from app.critical_path import gate_funnel
 from app.db import DbSession
 from app.metrics_core import ROW_LIMIT, load_turn_signals
 from app.outcomes import turn_outcome
@@ -25,6 +26,30 @@ _OUTCOME_FILTER = "^(" + "|".join((*agent_contract.OUTCOMES, agent_contract.UNKN
 @router.get("/contract")
 async def contract() -> dict[str, Any]:
     return agent_contract.describe()
+
+
+@router.get("/funnel")
+async def funnel(
+    project_id: str = Query(..., min_length=1, max_length=128),
+    hours: float = Query(24, gt=0, le=24 * 90),
+    environment: str | None = Query(None, max_length=64),
+    session=DbSession,
+) -> dict[str, Any]:
+    """Gate funnel (roadmap step 14): per gate, the turns it saw, passed, skipped and stopped, and
+    the reason codes of its stops; the gate that stops most turns first."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    turns = await load_turn_signals(
+        session, project_id=project_id, since=since, environment=environment
+    )
+    gated = [t for t in turns if t.gates]
+    return {
+        "project_id": project_id,
+        "hours": hours,
+        "turns": len(turns),
+        "turns_with_gates": len(gated),
+        "truncated": len(turns) >= ROW_LIMIT,
+        "gates": gate_funnel(gated),
+    }
 
 
 @router.get("/turns")

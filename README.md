@@ -261,6 +261,7 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/summary`           | Trace analytics                  |
 | `GET`    | `/v1/analytics/timeline`          | Trace counts over time           |
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost by model: paid, paid-price equivalent, tokens, price status |
+| `GET`    | `/v1/agent/funnel`                | Gate funnel: per gate, turns seen, passed and stopped, stop reason codes |
 | `GET`    | `/v1/governance/{decisions,denials,approvals,skills}` | Governance spans of an agent (contract attributes only) |
 | `GET`    | `/v1/governance/summary`          | Governance span counts by outcome |
 | `GET`    | `/v1/governance/turns/{trace_id}` | One turn's path: decision, permission, answer, tool, skill |
