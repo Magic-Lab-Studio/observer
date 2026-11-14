@@ -140,7 +140,9 @@ function Evaluations() {
         <Card title={t('Salud por modelo')}
           subtitle={t('Salud operativa media de las evaluaciones automáticas por reglas · {n} turnos · la corrección de las respuestas aún no se mide', { n: fmtInt(byModel.count) })}
           bodyClass="p-2 pt-3">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          {/* One explicit minmax(0,1fr) track on phones: an implicit grid track grew to the list's min-content width and the
+              page scrolled sideways by 86 px at 390 px (live sweep 2026-11-13). */}
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <ResponsiveContainer width="100%" height={Math.max(150, byModel.models.slice(0, 8).length * 34 + 30)}>
               <BarChart data={byModel.models.slice(0, 8).map((m) => ({ key: m.key, score: m.avg_health ?? 0 }))}
                 layout="vertical" margin={{ top: 0, right: 16, left: 4, bottom: 0 }}>
@@ -155,7 +157,7 @@ function Evaluations() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            <ul className="space-y-2.5 px-2">
+            <ul className="min-w-0 space-y-2.5 px-2">
               {byModel.models.slice(0, 8).map((m) => (
                 <li key={m.key} className="flex items-baseline justify-between gap-3 text-xs">
                   <span className="min-w-0 truncate font-mono text-dim" title={m.key}>{m.key}</span>
