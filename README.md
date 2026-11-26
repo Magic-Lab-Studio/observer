@@ -262,6 +262,8 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/timeline`          | Trace counts over time           |
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost by model: paid, paid-price equivalent, tokens, price status |
 | `GET`    | `/v1/costs/summary`               | Cost per outcome: spend by bucket (useful, failed, error, repeated, unknown), per answered turn, top-5% users, per model |
+| `GET`    | `/v1/costs/changes`               | Cost per merged change: spend on merged and abandoned changes over the merged count; open and unattributed spend apart (traces carry `vcs.change` or `vcs.commit`) |
+| `POST`   | `/v1/vcs/events`                  | CI hook: a change (pull request) `merged` or `closed` unmerged, with its commit; reporting twice records once |
 | `GET`    | `/v1/agent/funnel`                | Gate funnel: per gate, turns seen, passed and stopped, stop reason codes |
 | `GET`    | `/v1/agent/budgets`               | Time budget per stage (project section `budgets`): turns over budget, p50/p95 |
 | `GET`    | `/v1/governance/{decisions,denials,approvals,skills}` | Governance spans of an agent (contract attributes only) |

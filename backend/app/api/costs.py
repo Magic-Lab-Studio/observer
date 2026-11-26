@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import cost_outcomes
+from app import cost_outcomes, vcs_costs
 from app.db import DbSession
 
 router = APIRouter()
@@ -27,3 +27,15 @@ async def cost_summary(
     return await cost_outcomes.summary(
         session, project_id=project_id, environment=environment, since=since
     )
+
+
+@router.get("/changes")
+async def cost_per_change(
+    project_id: str = Query("manitos", min_length=1, max_length=128),
+    hours: float = Query(720.0, gt=0, le=2160),
+    session: AsyncSession = DbSession,
+) -> dict[str, Any]:
+    """Cost per merged change: spend on merged and abandoned changes over the merged count; spend on
+    open changes and spend with no change reported apart (step 13b)."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    return await vcs_costs.summary(session, project_id=project_id, since=since)
