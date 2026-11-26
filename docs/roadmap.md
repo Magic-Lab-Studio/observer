@@ -33,7 +33,7 @@ and write down what was learned or changed. Keep entries short.
 | 9 | Groundedness, configurable per project (hallucinations) | done | `rules` mode, then the judge modes; see `docs/groundedness.md` |
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
-| 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel built; `observer-replay` not yet |
+| 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel, `observer-replay` built; replaying real sessions (JSONL) not yet |
 | 13 | Cost per outcome, not per token | in progress | 13a built; owned capacity built; cost per merged change (`vcs_events`) not yet |
 | 14 | Gate funnel and critical path | done | funnel, critical path, time budgets; bed check `--check 14` (funnel) |
 
@@ -270,9 +270,12 @@ a broken one.
   report the same case several times; `case_check.aggregate_repetitions` folds them (`unstable` with
   the distribution and a binary entropy, 3 of 5 = 0.971); run summaries count `unstable` apart and
   comparisons mark it as its own change; `observer-regression --fail-on-unstable / --max-unstable`
-  (unstable is not a regression by default); the runs panel shows unstable counts. **Not built:**
-  `observer-replay` (running a dataset N times against an HTTP endpoint) and the bed's planted
-  unstable case.
+  (unstable is not a regression by default); the runs panel shows unstable counts.
+- **Built (2026-11-26):** `observer-replay` (`app/ops/replay.py`) runs a dataset's cases N times
+  against an HTTP endpoint (inputs from a local cases file: Observer stores none), writes the
+  `--results` file the gate reads and, with `--record`, reports the run; a case right 3 of 5 times
+  is recorded `unstable` with that distribution, a steady one passes. **Not built:** replaying a
+  JSONL of real sessions and the bed's planted unstable case.
 
 ## Step 13: cost per outcome, not per token
 
@@ -458,6 +461,9 @@ premium route can drive most of the spend.
 - 2026-11-12: step 14: gate funnel, critical path (checked in a browser at 1440 and 390 px) and
   time budgets per stage. Learned: the config API returned a 500 for the first section with its own
   validator (pydantic puts the ValueError in the error context, which is not JSON).
+- 2026-11-26: step 12: `observer-replay`. Learned: datasets keep no inputs by design, so a replay
+  needs a local cases file; the command refuses an export whose items have no `input` and names them
+  instead of sending empty turns.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

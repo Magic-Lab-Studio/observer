@@ -497,6 +497,22 @@ an already recorded run (`--candidate latest` by default). Exit codes: `0` passe
 threshold failure (reasons on stderr, JSON on stdout, optional `observer.regression.v1` report),
 `2` it could not decide (Observer unreachable, unknown dataset or run, bad arguments).
 
+`observer-replay` runs the cases for you, N times each, against your agent's HTTP endpoint, so a
+case that passes only sometimes shows as `unstable` instead of pass or fail. Observer keeps no case
+inputs, so export the dataset and add an `input` to each item locally first:
+
+```bash
+curl -s "$OBSERVER_URL/v1/datasets/$DATASET/export" > cases.json   # then add "input" to each item
+observer-replay --cases cases.json --endpoint http://127.0.0.1:9000/turn --repeat 5 \
+  --trace-field meta.trace_id --out results.json --record --name nightly --pause 2
+observer-regression --dataset "$DATASET" --candidate latest --max-unstable 0
+```
+
+Each call is a POST of `{"input": ..., "case": ..., "repetition": n}`; the agent exports its trace
+as usual and answers with its id (a JSON field, or the `X-Observer-Trace-Id` header). Exit codes:
+`0` every call was traced, `1` some calls failed (the rest are written and recorded), `2` nothing
+could be run.
+
 Rules: with a baseline, more than `--max-regressions` cases going pass → fail blocks (default 0);
 without one, any failed case blocks (`--max-failures` changes it). `--min-pass-rate` and
 `--max-health-drop` add thresholds. Cases it cannot verify are **unknown** and reported apart;
