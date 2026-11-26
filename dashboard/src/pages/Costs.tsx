@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useFilters } from '../context';
-import type { CostSummary } from '../types';
+import type { CostPerChange, CostSummary } from '../types';
 import { Card, EmptyState, ErrorState, Kpi, Skeleton } from '../components/ui';
 import { fmtInt, fmtPct, fmtUsd } from '../helpers/format';
 import { OUTCOME_LABEL } from '../helpers/outcomes';
@@ -19,12 +19,15 @@ const PRICING_LABEL: Record<string, string> = {
 function Costs() {
   const { hours, project } = useFilters();
   const [data, setData] = useState<CostSummary | null>(null);
+  const [changes, setChanges] = useState<CostPerChange | null>(null);
   const [error, setError] = useState(false);
 
   const load = useCallback(() => {
     api.getCostSummary(hours, project || undefined)
       .then((d) => { setData(d); setError(false); })
       .catch(() => setError(true));
+    // Step 13b: a separate request, so a backend without it still shows the rest of the page.
+    api.getCostPerChange(hours, project || 'manitos').then(setChanges).catch(() => setChanges(null));
   }, [hours, project]);
   useEffect(() => { load(); }, [load]);
 
@@ -97,6 +100,22 @@ function Costs() {
           <p className="px-4 py-2 text-xs text-faint">{t('Un modelo local cuesta 0 salvo que el proyecto fije el costo por hora de su capacidad propia (sección «cost» de su configuración): entonces cuesta su duración a esa tarifa.')}</p>
         </Card>
       </>)}
+      {changes && changes.merged.changes + changes.abandoned.changes + changes.open.changes > 0 && (
+        <Card title={t('Por cambio fusionado')} bodyClass="p-4">
+          <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Kpi label={t('Costo por cambio')} value={fmtUsd(changes.cost_per_merged_change)}
+              hint={t('{n} fusionados', { n: fmtInt(changes.merged.changes) })} />
+            <Kpi label={t('Cambios abandonados')} value={fmtUsd(changes.abandoned.cost_usd)}
+              hint={t('{n} cerrados sin fusionar', { n: fmtInt(changes.abandoned.changes) })}
+              tone={changes.abandoned.cost_usd > changes.merged.cost_usd ? 'warn' : 'neutral'} />
+            <Kpi label={t('Cambios abiertos')} value={fmtUsd(changes.open.cost_usd)}
+              hint={t('{n} sin cerrar', { n: fmtInt(changes.open.changes) })} />
+            <Kpi label={t('Sin cambio')} value={fmtUsd(changes.unattributed_usd)}
+              hint={t('sin etiqueta vcs')} />
+          </dl>
+          <p className="mt-3 text-xs text-faint">{t('El gasto de los cambios abandonados se carga a los fusionados; el de los abiertos y el que no nombra un cambio (trazas sin vcs.change ni vcs.commit) se muestran aparte.')}</p>
+        </Card>
+      )}
     </div>
   );
 }

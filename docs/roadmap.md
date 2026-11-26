@@ -34,7 +34,7 @@ and write down what was learned or changed. Keep entries short.
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
 | 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel, `observer-replay` built; replaying real sessions (JSONL) not yet |
-| 13 | Cost per outcome, not per token | in progress | 13a, owned capacity and cost per merged change built; rework and a dashboard row not yet |
+| 13 | Cost per outcome, not per token | in progress | 13a, owned capacity and cost per merged change built (API and `/costs` card); rework not yet |
 | 14 | Gate funnel and critical path | done | funnel, critical path, time budgets; bed check `--check 14` (funnel) |
 
 ## Step 1: health vs quality
@@ -316,8 +316,9 @@ premium route can drive most of the spend.
   `POST /v1/vcs/events` (`merged` or `closed`, idempotent); traces name their change in `vcs.change`
   or `vcs.commit` (trace metadata or any span); `GET /v1/costs/changes` charges the spend on merged
   and abandoned changes to the merged count and reports open changes and unattributed spend apart
-  (a hand count on synthetic data adds up to the total). **Not built:** rework (cases that regressed
-  after a change) and its row on the `/costs` page.
+  (a hand count on synthetic data adds up to the total). The `/costs` page shows it in a «Per merged
+  change» card (checked in headless Chromium at 1440 and 390 px, Spanish and English, no horizontal
+  scroll). **Not built:** rework (cases that regressed after a change).
 
 ## Step 14: gate funnel and critical path
 

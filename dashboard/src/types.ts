@@ -307,6 +307,14 @@ export interface GovernanceTurn {
 }
 
 /** GET /v1/costs/summary (roadmap step 13a). */
+export interface CostPerChange {
+  project_id: string; since: string; traces: number; truncated: boolean; total_usd: number;
+  merged: { changes: number; cost_usd: number }; abandoned: { changes: number; cost_usd: number };
+  open: { changes: number; cost_usd: number }; unattributed_usd: number;
+  cost_per_merged_change: number | null;
+  changes: { change: string; status: 'merged' | 'abandoned' | 'open'; cost_usd: number; traces: number }[];
+}
+
 export interface CostSummary {
   project_id: string | null; since: string; traces: number; truncated: boolean; costed_spans: number;
   total_usd: number; paid_usd: number; owned_usd: number;
