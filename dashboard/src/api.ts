@@ -14,6 +14,7 @@ import type {
   OverviewData,
   TimelinePoint,
   CostByModel,
+  CostPerChange,
   CostSummary,
   ManitOSQualitySummary,
   ProvidersResponse,
@@ -139,6 +140,11 @@ export const api = {
     const qs = new URLSearchParams({ hours: String(hours) });
     if (projectId) qs.set('project_id', projectId);
     return request(`/v1/costs/summary?${qs.toString()}`);
+  },
+
+  async getCostPerChange(hours = 720, projectId = 'manitos'): Promise<CostPerChange> {
+    const qs = new URLSearchParams({ hours: String(hours), project_id: projectId });
+    return request(`/v1/costs/changes?${qs.toString()}`);
   },
 
   async getCostByModel(hours = 168): Promise<CostByModel[]> {

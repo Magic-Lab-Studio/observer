@@ -24,6 +24,7 @@ from app.api import ingest_health as ingest_health_api
 from app.api import otlp as otlp_api
 from app.api import privacy as privacy_api
 from app.api import project_config as project_config_api
+from app.api import vcs as vcs_api
 from app.auth import API_KEY, require_api_key
 from app.db.postgres import engine
 from app.limits import BodyLimitMiddleware
@@ -137,6 +138,12 @@ app.include_router(
     costs_api.router,
     prefix="/v1/costs",
     tags=["costs"],
+    dependencies=[_app_auth],
+)
+app.include_router(
+    vcs_api.router,
+    prefix="/v1/vcs",
+    tags=["vcs"],
     dependencies=[_app_auth],
 )
 app.include_router(

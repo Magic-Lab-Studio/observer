@@ -16,6 +16,7 @@ from app.models.ingestion import IngestionReceipt  # noqa: E402
 from app.models.runs import DatasetRun, RunResult  # noqa: E402
 from app.models.settings import ProjectConfig, ProjectSetting  # noqa: E402
 from app.models.trace import Span, Trace  # noqa: E402
+from app.models.vcs import VcsEvent  # noqa: E402
 
 __all__ = [
     "Base",
@@ -31,4 +32,5 @@ __all__ = [
     "RunResult",
     "ProjectSetting",
     "ProjectConfig",
+    "VcsEvent",
 ]

@@ -262,6 +262,8 @@ Base URL: `http://localhost:8000`
 | `GET`    | `/v1/analytics/timeline`          | Trace counts over time           |
 | `GET`    | `/v1/analytics/cost-by-model`     | Cost by model: paid, paid-price equivalent, tokens, price status |
 | `GET`    | `/v1/costs/summary`               | Cost per outcome: spend by bucket (useful, failed, error, repeated, unknown), per answered turn, top-5% users, per model |
+| `GET`    | `/v1/costs/changes`               | Cost per merged change: spend on merged and abandoned changes over the merged count; open and unattributed spend apart (traces carry `vcs.change` or `vcs.commit`) |
+| `POST`   | `/v1/vcs/events`                  | CI hook: a change (pull request) `merged` or `closed` unmerged, with its commit; reporting twice records once |
 | `GET`    | `/v1/agent/funnel`                | Gate funnel: per gate, turns seen, passed and stopped, stop reason codes |
 | `GET`    | `/v1/agent/budgets`               | Time budget per stage (project section `budgets`): turns over budget, p50/p95 |
 | `GET`    | `/v1/governance/{decisions,denials,approvals,skills}` | Governance spans of an agent (contract attributes only) |
@@ -496,6 +498,22 @@ case ran more than once). Without `--results` it gates
 an already recorded run (`--candidate latest` by default). Exit codes: `0` passes, `1` regression or
 threshold failure (reasons on stderr, JSON on stdout, optional `observer.regression.v1` report),
 `2` it could not decide (Observer unreachable, unknown dataset or run, bad arguments).
+
+`observer-replay` runs the cases for you, N times each, against your agent's HTTP endpoint, so a
+case that passes only sometimes shows as `unstable` instead of pass or fail. Observer keeps no case
+inputs, so export the dataset and add an `input` to each item locally first:
+
+```bash
+curl -s "$OBSERVER_URL/v1/datasets/$DATASET/export" > cases.json   # then add "input" to each item
+observer-replay --cases cases.json --endpoint http://127.0.0.1:9000/turn --repeat 5 \
+  --trace-field meta.trace_id --out results.json --record --name nightly --pause 2
+observer-regression --dataset "$DATASET" --candidate latest --max-unstable 0
+```
+
+Each call is a POST of `{"input": ..., "case": ..., "repetition": n}`; the agent exports its trace
+as usual and answers with its id (a JSON field, or the `X-Observer-Trace-Id` header). Exit codes:
+`0` every call was traced, `1` some calls failed (the rest are written and recorded), `2` nothing
+could be run.
 
 Rules: with a baseline, more than `--max-regressions` cases going pass → fail blocks (default 0);
 without one, any failed case blocks (`--max-failures` changes it). `--min-pass-rate` and

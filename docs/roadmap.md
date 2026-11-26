@@ -33,8 +33,8 @@ and write down what was learned or changed. Keep entries short.
 | 9 | Groundedness, configurable per project (hallucinations) | done | `rules` mode, then the judge modes; see `docs/groundedness.md` |
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
-| 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel built; `observer-replay` not yet |
-| 13 | Cost per outcome, not per token | in progress | 13a built; owned capacity built; cost per merged change (`vcs_events`) not yet |
+| 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel, `observer-replay` built; replaying real sessions (JSONL) not yet |
+| 13 | Cost per outcome, not per token | in progress | 13a, owned capacity and cost per merged change built (API and `/costs` card); rework not yet |
 | 14 | Gate funnel and critical path | done | funnel, critical path, time budgets; bed check `--check 14` (funnel) |
 
 ## Step 1: health vs quality
@@ -270,9 +270,12 @@ a broken one.
   report the same case several times; `case_check.aggregate_repetitions` folds them (`unstable` with
   the distribution and a binary entropy, 3 of 5 = 0.971); run summaries count `unstable` apart and
   comparisons mark it as its own change; `observer-regression --fail-on-unstable / --max-unstable`
-  (unstable is not a regression by default); the runs panel shows unstable counts. **Not built:**
-  `observer-replay` (running a dataset N times against an HTTP endpoint) and the bed's planted
-  unstable case.
+  (unstable is not a regression by default); the runs panel shows unstable counts.
+- **Built (2026-11-26):** `observer-replay` (`app/ops/replay.py`) runs a dataset's cases N times
+  against an HTTP endpoint (inputs from a local cases file: Observer stores none), writes the
+  `--results` file the gate reads and, with `--record`, reports the run; a case right 3 of 5 times
+  is recorded `unstable` with that distribution, a steady one passes. **Not built:** replaying a
+  JSONL of real sessions and the bed's planted unstable case.
 
 ## Step 13: cost per outcome, not per token
 
@@ -309,8 +312,13 @@ premium route can drive most of the spend.
   `{"hourly_usd": {"local": 0.5}}` (keys: a model, a provider, or `local` for every local model); a
   local call with no cost then costs its duration at that rate, computed when read and never written
   to `cost_usd`; the summary reports `paid_usd` and `owned_usd` apart and the buckets cover both.
-  **Not built:** cost per merged change (`vcs_events`, `vcs.*` attributes, a CI hook) and rework: it
-  needs a migration, kept until #112's migration has merged so Alembic keeps one head.
+- **Built (2026-11-26, 13b, cost per merged change):** migration `20261126_vcs_events`; a CI hook
+  `POST /v1/vcs/events` (`merged` or `closed`, idempotent); traces name their change in `vcs.change`
+  or `vcs.commit` (trace metadata or any span); `GET /v1/costs/changes` charges the spend on merged
+  and abandoned changes to the merged count and reports open changes and unattributed spend apart
+  (a hand count on synthetic data adds up to the total). The `/costs` page shows it in a «Per merged
+  change» card (checked in headless Chromium at 1440 and 390 px, Spanish and English, no horizontal
+  scroll). **Not built:** rework (cases that regressed after a change).
 
 ## Step 14: gate funnel and critical path
 
@@ -458,6 +466,11 @@ premium route can drive most of the spend.
 - 2026-11-12: step 14: gate funnel, critical path (checked in a browser at 1440 and 390 px) and
   time budgets per stage. Learned: the config API returned a 500 for the first section with its own
   validator (pydantic puts the ValueError in the error context, which is not JSON).
+- 2026-11-26: step 12: `observer-replay`. Learned: datasets keep no inputs by design, so a replay
+  needs a local cases file; the command refuses an export whose items have no `input` and names them
+  instead of sending empty turns.
+- 2026-11-26: step 13b: cost per merged change. Learned: a merged change with no traced work must
+  still count as shipped, or one busy pull request looks cheaper than the work really was.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.
