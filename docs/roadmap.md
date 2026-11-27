@@ -33,8 +33,8 @@ and write down what was learned or changed. Keep entries short.
 | 9 | Groundedness, configurable per project (hallucinations) | done | `rules` mode, then the judge modes; see `docs/groundedness.md` |
 | 10 | Outcomes and an agent span contract (why it did not answer) | done | #88, #89 |
 | 11 | Ingest the events a system already emits | done | JSONL, `/v1/ingest/events`, `observer-ingest`; Loki and Azure not built |
-| 12 | Non-determinism: same input, N runs | in progress | repetitions, instability, gate, panel, `observer-replay` built; replaying real sessions (JSONL) not yet |
-| 13 | Cost per outcome, not per token | in progress | 13a, owned capacity and cost per merged change built (API and `/costs` card); rework not yet |
+| 12 | Non-determinism: same input, N runs | done | repetitions, instability, gate, panel, `observer-replay` (dataset cases and real sessions from JSONL) |
+| 13 | Cost per outcome, not per token | done | 13a, owned capacity, cost per merged change and its rework (API and `/costs` card) |
 | 14 | Gate funnel and critical path | done | funnel, critical path, time budgets; bed check `--check 14` (funnel) |
 
 ## Step 1: health vs quality
@@ -274,8 +274,13 @@ a broken one.
 - **Built (2026-11-26):** `observer-replay` (`app/ops/replay.py`) runs a dataset's cases N times
   against an HTTP endpoint (inputs from a local cases file: Observer stores none), writes the
   `--results` file the gate reads and, with `--record`, reports the run; a case right 3 of 5 times
-  is recorded `unstable` with that distribution, a steady one passes. **Not built:** replaying a
-  JSONL of real sessions and the bed's planted unstable case.
+  is recorded `unstable` with that distribution, a steady one passes.
+- **Built (2026-11-27):** `observer-replay --session FILE.jsonl` (repeatable) replays real
+  conversations: each user turn is a case and the conversation is sent in order, once per repetition,
+  with its own `conversation` id and `turn` so the agent keeps the context and repetitions never share
+  it. A turn that names the trace it produced (`--session-trace-field`, also read from `metadata`) can
+  be recorded against a dataset built from those traces; one without is written with `--out` but
+  `--record` refuses it by name. **Not built:** the bed's planted unstable case.
 
 ## Step 13: cost per outcome, not per token
 
@@ -318,7 +323,14 @@ premium route can drive most of the spend.
   and abandoned changes to the merged count and reports open changes and unattributed spend apart
   (a hand count on synthetic data adds up to the total). The `/costs` page shows it in a «Per merged
   change» card (checked in headless Chromium at 1440 and 390 px, Spanish and English, no horizontal
-  scroll). **Not built:** rework (cases that regressed after a change).
+  scroll).
+- **Built (2026-11-27, 13b, rework):** a merged change whose commit produced a dataset run
+  (`version.commit`, a short or full hash) is compared case by case with the run of the same dataset
+  just before it (`compare_results`); cases that went from pass to fail are its rework. Unstable cases
+  are not rework, runs of other projects are not counted, a first run has nothing to compare with,
+  and merged changes with no run at their commit are reported as not checked. `GET /v1/costs/changes`
+  carries `rework`; the «Per merged change» card adds one line (checked in headless Chromium at 1440
+  and 390 px against a copy of the live database).
 
 ## Step 14: gate funnel and critical path
 
@@ -471,6 +483,10 @@ premium route can drive most of the spend.
   instead of sending empty turns.
 - 2026-11-26: step 13b: cost per merged change. Learned: a merged change with no traced work must
   still count as shipped, or one busy pull request looks cheaper than the work really was.
+- 2026-11-27: step 12, real sessions; step 13, rework. Learned: a session must be replayed turn by
+  turn in one conversation per repetition (sending its turns as separate cases loses the context
+  the later turns depend on), and a merged change with no run at its commit must be reported as not
+  checked, or every untested change looks free of rework.
 ## Later
 
 Not scheduled; recorded here because the text above refers to this section.

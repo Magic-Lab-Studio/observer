@@ -12,6 +12,15 @@ exports its own trace to Observer as usual and answers with the trace id: a JSON
 reads; ``--record`` also reports them as a run, so each case shows as ``pass``, ``fail`` or
 ``unstable`` (a case right 3 times out of 5 is unstable, not pass).
 
+Real sessions (``--session FILE.jsonl``, repeatable, instead of ``--cases``): every user turn of a
+conversation log is a case, and the conversation is replayed in order, turn by turn, once per
+repetition. Each body then also carries ``conversation`` (``<file stem>:<repetition>``) and ``turn``
+so the agent keeps the context between turns, and different repetitions never share it. A line is a
+user turn when it has ``role`` ``user``/``human`` and a ``content`` or ``text``, or an ``input``;
+other lines are skipped. A turn names its case by the trace it produced (``--session-trace-field``,
+default ``trace_id``, also read from ``metadata``); without one it is ``<stem>#<n>``, which can be
+written with ``--out`` but not recorded (Observer matches cases by dataset item or source trace).
+
 Exit codes: ``0`` every call returned a trace; ``1`` some calls failed (the rest are written and
 recorded); ``2`` nothing could be run (bad arguments, unreadable cases, no call returned a trace,
 Observer refused the run).
@@ -49,6 +58,8 @@ class Case:
 class Config:
     cases_path: str
     endpoint: str
+    sessions: list[str] = field(default_factory=list)
+    session_trace_field: str = "trace_id"
     repeat: int = 1
     out_path: str = ""
     input_field: str = "input"
@@ -99,6 +110,58 @@ def load_cases(path: str) -> tuple[list[Case], str]:
     return cases, dataset_id
 
 
+_USER_ROLES = {"user", "human"}
+
+
+def load_session(path: str, trace_field: str = "trace_id") -> list[Case]:
+    """The user turns of a JSONL conversation log, in order."""
+    try:
+        lines = Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ReplayError(f"cannot read --session: {exc}") from exc
+    stem, cases = Path(path).stem, []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue  # a torn last line of a live log
+        if not isinstance(entry, dict):
+            continue
+        if "input" in entry and "role" not in entry:
+            text = entry.get("input")
+        elif str(entry.get("role") or "").lower() in _USER_ROLES:
+            text = (
+                entry.get("content")
+                if entry.get("content") not in (None, "")
+                else entry.get("text")
+            )
+        else:
+            continue
+        if text in (None, "") or (isinstance(text, str) and not text.strip()):
+            continue
+        metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+        trace = _dig(entry, trace_field) or _dig(metadata, trace_field)
+        cases.append(
+            Case(
+                item_id="",
+                case_trace=str(trace)
+                if isinstance(trace, str) and trace
+                else f"{stem}#{len(cases)}",
+                input=text,
+            )
+        )
+    if not cases:
+        raise ReplayError(f"--session {path} has no user turns")
+    return cases
+
+
+def _has_trace(case: Case) -> bool:
+    return "#" not in case.case_trace
+
+
 def _dig(data: Any, dotted: str) -> Any:
     for key in dotted.split("."):
         if not isinstance(data, dict):
@@ -108,13 +171,19 @@ def _dig(data: Any, dotted: str) -> Any:
 
 
 async def _call(
-    client: httpx.AsyncClient, config: Config, case: Case, repetition: int
+    client: httpx.AsyncClient,
+    config: Config,
+    case: Case,
+    repetition: int,
+    conversation: tuple[str, int] | None = None,
 ) -> dict[str, Any]:
     body = {
         config.input_field: case.input,
         "case": case.item_id or case.case_trace,
         "repetition": repetition,
     }
+    if conversation is not None:
+        body["conversation"], body["turn"] = conversation
     row: dict[str, Any] = {"repetition": repetition}
     row["item_id" if case.item_id else "case_trace"] = case.item_id or case.case_trace
     try:
@@ -138,12 +207,36 @@ async def replay(
     config: Config, transport: httpx.AsyncBaseTransport | None = None
 ) -> list[dict[str, Any]]:
     """Every (case, repetition) in order; a failed call carries ``error``, not ``trace_id``."""
-    cases, _ = load_cases(config.cases_path)
-    jobs = [(case, n) for case in cases for n in range(config.repeat)]
     gate = asyncio.Semaphore(max(1, config.concurrency))
     async with httpx.AsyncClient(
         headers=config.headers, timeout=config.timeout, trust_env=False, transport=transport
     ) as client:
+        if config.sessions:
+            sessions = [
+                (Path(p).stem, load_session(p, config.session_trace_field)) for p in config.sessions
+            ]
+
+            async def conversation(stem: str, turns: list[Case], n: int) -> list[dict[str, Any]]:
+                # One conversation at a time per slot: its turns must arrive in order.
+                async with gate:
+                    out = []
+                    for i, case in enumerate(turns):
+                        out.append(await _call(client, config, case, n, (f"{stem}:{n}", i)))
+                        if config.pause:
+                            await asyncio.sleep(config.pause)
+                    return out
+
+            runs = await asyncio.gather(
+                *(
+                    conversation(stem, turns, n)
+                    for stem, turns in sessions
+                    for n in range(config.repeat)
+                )
+            )
+            return [row for rows in runs for row in rows]
+
+        cases, _ = load_cases(config.cases_path)
+        jobs = [(case, n) for case in cases for n in range(config.repeat)]
 
         async def one(case: Case, n: int) -> dict[str, Any]:
             async with gate:
@@ -231,8 +324,19 @@ def build_parser() -> argparse.ArgumentParser:
         prog="observer-replay",
         description="Run a dataset's cases N times against an agent endpoint and record the runs.",
     )
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--cases", help="dataset export with an 'input' per item, or a JSON list")
+    source.add_argument(
+        "--session",
+        action="append",
+        default=[],
+        metavar="FILE.jsonl",
+        help="a real conversation log: its user turns are replayed in order (repeatable)",
+    )
     p.add_argument(
-        "--cases", required=True, help="dataset export with an 'input' per item, or a JSON list"
+        "--session-trace-field",
+        default="trace_id",
+        help="field of a session line naming the trace that turn produced (a.b.c)",
     )
     p.add_argument("--endpoint", required=True, help="the agent's HTTP endpoint (POST)")
     p.add_argument("--repeat", type=int, default=1, help="runs per case (1-99)")
@@ -268,8 +372,10 @@ def config_from_args(args: argparse.Namespace) -> Config:
     except argparse.ArgumentTypeError as exc:
         raise ReplayError(str(exc)) from exc
     return Config(
-        cases_path=args.cases,
+        cases_path=args.cases or "",
         endpoint=args.endpoint,
+        sessions=list(args.session or []),
+        session_trace_field=args.session_trace_field,
         repeat=args.repeat,
         out_path=args.out,
         input_field=args.input_field,
@@ -294,7 +400,18 @@ async def run(
     transport: httpx.AsyncBaseTransport | None = None,
     observer_transport: httpx.AsyncBaseTransport | None = None,
 ) -> tuple[int, dict[str, Any]]:
-    _, dataset_id = load_cases(config.cases_path)
+    if config.sessions:
+        dataset_id = ""
+        loaded = [load_session(p, config.session_trace_field) for p in config.sessions]
+        if config.record:
+            untraced = [c.case_trace for turns in loaded for c in turns if not _has_trace(c)]
+            if untraced:
+                raise ReplayError(
+                    "--record needs every session turn to name its trace "
+                    f"(--session-trace-field); these do not: {untraced[:5]}"
+                )
+    else:
+        _, dataset_id = load_cases(config.cases_path)
     if config.record and not (config.dataset or dataset_id):
         raise ReplayError("--record needs --dataset (or a dataset export as --cases)")
     results = await replay(config, transport)

@@ -510,6 +510,12 @@ observer-replay --cases cases.json --endpoint http://127.0.0.1:9000/turn --repea
 observer-regression --dataset "$DATASET" --candidate latest --max-unstable 0
 ```
 
+To replay real conversations instead, pass their logs: `observer-replay --session chat.jsonl
+--endpoint ... --repeat 3`. Each user turn (`{"role": "user", "content": ...}` or `{"input": ...}`)
+is sent in order, with `conversation` and `turn` added to the body so the agent keeps the context;
+each repetition is its own conversation. `--record` needs every turn to name the trace it produced
+(`--session-trace-field`, default `trace_id`).
+
 Each call is a POST of `{"input": ..., "case": ..., "repetition": n}`; the agent exports its trace
 as usual and answers with its id (a JSON field, or the `X-Observer-Trace-Id` header). Exit codes:
 `0` every call was traced, `1` some calls failed (the rest are written and recorded), `2` nothing
