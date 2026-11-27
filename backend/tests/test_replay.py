@@ -15,6 +15,7 @@ from app.ops.replay import (
     build_parser,
     config_from_args,
     load_cases,
+    load_session,
     main,
     run,
 )
@@ -189,3 +190,121 @@ async def test_nothing_traced_is_exit_two(tmp_path):
 def test_main_reports_bad_arguments_with_exit_two(tmp_path, capsys):
     assert main(["--cases", str(tmp_path / "missing.json"), "--endpoint", "http://agent"]) == 2
     assert "cannot read --cases" in capsys.readouterr().err
+
+
+def _session(tmp_path, lines, name="session_a.jsonl"):
+    path = tmp_path / name
+    path.write_text(
+        "\n".join(json.dumps(line) if not isinstance(line, str) else line for line in lines)
+    )
+    return str(path)
+
+
+def test_a_session_gives_its_user_turns_in_order_and_skips_the_rest(tmp_path):
+    path = _session(
+        tmp_path,
+        [
+            {"role": "user", "content": "hola"},
+            {"role": "assistant", "content": "¡Hola!"},
+            {"role": "system", "content": "Flavour selected"},
+            {"role": "user", "content": "   "},
+            {"role": "human", "text": "¿qué hora es?", "metadata": {"trace_id": "t2"}},
+            {"input": "y mañana?"},
+            '{"role": "user", "content": "torn',
+        ],
+    )
+    cases = load_session(path)
+    assert [c.input for c in cases] == ["hola", "¿qué hora es?", "y mañana?"]
+    assert [c.case_trace for c in cases] == ["session_a#0", "t2", "session_a#2"]
+
+
+def test_a_session_without_user_turns_is_refused(tmp_path):
+    with pytest.raises(ReplayError, match="no user turns"):
+        load_session(_session(tmp_path, [{"role": "assistant", "content": "hi"}]))
+
+
+@pytest.mark.anyio
+async def test_each_repetition_replays_the_conversation_in_order_with_its_own_id(tmp_path):
+    path = _session(
+        tmp_path, [{"role": "user", "content": "uno"}, {"role": "user", "content": "dos"}]
+    )
+    seen: list = []
+    out = tmp_path / "r.json"
+    code, report = await run(
+        Config(
+            cases_path="",
+            sessions=[path],
+            endpoint="http://agent/turn",
+            repeat=2,
+            out_path=str(out),
+            trace_field="meta.trace",
+        ),
+        transport=_agent(["a", "b", "c", "d"], seen),
+    )
+    assert code == 0 and report["calls"] == 4
+    assert [(s["conversation"], s["turn"], s["input"]) for s in seen] == [
+        ("session_a:0", 0, "uno"),
+        ("session_a:0", 1, "dos"),
+        ("session_a:1", 0, "uno"),
+        ("session_a:1", 1, "dos"),
+    ]
+    assert json.loads(out.read_text())[1] == {
+        "case_trace": "session_a#1",
+        "repetition": 0,
+        "trace_id": "b",
+    }
+
+
+@pytest.mark.anyio
+async def test_recording_a_session_needs_a_trace_for_every_turn(tmp_path):
+    path = _session(
+        tmp_path,
+        [{"role": "user", "content": "uno", "trace_id": "t1"}, {"role": "user", "content": "dos"}],
+    )
+    with pytest.raises(ReplayError, match="--record needs every session turn.*session_a#1"):
+        await run(
+            Config(
+                cases_path="", sessions=[path], endpoint="http://agent", record=True, dataset="ds"
+            ),
+            transport=_agent([], []),
+        )
+
+
+@pytest.mark.anyio
+async def test_a_real_session_is_recorded_against_the_dataset_by_its_source_traces(
+    client, db_session, tmp_path
+):
+    source = await _trace(db_session)
+    ds = (await client.post("/v1/datasets", json={"name": "from-session"})).json()["id"]
+    item = (
+        await client.post(
+            f"/v1/datasets/{ds}/items",
+            json={"trace_id": source.id, "expect": {"health": {"no_degradation": True}}},
+        )
+    ).json()
+    runs = [await _trace(db_session, degraded=bad) for bad in (False, True)]
+    path = _session(
+        tmp_path, [{"role": "user", "content": "hola", "metadata": {"trace_id": source.id}}]
+    )
+    code, report = await run(
+        Config(
+            cases_path="",
+            sessions=[path],
+            endpoint="http://agent/turn",
+            repeat=2,
+            trace_field="meta.trace",
+            record=True,
+            dataset=ds,
+        ),
+        transport=_agent([t.id for t in runs], []),
+        observer_transport=ASGITransport(app=app),
+    )
+    assert code == 0 and report["run"]["summary"]["unstable"] == 1
+    assert report["unstable"][0]["item_id"] == item["id"]
+
+
+def test_cases_and_session_cannot_be_given_together():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            ["--cases", "c", "--session", "s.jsonl", "--endpoint", "http://a"]
+        )

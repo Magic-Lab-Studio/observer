@@ -114,6 +114,18 @@ function Costs() {
               hint={t('sin etiqueta vcs')} />
           </dl>
           <p className="mt-3 text-xs text-faint">{t('El gasto de los cambios abandonados se carga a los fusionados; el de los abiertos y el que no nombra un cambio (trazas sin vcs.change ni vcs.commit) se muestran aparte.')}</p>
+          {changes.rework && (
+            <p className="mt-2 text-sm text-ink">
+              {changes.rework.changes_checked === 0
+                ? t('Retrabajo: ningún cambio fusionado tiene una corrida del dataset en su commit.')
+                : t('Retrabajo: {r} casos empeoraron en {c} de {k} cambios revisados ({n} sin corrida en su commit).', {
+                    r: fmtInt(changes.rework.regressed_cases),
+                    c: fmtInt(changes.rework.changes_with_regressions),
+                    k: fmtInt(changes.rework.changes_checked),
+                    n: fmtInt(changes.rework.changes_not_checked),
+                  })}
+            </p>
+          )}
         </Card>
       )}
     </div>

@@ -5,6 +5,11 @@ A trace names the change it worked on in ``vcs.change`` (a pull request), or the
 closed unmerged (``vcs_events``). Nothing is dropped silently: spend on abandoned changes is charged
 to the merged ones (it was the price of shipping them), spend on changes still open and spend with
 no change are reported apart.
+
+Rework: a merged change whose commit produced a dataset run (``version.commit``) is checked case
+by case against the run of the same dataset just before it; cases that went from pass to fail are
+the change's rework. Merged changes with no run at their commit are counted as not checked, not as
+clean.
 """
 
 from __future__ import annotations
@@ -16,9 +21,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.case_check import aggregate_repetitions, compare_results
 from app.cost import model_of
 from app.cost_outcomes import MAX_TRACES, _hours, load_config, owned_rate
 from app.models import Span, Trace
+from app.models.datasets import Dataset
+from app.models.runs import DatasetRun, RunResult
 from app.models.vcs import VcsEvent
 
 TOP_CHANGES = 20
@@ -33,6 +41,90 @@ def _attr(trace: Trace, spans: list[Any], key: str) -> str:
         if attrs.get(key):
             return str(attrs[key])[:128]
     return ""
+
+
+def _same_commit(a: str, b: str) -> bool:
+    """A short and a full hash of one commit match (7 characters at least)."""
+    a, b = a.strip().lower(), b.strip().lower()
+    return len(a) >= 7 and len(b) >= 7 and (a.startswith(b) or b.startswith(a))
+
+
+async def _case_statuses(session: AsyncSession, run_id: str) -> dict[str, dict[str, Any]]:
+    rows = (await session.execute(select(RunResult).where(RunResult.run_id == run_id))).scalars()
+    return aggregate_repetitions(
+        [
+            {
+                "item_id": r.item_id,
+                "status": r.status,
+                "health_score": r.health_score,
+                "duration_ms": r.duration_ms,
+            }
+            for r in rows
+        ]
+    )
+
+
+async def rework(
+    session: AsyncSession, *, project_id: str, merged: dict[str, str]
+) -> dict[str, Any]:
+    """Cases that regressed at each merged change's commit (``merged``: change -> commit)."""
+    runs = list(
+        (
+            await session.execute(
+                select(DatasetRun)
+                .join(Dataset, Dataset.id == DatasetRun.dataset_id)
+                .where(Dataset.project_id == project_id)
+                .order_by(DatasetRun.created_at)
+            )
+        ).scalars()
+    )
+    checked, per_change = 0, []
+    for change, commit in sorted(merged.items()):
+        at_commit = [
+            r
+            for r in runs
+            if commit and _same_commit(str((r.version or {}).get("commit") or ""), commit)
+        ]
+        if not at_commit:
+            continue
+        checked += 1
+        regressed: list[str] = []
+        compared = 0
+        for run in at_commit:
+            base = next(
+                (
+                    b
+                    for b in reversed(runs)
+                    if b.dataset_id == run.dataset_id
+                    and b.created_at < run.created_at
+                    and b.id != run.id
+                ),
+                None,
+            )
+            if base is None:
+                continue
+            compared += 1
+            diff = compare_results(
+                await _case_statuses(session, base.id), await _case_statuses(session, run.id)
+            )
+            regressed += [c["item_id"] for c in diff["cases"] if c["change"] == "regressed"]
+        per_change.append(
+            {
+                "change": change,
+                "commit": commit,
+                "runs": len(at_commit),
+                "compared": compared,
+                "regressed_cases": len(regressed),
+                "regressed_items": sorted(set(regressed))[:20],
+            }
+        )
+    return {
+        "changes_checked": checked,
+        "changes_not_checked": len(merged) - checked,
+        "changes_with_regressions": sum(1 for c in per_change if c["regressed_cases"]),
+        "regressed_cases": sum(c["regressed_cases"] for c in per_change),
+        "changes": sorted(per_change, key=lambda c: -c["regressed_cases"])[:TOP_CHANGES],
+    }
 
 
 def span_cost(span: Any, cfg: Any) -> float | None:
@@ -102,6 +194,10 @@ async def summary(
     shipped = groups["merged"]["changes"]
     charged = groups["merged"]["cost_usd"] + groups["abandoned"]["cost_usd"]
     total = charged + groups["open"]["cost_usd"] + unattributed
+    merged_commits = {c: "" for c in merged}
+    for e in events:
+        if e.event == "merged" and e.commit:
+            merged_commits[e.change] = e.commit
     return {
         "project_id": project_id,
         "since": since.isoformat(),
@@ -117,4 +213,5 @@ async def summary(
             {**e, "cost_usd": round(e["cost_usd"], 6)}
             for e in sorted(per_change.values(), key=lambda e: -e["cost_usd"])[:TOP_CHANGES]
         ],
+        "rework": await rework(session, project_id=project_id, merged=merged_commits),
     }

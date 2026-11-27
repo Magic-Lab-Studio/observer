@@ -313,6 +313,12 @@ export interface CostPerChange {
   open: { changes: number; cost_usd: number }; unattributed_usd: number;
   cost_per_merged_change: number | null;
   changes: { change: string; status: 'merged' | 'abandoned' | 'open'; cost_usd: number; traces: number }[];
+  /** Cases that regressed at a merged change's commit (a dataset run there vs the run before). */
+  rework?: {
+    changes_checked: number; changes_not_checked: number; changes_with_regressions: number;
+    regressed_cases: number;
+    changes: { change: string; commit: string; runs: number; compared: number; regressed_cases: number; regressed_items: string[] }[];
+  };
 }
 
 export interface CostSummary {

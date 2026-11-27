@@ -656,5 +656,7 @@ export const EN: Record<string, string> = {
   '{n} sin cerrar': '{n} still open',
   'Sin cambio': 'No change',
   'sin etiqueta vcs': 'no vcs tag',
+  'Retrabajo: ningún cambio fusionado tiene una corrida del dataset en su commit.': 'Rework: no merged change has a dataset run at its commit.',
+  'Retrabajo: {r} casos empeoraron en {c} de {k} cambios revisados ({n} sin corrida en su commit).': 'Rework: {r} cases regressed in {c} of {k} checked changes ({n} with no run at their commit).',
   'El gasto de los cambios abandonados se carga a los fusionados; el de los abiertos y el que no nombra un cambio (trazas sin vcs.change ni vcs.commit) se muestran aparte.': 'Spend on abandoned changes is charged to the merged ones; spend on open changes and spend that names no change (traces with no vcs.change or vcs.commit) are shown apart.',
 };
